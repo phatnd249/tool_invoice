@@ -37,7 +37,7 @@ export class InvoiceController {
     }
 
     const type = invoiceType === 'BUY' ? 'BUY' : 'SELL';
-    const targetDir = outputDir || path.join(process.cwd(), 'invoices');
+    
     let start: Date;
     let end: Date;
 
@@ -54,6 +54,23 @@ export class InvoiceController {
       res.status(401).json({ error: 'Failed to decode tax code (MST) from Token. Token might be invalid.' });
       return;
     }
+
+    // Determine company folder name based on DB name or fallback to MST
+    let companyFolder = tokenMst;
+    try {
+      const company = await prisma.company.findUnique({
+        where: { taxCode: tokenMst },
+      });
+      if (company && company.name) {
+        // Clean folder name from illegal characters
+        companyFolder = company.name.replace(/[\\/*?:"<>|]/g, '').trim();
+      }
+    } catch (dbError) {
+      console.warn('[InvoiceController] Could not fetch company name from DB:', dbError);
+    }
+
+    const baseDir = outputDir || path.join(process.cwd(), 'invoices');
+    const targetDir = path.join(baseDir, companyFolder);
 
     // Split date range to prevent tax server query limits
     const dateChunks = downloaderService.splitDateRange(start, end);
