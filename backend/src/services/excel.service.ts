@@ -71,6 +71,26 @@ export class ExcelService {
     };
 
     // ---------------------------------------------------------
+    // PRE-CALCULATE UNIQUE SHEET NAMES TO PREVENT DUPLICATES
+    // ---------------------------------------------------------
+    const sheetNamesMap = new Map<string, string>(); // key: invoice_key -> uniqueName
+    const usedNames = new Set<string>();
+
+    invoices.forEach(inv => {
+      const baseName = this.cleanSheetName(inv.lookupCode, inv.invoiceNumber);
+      let uniqueName = baseName;
+      let counter = 1;
+      while (usedNames.has(uniqueName.toLowerCase())) {
+        const suffix = `_${counter}`;
+        uniqueName = baseName.slice(0, 31 - suffix.length) + suffix;
+        counter++;
+      }
+      usedNames.add(uniqueName.toLowerCase());
+      const invoiceKey = `${inv.invoiceNumber}_${inv.sellerTaxCode}_${inv.buyerTaxCode}`;
+      sheetNamesMap.set(invoiceKey, uniqueName);
+    });
+
+    // ---------------------------------------------------------
     // SHEET 1: SUMMARY
     // ---------------------------------------------------------
     const summarySheet = workbook.addWorksheet('TongQuan_HoaDon', {
@@ -129,8 +149,9 @@ export class ExcelService {
       row.getCell(11).value = inv.paymentMethod || ''; // HTTT
       row.getCell(12).value = inv.totalAmountInWords || ''; // Bằng chữ
       
-      // Hyperlink to detail sheet
-      const subSheetName = this.cleanSheetName(inv.lookupCode, inv.invoiceNumber);
+      // Hyperlink to detail sheet using pre-calculated unique name
+      const invoiceKey = `${inv.invoiceNumber}_${inv.sellerTaxCode}_${inv.buyerTaxCode}`;
+      const subSheetName = sheetNamesMap.get(invoiceKey) || `HD_${inv.invoiceNumber}`;
       row.getCell(13).value = {
         text: 'Xem chi tiết',
         hyperlink: `#${subSheetName}!A1`
@@ -211,7 +232,8 @@ export class ExcelService {
     // SHEET N: DETAILS FOR EACH INVOICE
     // ---------------------------------------------------------
     invoices.forEach(inv => {
-      const subSheetName = this.cleanSheetName(inv.lookupCode, inv.invoiceNumber);
+      const invoiceKey = `${inv.invoiceNumber}_${inv.sellerTaxCode}_${inv.buyerTaxCode}`;
+      const subSheetName = sheetNamesMap.get(invoiceKey) || `HD_${inv.invoiceNumber}`;
       const subSheet = workbook.addWorksheet(subSheetName, {
         views: [{ showGridLines: true }]
       });
