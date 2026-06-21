@@ -63,26 +63,29 @@ export class ParserService {
   }
 
   /**
-   * Helper to safely get nested values or search for tag key case-insensitively
+   * Recursively finds a key in a JSON object case-insensitively, similar to Python's find_xml_element
    */
-  private getNestedValue(obj: any, keys: string[]): any {
-    let current = obj;
+  private findKeyRecursive(obj: any, targetKey: string): any {
+    if (!obj || typeof obj !== 'object') return undefined;
+
+    // Check if the current object has the key (case-insensitive)
+    const keys = Object.keys(obj);
+    const foundKey = keys.find(k => k.toLowerCase() === targetKey.toLowerCase());
+    if (foundKey) {
+      return obj[foundKey];
+    }
+
+    // Recursively check children
     for (const key of keys) {
-      if (!current) return undefined;
-      // Exact match
-      if (current[key] !== undefined) {
-        current = current[key];
-      } else {
-        // Case insensitive match
-        const foundKey = Object.keys(current).find(k => k.toLowerCase() === key.toLowerCase());
-        if (foundKey) {
-          current = current[foundKey];
-        } else {
-          return undefined;
+      const child = obj[key];
+      if (child && typeof child === 'object') {
+        const result = this.findKeyRecursive(child, targetKey);
+        if (result !== undefined) {
+          return result;
         }
       }
     }
-    return current;
+    return undefined;
   }
 
   /**
@@ -128,12 +131,12 @@ export class ParserService {
     const rootKey = Object.keys(jsonObj)[0];
     const root = jsonObj[rootKey] || jsonObj;
     
-    const dlHDon = this.getNestedValue(root, ['DLHDon']) || root;
-    const ttChung = this.getNestedValue(dlHDon, ['TTChung']);
-    const nBan = this.getNestedValue(dlHDon, ['NBan']);
-    const nMua = this.getNestedValue(dlHDon, ['NMua']);
-    const tToan = this.getNestedValue(dlHDon, ['TToan']);
-    const dshhdVu = this.getNestedValue(dlHDon, ['DSHHDVu']);
+    const dlHDon = this.findKeyRecursive(root, 'DLHDon') || root;
+    const ttChung = this.findKeyRecursive(dlHDon, 'TTChung');
+    const nBan = this.findKeyRecursive(dlHDon, 'NBan');
+    const nMua = this.findKeyRecursive(dlHDon, 'NMua');
+    const tToan = this.findKeyRecursive(dlHDon, 'TToan');
+    const dshhdVu = this.findKeyRecursive(dlHDon, 'DSHHDVu');
     
     // Extract items list
     const items: ParsedInvoiceItem[] = [];
@@ -160,7 +163,7 @@ export class ParserService {
 
     // Try finding "MaTraCuu" in TTKhac -> TTin
     let lookupCode = '';
-    const ttKhac = this.getNestedValue(dlHDon, ['TTKhac']);
+    const ttKhac = this.findKeyRecursive(dlHDon, 'TTKhac');
     if (ttKhac && ttKhac.TTin) {
       let ttinList = ttKhac.TTin;
       if (!Array.isArray(ttinList)) {
@@ -175,7 +178,7 @@ export class ParserService {
     }
 
     // Try parsing date (e.g. 2026-05-09T08:30:15 or 2026-05-09)
-    const nlapStr = this.getSafeText(this.getNestedValue(ttChung, ['NLap'])) || '';
+    const nlapStr = this.getSafeText(this.findKeyRecursive(ttChung, 'NLap')) || '';
     let invoiceDate = new Date();
     if (nlapStr) {
       const parsedDate = Date.parse(nlapStr);
@@ -186,36 +189,36 @@ export class ParserService {
 
     return {
       xmlFile: xmlFileName,
-      version: this.getSafeText(this.getNestedValue(ttChung, ['PBan'])) || undefined,
-      invoiceName: this.getSafeText(this.getNestedValue(ttChung, ['THDon'])) || undefined,
-      templateSymbol: this.getSafeText(this.getNestedValue(ttChung, ['KHMSHDon'])),
-      invoiceSymbol: this.getSafeText(this.getNestedValue(ttChung, ['KHHDon'])),
-      invoiceNumber: this.getSafeText(this.getNestedValue(ttChung, ['SHDon'])),
+      version: this.getSafeText(this.findKeyRecursive(ttChung, 'PBan')) || undefined,
+      invoiceName: this.getSafeText(this.findKeyRecursive(ttChung, 'THDon')) || undefined,
+      templateSymbol: this.getSafeText(this.findKeyRecursive(ttChung, 'KHMSHDon')),
+      invoiceSymbol: this.getSafeText(this.findKeyRecursive(ttChung, 'KHHDon')),
+      invoiceNumber: this.getSafeText(this.findKeyRecursive(ttChung, 'SHDon')),
       invoiceDate,
-      currency: this.getSafeText(this.getNestedValue(ttChung, ['DVTTe']) || 'VND'),
-      exchangeRate: this.toNumber(this.getNestedValue(ttChung, ['TGia']) || 1),
-      paymentMethod: this.getSafeText(this.getNestedValue(ttChung, ['HTTToan'])) || undefined,
-      gdtProviderTaxCode: this.getSafeText(this.getNestedValue(ttChung, ['MSTTCGP'])) || undefined,
-      taxAuthorityCode: this.getSafeText(this.getNestedValue(root, ['MCCQT'])) || undefined,
+      currency: this.getSafeText(this.findKeyRecursive(ttChung, 'DVTTe') || 'VND'),
+      exchangeRate: this.toNumber(this.findKeyRecursive(ttChung, 'TGia') || 1),
+      paymentMethod: this.getSafeText(this.findKeyRecursive(ttChung, 'HTTToan')) || undefined,
+      gdtProviderTaxCode: this.getSafeText(this.findKeyRecursive(ttChung, 'MSTTCGP')) || undefined,
+      taxAuthorityCode: this.getSafeText(this.findKeyRecursive(root, 'MCCQT')) || undefined,
       lookupCode: lookupCode || undefined,
 
       // Seller
-      sellerName: this.getSafeText(this.getNestedValue(nBan, ['Ten'])),
-      sellerTaxCode: this.getSafeText(this.getNestedValue(nBan, ['MST'])),
-      sellerAddress: this.getSafeText(this.getNestedValue(nBan, ['DChi'])) || undefined,
-      sellerPhone: this.getSafeText(this.getNestedValue(nBan, ['SDThoai'])) || undefined,
+      sellerName: this.getSafeText(this.findKeyRecursive(nBan, 'Ten')),
+      sellerTaxCode: this.getSafeText(this.findKeyRecursive(nBan, 'MST')),
+      sellerAddress: this.getSafeText(this.findKeyRecursive(nBan, 'DChi')) || undefined,
+      sellerPhone: this.getSafeText(this.findKeyRecursive(nBan, 'SDThoai')) || undefined,
 
       // Buyer
-      buyerName: this.getSafeText(this.getNestedValue(nMua, ['Ten'])),
-      buyerTaxCode: this.getSafeText(this.getNestedValue(nMua, ['MST'])),
-      buyerAddress: this.getSafeText(this.getNestedValue(nMua, ['DChi'])) || undefined,
-      buyerCustomerId: this.getSafeText(this.getNestedValue(nMua, ['MKHang'])) || undefined,
+      buyerName: this.getSafeText(this.findKeyRecursive(nMua, 'Ten')),
+      buyerTaxCode: this.getSafeText(this.findKeyRecursive(nMua, 'MST')),
+      buyerAddress: this.getSafeText(this.findKeyRecursive(nMua, 'DChi')) || undefined,
+      buyerCustomerId: this.getSafeText(this.findKeyRecursive(nMua, 'MKHang')) || undefined,
 
       // Financial
-      totalBeforeTax: this.toNumber(this.getNestedValue(tToan, ['TgTCThue'])),
-      taxAmount: this.toNumber(this.getNestedValue(tToan, ['TgTThue'])),
-      totalAmount: this.toNumber(this.getNestedValue(tToan, ['TgTTTBSo'])),
-      totalAmountInWords: this.getSafeText(this.getNestedValue(tToan, ['TgTTTBChu'])) || undefined,
+      totalBeforeTax: this.toNumber(this.findKeyRecursive(tToan, 'TgTCThue')),
+      taxAmount: this.toNumber(this.findKeyRecursive(tToan, 'TgTThue')),
+      totalAmount: this.toNumber(this.findKeyRecursive(tToan, 'TgTTTBSo')),
+      totalAmountInWords: this.getSafeText(this.findKeyRecursive(tToan, 'TgTTTBChu')) || undefined,
 
       items,
     };
