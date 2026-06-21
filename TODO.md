@@ -88,10 +88,10 @@ Quy trình đăng nhập Tổng cục Thuế yêu cầu vượt mã Captcha dạ
 - [x] 11. Tạo `auth.controller.ts` và route `POST /api/auth/token`.
 - [x] 12. Kiểm thử luồng tự động lấy token từ tài khoản/mật khẩu thực tế.
 
-### Giai đoạn 3: Xây dựng Giao diện Demo HTML/TailwindCSS (Cần Triển Khai)
-- [ ] 13. Cấu hình Express Static Files phục vụ thư mục `public/`.
-- [ ] 14. Tạo file `backend/public/index.html` với đầy đủ cấu trúc UI và CSS.
-- [ ] 15. Triển khai JS gọi API `/api/invoices/download` hiển thị Log/Loading trực quan.
-- [ ] 16. Triển khai JS gọi API `/api/invoices` đổ dữ liệu vào bảng danh sách.
-- [ ] 17. Triển khai JS gọi API `/api/invoices/export` để tải file Excel tổng hợp các hoá đơn đã chọn.
-- [ ] 18. Hỗ trợ tải file XML của hoá đơn từ thư mục backend về trình duyệt người dùng.
+### Giai đoạn 3: Xây dựng Giao diện Demo HTML/TailwindCSS (Đã Hoàn Thành)
+- [x] 13. Cấu hình Express Static Files phục vụ thư mục `public/`.
+- [x] 14. Tạo file `backend/public/index.html` với đầy đủ cấu trúc UI và CSS.
+- [x] 15. Triển khai JS gọi API `/api/invoices/download` hiển thị Log/Loading trực quan.
+- [x] 16. Triển khai JS gọi API `/api/invoices` đổ dữ liệu vào bảng danh sách.
+- [x] 17. Triển khai JS gọi API `/api/invoices/export` để tải file Excel tổng hợp các hoá đơn đã chọn.
+- [x] 18. Hỗ trợ tải file XML của hoá đơn từ thư mục backend về trình duyệt người dùng.
