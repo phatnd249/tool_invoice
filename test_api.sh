@@ -47,7 +47,7 @@ except Exception:
     print('[]')
 ")
 
-if [ "$INVOICE_IDS" == "[]" ] || [ -z "$INVOICE_IDS" ]; then
+if [ "$INVOICE_IDS" = "[]" ] || [ -z "$INVOICE_IDS" ]; then
   echo "Không tìm thấy hóa đơn nào trong DB để xuất báo cáo."
 else
   echo "Danh sách IDs xuất bản: $INVOICE_IDS"
