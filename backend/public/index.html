@@ -385,7 +385,7 @@
           <td class="p-4 font-semibold text-slate-100">${String(inv.invoiceNumber).padStart(8, '0')}</td>
           <td class="p-4 text-slate-400">${dateStr}</td>
           <td class="p-4">
-            <span class="px-2 py-0.5 rounded text-xs font-semibold ${inv.type === 'SELL' ? 'bg-indigo-900/50 text-indigo-300' : 'bg-amber-900/50 text-amber-300'}">
+            <span class="px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${inv.type === 'SELL' ? 'bg-indigo-900/50 text-indigo-300' : 'bg-amber-900/50 text-amber-300'}">
               ${inv.type === 'SELL' ? 'Bán ra' : 'Mua vào'}
             </span>
           </td>
