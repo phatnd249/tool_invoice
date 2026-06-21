@@ -82,10 +82,10 @@ Quy trình đăng nhập Tổng cục Thuế yêu cầu vượt mã Captcha dạ
 - [x] 5. Viết `excel.service.ts` xuất bản Excel báo cáo (đã sửa lỗi trùng lặp sheet).
 - [x] 6. Tạo Controller & Route API để liên kết các dịch vụ trên thành RESTful API.
 
-### Giai đoạn 2: Tự động Đăng nhập & Giải Captcha bằng Gemini (Cần Triển Khai)
-- [ ] 7. Cài đặt thư viện `@google/generative-ai` và `sharp`.
-- [ ] 8. Thiết lập biến môi trường `GEMINI_API_KEY` trong file `.env`.
-- [ ] 9. Viết `captcha.service.ts` hỗ trợ tải captcha, convert SVG sang PNG và tích hợp Gemini OCR.
-- [ ] 10. Viết `auth.service.ts` xử lý việc đăng nhập, gửi payload xác thực và thiết lập cơ chế tự động thử lại (Retry).
-- [ ] 11. Tạo `auth.controller.ts` và route `POST /api/auth/token`.
-- [ ] 12. Kiểm thử luồng tự động lấy token từ tài khoản/mật khẩu thực tế.
+### Giai đoạn 2: Tự động Đăng nhập & Giải Captcha bằng Gemini (Đã Hoàn Thành)
+- [x] 7. Cài đặt thư viện `@google/generative-ai` và `sharp`.
+- [x] 8. Thiết lập biến môi trường `GEMINI_API_KEY` trong file `.env`.
+- [x] 9. Viết `captcha.service.ts` hỗ trợ tải captcha, convert SVG sang PNG và tích hợp Gemini OCR.
+- [x] 10. Viết `auth.service.ts` xử lý việc đăng nhập, gửi payload xác thực và thiết lập cơ chế tự động thử lại (Retry).
+- [x] 11. Tạo `auth.controller.ts` và route `POST /api/auth/token`.
+- [x] 12. Kiểm thử luồng tự động lấy token từ tài khoản/mật khẩu thực tế.
