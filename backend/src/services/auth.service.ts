@@ -5,6 +5,30 @@ const captchaService = new CaptchaService();
 
 export class AuthService {
   /**
+   * Check if a GDT JWT Token is expired or close to expiration (within 5 minutes)
+   */
+  public isTokenExpired(token: string): boolean {
+    try {
+      const parts = token.split('.');
+      if (parts.length >= 2) {
+        const payloadB64 = parts[1];
+        const buffer = Buffer.from(payloadB64, 'base64');
+        const payload = JSON.parse(buffer.toString('utf-8'));
+        
+        if (payload && payload.exp) {
+          const expTimeMs = payload.exp * 1000;
+          // Consider expired if it expires in less than 5 minutes
+          const bufferTimeMs = 5 * 60 * 1000;
+          return expTimeMs < Date.now() + bufferTimeMs;
+        }
+      }
+    } catch (error) {
+      console.error('[AuthService] Error checking token expiration:', error);
+    }
+    return true; // Default to expired if check fails
+  }
+
+  /**
    * Log in to the Tax Portal and retrieve the session token
    * @param username Business tax code or username
    * @param password Account lookup password

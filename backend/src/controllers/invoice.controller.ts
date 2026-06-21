@@ -40,14 +40,49 @@ export class InvoiceController {
     }
 
     let activeToken = token;
+    let dbCompany = null;
+
+    if (username && password) {
+      try {
+        dbCompany = await prisma.company.findUnique({
+          where: { taxCode: username },
+        });
+      } catch (dbError) {
+        console.warn('[InvoiceController] Failed to query company from DB:', dbError);
+      }
+    }
+
     if (!activeToken) {
       if (username && password) {
-        try {
-          console.log('[InvoiceController] Token is missing. Attempting automatic GDT login...');
-          activeToken = await authService.loginAndGetToken(username, password);
-        } catch (authError: any) {
-          res.status(401).json({ error: 'Automatic authentication failed', details: authError.message });
-          return;
+        // If cached token exists in DB and is NOT expired, reuse it!
+        if (dbCompany && dbCompany.token && !authService.isTokenExpired(dbCompany.token)) {
+          console.log(`[InvoiceController] Reusing fresh GDT Token from Database cache for MST ${username}.`);
+          activeToken = dbCompany.token;
+        } else {
+          try {
+            console.log(`[InvoiceController] Cached token is missing or expired. Attempting automatic GDT login for MST ${username}...`);
+            activeToken = await authService.loginAndGetToken(username, password);
+            
+            // Save/Update the token in the Database cache
+            if (dbCompany) {
+              await prisma.company.update({
+                where: { id: dbCompany.id },
+                data: { token: activeToken }
+              });
+            } else {
+              await prisma.company.create({
+                data: {
+                  taxCode: username,
+                  name: username,
+                  lookupPassword: password,
+                  token: activeToken
+                }
+              });
+            }
+          } catch (authError: any) {
+            res.status(401).json({ error: 'Automatic authentication failed', details: authError.message });
+            return;
+          }
         }
       } else {
         res.status(400).json({ error: 'Missing authentication: provide either token OR username and password' });
@@ -105,18 +140,52 @@ export class InvoiceController {
         allQueryInvoices.push(...chunkRes);
       }
     } catch (error: any) {
-      // GDT error logging
-      await prisma.downloadHistory.create({
-        data: {
-          taxCode: tokenMst,
-          invoiceType: type,
-          status: 'FAILED',
-          log: `GDT API Query failed: ${error.message}`,
-          countDownloaded: 0,
-        },
-      });
-      res.status(502).json({ error: 'GDT portal query failed', details: error.message });
-      return;
+      const is401 = error.response?.status === 401 || String(error.message).includes('401');
+      if (is401 && username && password) {
+        console.warn(`[InvoiceController] GDT token expired or failed with 401. Resolving a new token...`);
+        try {
+          activeToken = await authService.loginAndGetToken(username, password);
+          
+          // Update DB Cache
+          await prisma.company.upsert({
+            where: { taxCode: username },
+            update: { token: activeToken },
+            create: { taxCode: username, name: username, lookupPassword: password, token: activeToken }
+          });
+
+          // Retry query with new token
+          allQueryInvoices.length = 0;
+          for (const chunk of dateChunks) {
+            const chunkRes = await downloaderService.queryInvoicesInRange(chunk.start, chunk.end, activeToken, type);
+            allQueryInvoices.push(...chunkRes);
+          }
+        } catch (retryError: any) {
+          await prisma.downloadHistory.create({
+            data: {
+              taxCode: tokenMst,
+              invoiceType: type,
+              status: 'FAILED',
+              log: `Retry GDT API Query failed: ${retryError.message}`,
+              countDownloaded: 0,
+            },
+          });
+          res.status(502).json({ error: 'GDT portal query failed on retry', details: retryError.message });
+          return;
+        }
+      } else {
+        // GDT error logging
+        await prisma.downloadHistory.create({
+          data: {
+            taxCode: tokenMst,
+            invoiceType: type,
+            status: 'FAILED',
+            log: `GDT API Query failed: ${error.message}`,
+            countDownloaded: 0,
+          },
+        });
+        res.status(502).json({ error: 'GDT portal query failed', details: error.message });
+        return;
+      }
     }
 
     console.log(`[InvoiceController] Found total ${allQueryInvoices.length} invoices. Starting downloads...`);
