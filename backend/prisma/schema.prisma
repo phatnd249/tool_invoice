@@ -22,24 +22,62 @@ model Company {
 }
 
 model Invoice {
-  id              String   @id @default(uuid())
-  invoiceNumber   String
-  invoiceDate     DateTime
-  sellerName      String
-  sellerTaxCode   String
-  buyerName       String
-  buyerTaxCode    String
-  totalBeforeTax  Float
-  taxAmount       Float
-  totalAmount     Float
-  type            String   // "BUY" (Mua vào) or "SELL" (Bán ra)
-  pdfPath         String?
-  xmlPath         String?
-  isSavedToDb     Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                 String        @id @default(uuid())
+  invoiceNumber      String
+  invoiceDate        DateTime
+  templateSymbol     String        // Ký hiệu mẫu hóa đơn (khmshdon)
+  invoiceSymbol      String        // Ký hiệu hóa đơn (khhdon)
+  paymentMethod      String?       // Hình thức thanh toán (htttoan)
+  currency           String        @default("VND") // Đơn vị tiền tệ (dvtte)
+  exchangeRate       Float         @default(1.0) // Tỷ giá (tgia)
+  taxAuthorityCode   String?       // Mã cơ quan thuế (mccqt)
+  lookupCode         String?       // Mã tra cứu (matracuu)
+  invoiceName        String?       // Tên hóa đơn (thdon)
+  version            String?       // Phiên bản (pban)
+  gdtProviderTaxCode String?       // Mã số thuế tổ chức giải pháp (msttcgp)
+
+  // Seller info
+  sellerName         String
+  sellerTaxCode      String
+  sellerAddress      String?
+  sellerPhone        String?
+
+  // Buyer info
+  buyerName          String
+  buyerTaxCode       String
+  buyerAddress       String?
+  buyerCustomerId    String?
+
+  // Financial summary
+  totalBeforeTax     Float
+  taxAmount          Float
+  totalAmount        Float
+  totalAmountInWords String?
+
+  type               String        // "BUY" (Mua vào) or "SELL" (Bán ra)
+  pdfPath            String?
+  xmlPath            String?
+  zipPath            String?       // Đường dẫn file ZIP gốc đã tải
+  isSavedToDb        Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  items              InvoiceItem[]
 
   @@unique([invoiceNumber, sellerTaxCode, buyerTaxCode])
+}
+
+model InvoiceItem {
+  id          Int     @id @default(autoincrement())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  lineNumber  String? // Số thứ tự dòng (stt)
+  name        String  // Tên hàng hóa, dịch vụ (thhdvu)
+  unit        String? // Đơn vị tính (dvtinh)
+  quantity    Float?  // Số lượng (sluong)
+  price       Float?  // Đơn giá (dgia)
+  amount      Float   // Thành tiền chưa thuế (thtien)
+  taxRate     String? // Thuế suất (tsuat)
 }
 
 model DownloadHistory {
