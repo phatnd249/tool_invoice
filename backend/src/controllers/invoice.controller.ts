@@ -200,6 +200,13 @@ export class InvoiceController {
         const zipPath = await downloaderService.downloadInvoiceZip(inv, activeToken, targetDir);
         if (!zipPath) {
           errors.push(`Invoice ${inv.shdon}: Failed to download ZIP.`);
+          if (saveToDb) {
+            try {
+              await saveBasicInvoiceFromGdt(inv, type);
+            } catch (dbError: any) {
+              console.error(`[InvoiceController] Failed to save basic invoice ${inv.shdon} metadata:`, dbError.message);
+            }
+          }
           continue;
         }
 
@@ -558,4 +565,74 @@ export class InvoiceController {
       res.status(500).json({ error: 'Failed to download ZIP file', details: error.message });
     }
   }
+}
+
+/**
+ * Helper to save basic metadata retrieved from GDT query response when ZIP fails to download
+ */
+async function saveBasicInvoiceFromGdt(inv: any, type: 'BUY' | 'SELL'): Promise<void> {
+  const invoiceNumber = String(inv.shdon || '').trim();
+  const sellerTaxCode = String(inv.nbmst || '').trim();
+  const buyerTaxCode = String(inv.nmmst || inv.nmuamst || '').trim();
+
+  if (!invoiceNumber || !sellerTaxCode || !buyerTaxCode) {
+    throw new Error('Missing primary key identifiers (shdon, nbmst, nmmst)');
+  }
+
+  let invoiceDate = new Date();
+  if (inv.tdlap) {
+    const parsedDate = Date.parse(inv.tdlap);
+    if (!isNaN(parsedDate)) {
+      invoiceDate = new Date(parsedDate);
+    }
+  }
+
+  const dataObj = {
+    invoiceNumber,
+    invoiceDate,
+    templateSymbol: String(inv.khmshdon || '').trim(),
+    invoiceSymbol: String(inv.khhdon || '').trim(),
+    paymentMethod: inv.htttoan ? String(inv.htttoan).trim() : null,
+    currency: String(inv.dvtte || 'VND').trim(),
+    exchangeRate: Number(inv.tgia) || 1.0,
+    taxAuthorityCode: inv.mccqt ? String(inv.mccqt).trim() : null,
+    lookupCode: inv.matracuu ? String(inv.matracuu).trim() : null,
+    invoiceName: inv.thdon ? String(inv.thdon).trim() : 'Hóa đơn điện tử',
+    sellerName: String(inv.nbten || '').trim(),
+    sellerTaxCode,
+    sellerAddress: inv.nbdchi ? String(inv.nbdchi).trim() : null,
+    buyerName: String(inv.nmten || inv.nmuaten || '').trim(),
+    buyerTaxCode,
+    buyerAddress: inv.nmdchi || inv.nmuadchi ? String(inv.nmdchi || inv.nmuadchi).trim() : null,
+    totalBeforeTax: Number(inv.tgtcthue) || 0,
+    taxAmount: Number(inv.tgtthue) || 0,
+    totalAmount: Number(inv.tgtttbso) || 0,
+    type,
+    pdfPath: null,
+    xmlPath: null,
+    zipPath: null,
+    isSavedToDb: true,
+  };
+
+  const compositeKey = {
+    invoiceNumber_sellerTaxCode_buyerTaxCode: {
+      invoiceNumber,
+      sellerTaxCode,
+      buyerTaxCode,
+    },
+  };
+
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.invoice.findUnique({ where: compositeKey });
+    if (existing) {
+      await tx.invoice.update({
+        where: { id: existing.id },
+        data: dataObj,
+      });
+    } else {
+      await tx.invoice.create({
+        data: dataObj,
+      });
+    }
+  });
 }
