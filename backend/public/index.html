@@ -188,7 +188,7 @@
                   <th class="p-4">Bên Bán</th>
                   <th class="p-4">Bên Mua</th>
                   <th class="p-4 text-right">Tổng Thanh Toán</th>
-                  <th class="p-4 text-center">Tải XML</th>
+                  <th class="p-4 text-center">Tải Tệp</th>
                 </tr>
               </thead>
               <tbody id="invoices-tbody" class="divide-y divide-slate-800/50 text-slate-300">
@@ -399,9 +399,14 @@
           </td>
           <td class="p-4 text-right font-bold text-emerald-400">${formattedAmount}</td>
           <td class="p-4 text-center">
-            <a href="/api/invoices/${inv.id}/xml" download class="text-indigo-400 hover:text-indigo-300 transition duration-150 inline-flex p-2 hover:bg-slate-800 rounded-lg">
-              <i class="fa-solid fa-download text-lg"></i>
-            </a>
+            <div class="flex items-center justify-center space-x-2">
+              <a href="/api/invoices/${inv.id}/xml" download class="text-indigo-400 hover:text-indigo-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg animate-fade-in" title="Tải file XML gốc">
+                <i class="fa-solid fa-file-code text-lg"></i>
+              </a>
+              <a href="/api/invoices/${inv.id}/zip" download class="text-amber-400 hover:text-amber-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg animate-fade-in" title="Tải tệp nén ZIP gốc">
+                <i class="fa-solid fa-file-zipper text-lg"></i>
+              </a>
+            </div>
           </td>
         `;
         tbody.appendChild(tr);

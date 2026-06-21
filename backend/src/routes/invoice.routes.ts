@@ -15,4 +15,7 @@ router.post('/export', InvoiceController.exportInvoices);
 // Route to download XML of a specific invoice
 router.get('/:id/xml', InvoiceController.downloadXml);
 
+// Route to download ZIP of a specific invoice
+router.get('/:id/zip', InvoiceController.downloadZip);
+
 export default router;

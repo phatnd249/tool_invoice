@@ -459,4 +459,34 @@ export class InvoiceController {
       res.status(500).json({ error: 'Failed to download XML file', details: error.message });
     }
   }
+
+  /**
+   * GET /api/invoices/:id/zip
+   * Download raw ZIP file of invoice
+   */
+  public static async downloadZip(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    try {
+      const invoice = await prisma.invoice.findUnique({
+        where: { id },
+      });
+
+      if (!invoice || !invoice.zipPath) {
+        res.status(404).json({ error: 'Invoice ZIP not found' });
+        return;
+      }
+
+      if (!fs.existsSync(invoice.zipPath)) {
+        res.status(404).json({ error: 'ZIP file does not exist on disk' });
+        return;
+      }
+
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename=${path.basename(invoice.zipPath)}`);
+      res.sendFile(invoice.zipPath);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to download ZIP file', details: error.message });
+    }
+  }
 }
