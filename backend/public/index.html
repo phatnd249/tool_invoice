@@ -13,29 +13,48 @@
     body {
       font-family: 'Inter', sans-serif;
     }
+    /* Sidebar Collapsed Styles */
+    #sidebar.collapsed {
+      width: 5rem; /* w-20 */
+    }
+    #sidebar.collapsed .sidebar-text {
+      display: none;
+    }
+    #sidebar.collapsed .px-6 {
+      padding-left: 1.25rem;
+      padding-right: 1.25rem;
+    }
+    #sidebar.collapsed nav button {
+      justify-content: center;
+      padding-left: 0;
+      padding-right: 0;
+    }
+    #sidebar.collapsed nav button i {
+      margin-right: 0;
+    }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex">
 
   <!-- Sidebar -->
-  <aside class="w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between shrink-0">
+  <aside id="sidebar" class="w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between shrink-0 transition-all duration-300">
     <div>
       <div class="h-16 flex items-center px-6 border-b border-slate-800 bg-slate-950">
         <i class="fa-solid fa-file-invoice-dollar text-indigo-500 text-2xl mr-3 animate-pulse"></i>
-        <span class="text-lg font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">Invoice Pro</span>
+        <span class="sidebar-text text-lg font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">Invoice Pro</span>
       </div>
       <nav class="p-4 space-y-2">
         <button id="nav-download" onclick="switchTab('download')" class="w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">
           <i class="fa-solid fa-cloud-arrow-down mr-3 text-lg"></i>
-          Tải Hoá Đơn
+          <span class="sidebar-text">Tải Hoá Đơn</span>
         </button>
         <button id="nav-history" onclick="switchTab('history')" class="w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white">
           <i class="fa-solid fa-history mr-3 text-lg"></i>
-          Lịch Sử Hoá Đơn
+          <span class="sidebar-text">Lịch Sử Hoá Đơn</span>
         </button>
       </nav>
     </div>
-    <div class="p-4 border-t border-slate-800 text-xs text-slate-500 text-center">
+    <div class="sidebar-text p-4 border-t border-slate-800 text-xs text-slate-500 text-center">
       v1.0.0 &copy; 2026 Invoice Pro
     </div>
   </aside>
@@ -44,7 +63,12 @@
   <main class="flex-1 flex flex-col min-w-0">
     <!-- Header -->
     <header class="h-16 border-b border-slate-800 bg-slate-950/50 backdrop-blur flex items-center justify-between px-8 shrink-0">
-      <h1 id="page-title" class="text-xl font-bold text-slate-100">Tải Hoá Đơn Mới</h1>
+      <div class="flex items-center space-x-4">
+        <button onclick="toggleSidebar()" class="text-slate-400 hover:text-white focus:outline-none transition duration-150 p-2 hover:bg-slate-800 rounded-lg">
+          <i class="fa-solid fa-bars text-xl"></i>
+        </button>
+        <h1 id="page-title" class="text-xl font-bold text-slate-100">Tải Hoá Đơn Mới</h1>
+      </div>
       <div class="flex items-center space-x-2">
         <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
         <span class="text-xs text-slate-400 font-medium">Hệ thống đang hoạt động</span>
@@ -468,6 +492,12 @@
         exportBtn.disabled = false;
         updateExportButton();
       }
+    }
+
+    // Toggle Sidebar collapsed state
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.classList.toggle('collapsed');
     }
   </script>
 </body>
