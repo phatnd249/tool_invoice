@@ -211,9 +211,9 @@ export class ExcelService {
 
     // Sum formulas
     const lastDataRow = startRow - 1;
-    totalRow.getCell(8).value = { formula: `=SUM(H4:H${lastDataRow})`, result: 0 };
-    totalRow.getCell(9).value = { formula: `=SUM(I4:I${lastDataRow})`, result: 0 };
-    totalRow.getCell(10).value = { formula: `=SUM(J4:J${lastDataRow})`, result: 0 };
+    totalRow.getCell(8).value = { formula: `SUM(H4:H${lastDataRow})`, result: 0 };
+    totalRow.getCell(9).value = { formula: `SUM(I4:I${lastDataRow})`, result: 0 };
+    totalRow.getCell(10).value = { formula: `SUM(J4:J${lastDataRow})`, result: 0 };
 
     for (let col = 8; col <= 10; col++) {
       const cell = totalRow.getCell(col);
@@ -334,7 +334,7 @@ export class ExcelService {
 
       const subLastDataRow = subStartRow - 1;
       const amountSumCell = subTotalRow.getCell(6);
-      amountSumCell.value = { formula: `=SUM(F7:F${subLastDataRow})`, result: 0 };
+      amountSumCell.value = { formula: `SUM(F7:F${subLastDataRow})`, result: 0 };
       amountSumCell.font = totalFont;
       amountSumCell.alignment = { horizontal: 'right', vertical: 'middle' };
       amountSumCell.numFmt = '#,##0';
