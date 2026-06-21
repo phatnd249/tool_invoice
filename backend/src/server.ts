@@ -4,6 +4,11 @@ import dotenv from 'dotenv';
 import prisma from './utils/db.js';
 import invoiceRoutes from './routes/invoice.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config();
@@ -14,6 +19,7 @@ const PORT = process.env.PORT || 3000;
 // Middlewares
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Routes
 app.use('/api/invoices', invoiceRoutes);

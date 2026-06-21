@@ -429,4 +429,34 @@ export class InvoiceController {
       res.status(500).json({ error: 'Failed to export invoices to Excel', details: error.message });
     }
   }
+
+  /**
+   * GET /api/invoices/:id/xml
+   * Download raw XML file of invoice
+   */
+  public static async downloadXml(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    try {
+      const invoice = await prisma.invoice.findUnique({
+        where: { id },
+      });
+
+      if (!invoice || !invoice.xmlPath) {
+        res.status(404).json({ error: 'Invoice XML not found' });
+        return;
+      }
+
+      if (!fs.existsSync(invoice.xmlPath)) {
+        res.status(404).json({ error: 'XML file does not exist on disk' });
+        return;
+      }
+
+      res.setHeader('Content-Type', 'application/xml');
+      res.setHeader('Content-Disposition', `attachment; filename=${path.basename(invoice.xmlPath)}`);
+      res.sendFile(invoice.xmlPath);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to download XML file', details: error.message });
+    }
+  }
 }

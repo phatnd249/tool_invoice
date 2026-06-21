@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice Downloader Pro - Bảng Điều Khiển</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex">
+
+  <!-- Sidebar -->
+  <aside class="w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between shrink-0">
+    <div>
+      <div class="h-16 flex items-center px-6 border-b border-slate-800 bg-slate-950">
+        <i class="fa-solid fa-file-invoice-dollar text-indigo-500 text-2xl mr-3 animate-pulse"></i>
+        <span class="text-lg font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">Invoice Pro</span>
+      </div>
+      <nav class="p-4 space-y-2">
+        <button id="nav-download" onclick="switchTab('download')" class="w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">
+          <i class="fa-solid fa-cloud-arrow-down mr-3 text-lg"></i>
+          Tải Hoá Đơn
+        </button>
+        <button id="nav-history" onclick="switchTab('history')" class="w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white">
+          <i class="fa-solid fa-history mr-3 text-lg"></i>
+          Lịch Sử Hoá Đơn
+        </button>
+      </nav>
+    </div>
+    <div class="p-4 border-t border-slate-800 text-xs text-slate-500 text-center">
+      v1.0.0 &copy; 2026 Invoice Pro
+    </div>
+  </aside>
+
+  <!-- Main Content View -->
+  <main class="flex-1 flex flex-col min-w-0">
+    <!-- Header -->
+    <header class="h-16 border-b border-slate-800 bg-slate-950/50 backdrop-blur flex items-center justify-between px-8 shrink-0">
+      <h1 id="page-title" class="text-xl font-bold text-slate-100">Tải Hoá Đơn Mới</h1>
+      <div class="flex items-center space-x-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+        <span class="text-xs text-slate-400 font-medium">Hệ thống đang hoạt động</span>
+      </div>
+    </header>
+
+    <!-- Content Area -->
+    <div class="flex-1 overflow-y-auto p-8">
+      
+      <!-- TAB 1: DOWNLOAD -->
+      <section id="tab-download" class="space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          <!-- Configuration Form Card -->
+          <div class="lg:col-span-2 bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl space-y-6">
+            <h2 class="text-lg font-semibold text-indigo-400 flex items-center">
+              <i class="fa-solid fa-sliders mr-2"></i> Cấu Hình Tải Hoá Đơn
+            </h2>
+            <form id="download-form" class="space-y-4" onsubmit="handleDownload(event)">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-400 mb-1">Mã Số Thuế (MST)</label>
+                  <input type="text" id="username" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder="Nhập MST doanh nghiệp">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-400 mb-1">Mật khẩu tra cứu</label>
+                  <input type="password" id="password" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder="Nhập mật khẩu trang thuế">
+                </div>
+              </div>
+
+              <div class="relative py-2">
+                <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                  <div class="w-full border-t border-slate-800"></div>
+                </div>
+                <div class="relative flex justify-center text-xs font-medium uppercase">
+                  <span class="bg-slate-950 px-2 text-slate-500">Hoặc sử dụng Token có sẵn</span>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">GDT Authorization Token</label>
+                <textarea id="token" rows="2" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder="Dán JWT Bearer Token tại đây (nếu không dùng mật khẩu)"></textarea>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-400 mb-1">Từ ngày</label>
+                  <input type="date" id="startDate" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-400 mb-1">Đến ngày</label>
+                  <input type="date" id="endDate" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-400 mb-1">Loại hoá đơn</label>
+                  <select id="invoiceType" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                    <option value="SELL">Hóa đơn Bán ra</option>
+                    <option value="BUY">Hóa đơn Mua vào</option>
+                  </select>
+                </div>
+              </div>
+
+              <button type="submit" id="btn-submit" class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-indigo-500/20 flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-play"></i>
+                <span>Bắt Đầu Tải Hóa Đơn</span>
+              </button>
+            </form>
+          </div>
+
+          <!-- Log Console Card -->
+          <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col h-[420px] lg:h-auto">
+            <div class="flex items-center justify-between mb-3 shrink-0">
+              <h2 class="text-lg font-semibold text-cyan-400 flex items-center">
+                <i class="fa-solid fa-terminal mr-2"></i> Tiến Trình Tải
+              </h2>
+              <button onclick="clearLogs()" class="text-xs text-slate-500 hover:text-slate-300">
+                <i class="fa-solid fa-trash-can mr-1"></i> Xóa log
+              </button>
+            </div>
+            <div id="log-console" class="flex-1 bg-black border border-slate-850 rounded-xl p-4 font-mono text-xs text-emerald-400 overflow-y-auto space-y-2 select-text">
+              <span class="text-slate-500">[System] Sẵn sàng nhận lệnh tải...</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: HISTORY -->
+      <section id="tab-history" class="hidden space-y-6">
+        <!-- Filters & Batch Actions Card -->
+        <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-4">
+            <select id="filterType" onchange="fetchInvoices()" class="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+              <option value="">Tất cả hóa đơn</option>
+              <option value="SELL">Bán ra (SELL)</option>
+              <option value="BUY">Mua vào (BUY)</option>
+            </select>
+            <input type="text" id="filterSearch" oninput="filterTable()" class="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500" placeholder="Tìm theo số HĐ, tên...">
+          </div>
+          <button id="btn-export" onclick="exportSelected()" disabled class="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-800 disabled:text-slate-600 text-white font-semibold py-2 px-5 rounded-xl transition-all duration-200 flex items-center space-x-2">
+            <i class="fa-solid fa-file-excel text-lg"></i>
+            <span>Xuất Báo Cáo Excel (0)</span>
+          </button>
+        </div>
+
+        <!-- Invoices List Table Card -->
+        <div class="bg-slate-950 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead class="bg-slate-900/50 border-b border-slate-800 text-slate-400 font-semibold uppercase text-xs">
+                <tr>
+                  <th class="p-4 w-12 text-center">
+                    <input type="checkbox" id="check-all" onchange="toggleSelectAll(this)" class="w-4 h-4 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-900">
+                  </th>
+                  <th class="p-4">Số Hóa Đơn</th>
+                  <th class="p-4">Ngày Lập</th>
+                  <th class="p-4">Loại HĐ</th>
+                  <th class="p-4">Bên Bán</th>
+                  <th class="p-4">Bên Mua</th>
+                  <th class="p-4 text-right">Tổng Thanh Toán</th>
+                  <th class="p-4 text-center">Tải XML</th>
+                </tr>
+              </thead>
+              <tbody id="invoices-tbody" class="divide-y divide-slate-800/50 text-slate-300">
+                <!-- Invoices will be dynamically appended here -->
+                <tr>
+                  <td colspan="8" class="p-8 text-center text-slate-500">
+                    <i class="fa-solid fa-spinner animate-spin text-2xl mb-2 block"></i>
+                    Đang tải danh sách hóa đơn từ Database...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+    // Tab switching logic
+    function switchTab(tabId) {
+      document.getElementById('tab-download').classList.add('hidden');
+      document.getElementById('tab-history').classList.add('hidden');
+      document.getElementById('nav-download').className = "w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white";
+      document.getElementById('nav-history').className = "w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white";
+
+      if (tabId === 'download') {
+        document.getElementById('tab-download').classList.remove('hidden');
+        document.getElementById('nav-download').className = "w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 bg-indigo-600 text-white shadow-lg shadow-indigo-600/30";
+        document.getElementById('page-title').innerText = "Tải Hoá Đơn Mới";
+      } else {
+        document.getElementById('tab-history').classList.remove('hidden');
+        document.getElementById('nav-history').className = "w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 bg-indigo-600 text-white shadow-lg shadow-indigo-600/30";
+        document.getElementById('page-title').innerText = "Lịch Sử Hoá Đơn Đã Tải";
+        fetchInvoices();
+      }
+    }
+
+    // Log Console utilities
+    function addLog(message, type = 'info') {
+      const consoleEl = document.getElementById('log-console');
+      const time = new Date().toLocaleTimeString();
+      let colorClass = 'text-emerald-400';
+      if (type === 'error') colorClass = 'text-red-400';
+      if (type === 'warning') colorClass = 'text-yellow-400';
+      if (type === 'system') colorClass = 'text-slate-500';
+
+      const line = document.createElement('div');
+      line.className = `leading-relaxed ${colorClass}`;
+      line.innerHTML = `[${time}] ${message}`;
+      consoleEl.appendChild(line);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    function clearLogs() {
+      document.getElementById('log-console').innerHTML = '<span class="text-slate-500">[System] Bảng Log đã được làm sạch.</span>';
+    }
+
+    // Convert HTML date format (yyyy-mm-dd) to dd/MM/yyyy
+    function formatDatePayload(dateStr) {
+      if (!dateStr) return '';
+      const [yyyy, mm, dd] = dateStr.split('-');
+      return `${dd}/${mm}/${yyyy}`;
+    }
+
+    // Submit invoice download form
+    async function handleDownload(event) {
+      event.preventDefault();
+      
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const token = document.getElementById('token').value.trim();
+      const startDateInput = document.getElementById('startDate').value;
+      const endDateInput = document.getElementById('endDate').value;
+      const invoiceType = document.getElementById('invoiceType').value;
+
+      const startDate = formatDatePayload(startDateInput);
+      const endDate = formatDatePayload(endDateInput);
+
+      const btnSubmit = document.getElementById('btn-submit');
+
+      // Loading state
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = '<i class="fa-solid fa-spinner animate-spin mr-2"></i>Đang tải hóa đơn...';
+
+      addLog(`Khởi chạy luồng tải hóa đơn từ ${startDate} đến ${endDate}...`, 'info');
+
+      const payload = {
+        startDate,
+        endDate,
+        invoiceType,
+        saveToDb: true
+      };
+
+      if (token) {
+        payload.token = token;
+        addLog('Sử dụng token xác thực có sẵn được cung cấp.', 'info');
+      } else if (username && password) {
+        payload.username = username;
+        payload.password = password;
+        addLog(`Sử dụng tài khoản MST: ${username}. Sẽ tự động lấy mã captcha và đăng nhập qua Gemini AI...`, 'info');
+      } else {
+        addLog('Lỗi: Bạn cần điền Token hoặc Cặp tài khoản/mật khẩu.', 'error');
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = '<i class="fa-solid fa-play mr-2"></i>Bắt Đầu Tải Hóa Đơn';
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/invoices/download', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          addLog(`Hoàn tất tải hóa đơn! ${result.message}`, 'info');
+          if (result.errors && result.errors.length > 0) {
+            result.errors.forEach(err => addLog(`Ngoại lệ: ${err}`, 'warning'));
+          }
+        } else {
+          addLog(`Lỗi API: ${result.error || 'Unknown Error'} - ${result.details || ''}`, 'error');
+        }
+      } catch (err) {
+        addLog(`Lỗi kết nối server: ${err.message}`, 'error');
+      } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = '<i class="fa-solid fa-play mr-2"></i>Bắt Đầu Tải Hóa Đơn';
+      }
+    }
+
+    // Invoices list container
+    let allInvoices = [];
+
+    // Fetch saved invoices from Database
+    async function fetchInvoices() {
+      const tbody = document.getElementById('invoices-tbody');
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="p-8 text-center text-slate-500">
+            <i class="fa-solid fa-spinner animate-spin text-2xl mb-2 block"></i>
+            Đang tải dữ liệu từ SQLite...
+          </td>
+        </tr>
+      `;
+
+      const typeFilter = document.getElementById('filterType').value;
+      let url = '/api/invoices';
+      if (typeFilter) {
+        url += `?type=${typeFilter}`;
+      }
+
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          allInvoices = await response.json();
+          renderTable(allInvoices);
+        } else {
+          tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-400">Không thể lấy dữ liệu hóa đơn từ database.</td></tr>`;
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-400">Lỗi kết nối: ${err.message}</td></tr>`;
+      }
+    }
+
+    // Render array to Table DOM
+    function renderTable(invoices) {
+      const tbody = document.getElementById('invoices-tbody');
+      document.getElementById('check-all').checked = false;
+      updateExportButton();
+
+      if (invoices.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-slate-500">Không có hóa đơn nào trong cơ sở dữ liệu.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = '';
+      invoices.forEach(inv => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-900/30 transition-all border-b border-slate-800/30";
+        
+        const dateStr = new Date(inv.invoiceDate).toLocaleDateString('vi-VN');
+        const formattedAmount = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(inv.totalAmount);
+        
+        tr.innerHTML = `
+          <td class="p-4 text-center">
+            <input type="checkbox" value="${inv.id}" onchange="updateExportButton()" class="invoice-checkbox w-4 h-4 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-900">
+          </td>
+          <td class="p-4 font-semibold text-slate-100">${String(inv.invoiceNumber).padStart(8, '0')}</td>
+          <td class="p-4 text-slate-400">${dateStr}</td>
+          <td class="p-4">
+            <span class="px-2 py-0.5 rounded text-xs font-semibold ${inv.type === 'SELL' ? 'bg-indigo-900/50 text-indigo-300' : 'bg-amber-900/50 text-amber-300'}">
+              ${inv.type === 'SELL' ? 'Bán ra' : 'Mua vào'}
+            </span>
+          </td>
+          <td class="p-4 max-w-[200px] truncate">
+            <div class="font-medium text-slate-200 truncate" title="${inv.sellerName}">${inv.sellerName}</div>
+            <div class="text-xs text-slate-500">${inv.sellerTaxCode}</div>
+          </td>
+          <td class="p-4 max-w-[200px] truncate">
+            <div class="font-medium text-slate-200 truncate" title="${inv.buyerName}">${inv.buyerName}</div>
+            <div class="text-xs text-slate-500">${inv.buyerTaxCode}</div>
+          </td>
+          <td class="p-4 text-right font-bold text-emerald-400">${formattedAmount}</td>
+          <td class="p-4 text-center">
+            <a href="/api/invoices/${inv.id}/xml" download class="text-indigo-400 hover:text-indigo-300 transition duration-150 inline-flex p-2 hover:bg-slate-800 rounded-lg">
+              <i class="fa-solid fa-download text-lg"></i>
+            </a>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Client-side text filter on render table
+    function filterTable() {
+      const query = document.getElementById('filterSearch').value.toLowerCase().trim();
+      if (!query) {
+        renderTable(allInvoices);
+        return;
+      }
+      const filtered = allInvoices.filter(inv => 
+        String(inv.invoiceNumber).includes(query) ||
+        inv.sellerName.toLowerCase().includes(query) ||
+        inv.sellerTaxCode.includes(query) ||
+        inv.buyerName.toLowerCase().includes(query) ||
+        inv.buyerTaxCode.includes(query)
+      );
+      renderTable(filtered);
+    }
+
+    // Checkbox selection utilities
+    function toggleSelectAll(masterCheckbox) {
+      const checkBoxes = document.getElementsByClassName('invoice-checkbox');
+      for (const box of checkBoxes) {
+        box.checked = masterCheckbox.checked;
+      }
+      updateExportButton();
+    }
+
+    function getSelectedIds() {
+      const checkBoxes = document.getElementsByClassName('invoice-checkbox');
+      const selectedIds = [];
+      for (const box of checkBoxes) {
+        if (box.checked) {
+          selectedIds.push(box.value);
+        }
+      }
+      return selectedIds;
+    }
+
+    function updateExportButton() {
+      const selectedIds = getSelectedIds();
+      const exportBtn = document.getElementById('btn-export');
+      exportBtn.disabled = selectedIds.length === 0;
+      exportBtn.innerHTML = `<i class="fa-solid fa-file-excel text-lg"></i> <span>Xuất Báo Cáo Excel (${selectedIds.length})</span>`;
+    }
+
+    // Export selected invoices to styled Excel sheet
+    async function exportSelected() {
+      const invoiceIds = getSelectedIds();
+      if (invoiceIds.length === 0) return;
+
+      const exportBtn = document.getElementById('btn-export');
+      const originalText = exportBtn.innerHTML;
+
+      exportBtn.disabled = true;
+      exportBtn.innerHTML = '<i class="fa-solid fa-spinner animate-spin text-lg"></i> <span>Đang xuất Excel...</span>';
+
+      try {
+        const response = await fetch('/api/invoices/export', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ invoiceIds })
+        });
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const downloadUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = `BaoCao_HoaDon_${new Date().toISOString().slice(0, 10)}.xlsx`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(downloadUrl);
+        } else {
+          const errRes = await response.json();
+          alert(`Xuất báo cáo thất bại: ${errRes.error || 'Lỗi không xác định'}`);
+        }
+      } catch (err) {
+        alert(`Lỗi kết nối xuất file: ${err.message}`);
+      } finally {
+        exportBtn.disabled = false;
+        updateExportButton();
+      }
+    }
+  </script>
+</body>
+</html>

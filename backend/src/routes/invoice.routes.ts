@@ -12,4 +12,7 @@ router.get('/', InvoiceController.getInvoices);
 // Route to export selected invoices to styled Excel sheet
 router.post('/export', InvoiceController.exportInvoices);
 
+// Route to download XML of a specific invoice
+router.get('/:id/xml', InvoiceController.downloadXml);
+
 export default router;
