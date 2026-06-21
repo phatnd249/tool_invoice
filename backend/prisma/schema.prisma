@@ -1,0 +1,65 @@
+// This is your Prisma schema file,
+// learn more it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id             Int       @id @default(autoincrement())
+  taxCode        String    @unique
+  name           String
+  lookupPassword String
+  token          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  schedules      Schedule[]
+}
+
+model Invoice {
+  id              String   @id @default(uuid())
+  invoiceNumber   String
+  invoiceDate     DateTime
+  sellerName      String
+  sellerTaxCode   String
+  buyerName       String
+  buyerTaxCode    String
+  totalBeforeTax  Float
+  taxAmount       Float
+  totalAmount     Float
+  type            String   // "BUY" (Mua vào) or "SELL" (Bán ra)
+  pdfPath         String?
+  xmlPath         String?
+  isSavedToDb     Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([invoiceNumber, sellerTaxCode, buyerTaxCode])
+}
+
+model DownloadHistory {
+  id              Int      @id @default(autoincrement())
+  downloadDate    DateTime @default(now())
+  taxCode         String
+  invoiceType     String   // "BUY" or "SELL" or "BOTH"
+  status          String   // "SUCCESS" or "FAILED" or "PARTIAL"
+  log             String?
+  countDownloaded Int      @default(0)
+}
+
+model Schedule {
+  id             Int       @id @default(autoincrement())
+  companyId      Int
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cronExpression String    // e.g., "0 9 * * *" (9 AM daily)
+  invoiceType    String    // "BUY" or "SELL"
+  isActive       Boolean   @default(true)
+  lastRun        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
