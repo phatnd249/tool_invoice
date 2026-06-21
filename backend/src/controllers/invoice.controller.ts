@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { DownloaderService } from '../services/downloader.service.js';
 import { ParserService, ParsedInvoice } from '../services/parser.service.js';
 import { ExcelService } from '../services/excel.service.js';
+import { AuthService } from '../services/auth.service.js';
 import prisma from '../utils/db.js';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -9,6 +10,7 @@ import * as fs from 'fs';
 const downloaderService = new DownloaderService();
 const parserService = new ParserService();
 const excelService = new ExcelService();
+const authService = new AuthService();
 
 /**
  * Helper to parse dd/MM/yyyy date string to JS Date
@@ -30,11 +32,27 @@ export class InvoiceController {
    * Triggers querying GDT portal, downloading zip files, parsing XML, and saving to database
    */
   public static async downloadInvoices(req: Request, res: Response): Promise<void> {
-    const { startDate, endDate, token, invoiceType = 'SELL', saveToDb = true, outputDir } = req.body;
+    const { startDate, endDate, token, username, password, invoiceType = 'SELL', saveToDb = true, outputDir } = req.body;
 
-    if (!startDate || !endDate || !token) {
-      res.status(400).json({ error: 'Missing required parameters: startDate, endDate, token' });
+    if (!startDate || !endDate) {
+      res.status(400).json({ error: 'Missing required parameters: startDate, endDate' });
       return;
+    }
+
+    let activeToken = token;
+    if (!activeToken) {
+      if (username && password) {
+        try {
+          console.log('[InvoiceController] Token is missing. Attempting automatic GDT login...');
+          activeToken = await authService.loginAndGetToken(username, password);
+        } catch (authError: any) {
+          res.status(401).json({ error: 'Automatic authentication failed', details: authError.message });
+          return;
+        }
+      } else {
+        res.status(400).json({ error: 'Missing authentication: provide either token OR username and password' });
+        return;
+      }
     }
 
     const type = invoiceType === 'BUY' ? 'BUY' : 'SELL';
@@ -50,11 +68,30 @@ export class InvoiceController {
       return;
     }
 
-    const tokenMst = downloaderService.getMstFromToken(token);
+    const tokenMst = downloaderService.getMstFromToken(activeToken);
     if (!tokenMst) {
       res.status(401).json({ error: 'Failed to decode tax code (MST) from Token. Token might be invalid.' });
       return;
     }
+
+    // Determine company folder name based on DB name or fallback to MST
+    let companyFolder = '';
+    let companyFolderResolved = false;
+    try {
+      const company = await prisma.company.findUnique({
+        where: { taxCode: tokenMst },
+      });
+      if (company && company.name) {
+        // Clean folder name from illegal characters
+        companyFolder = company.name.replace(/[\\/*?:"<>|]/g, '').trim();
+        companyFolderResolved = true;
+      }
+    } catch (dbError) {
+      console.warn('[InvoiceController] Could not fetch company name from DB:', dbError);
+    }
+
+    const baseDir = outputDir || path.join(process.cwd(), 'invoices');
+    let targetDir = companyFolderResolved ? path.join(baseDir, companyFolder) : baseDir;
 
     // Split date range to prevent tax server query limits
     const dateChunks = downloaderService.splitDateRange(start, end);
@@ -64,7 +101,7 @@ export class InvoiceController {
     
     try {
       for (const chunk of dateChunks) {
-        const chunkRes = await downloaderService.queryInvoicesInRange(chunk.start, chunk.end, token, type);
+        const chunkRes = await downloaderService.queryInvoicesInRange(chunk.start, chunk.end, activeToken, type);
         allQueryInvoices.push(...chunkRes);
       }
     } catch (error: any) {
@@ -83,10 +120,6 @@ export class InvoiceController {
     }
 
     console.log(`[InvoiceController] Found total ${allQueryInvoices.length} invoices. Starting downloads...`);
-    
-    const baseDir = outputDir || path.join(process.cwd(), 'invoices');
-    let targetDir = baseDir;
-    let companyFolderResolved = false;
 
     const parsedList: ParsedInvoice[] = [];
     let successCount = 0;
@@ -95,7 +128,7 @@ export class InvoiceController {
     for (const inv of allQueryInvoices) {
       try {
         // Download into targetDir (initially baseDir, then companyFolder after resolving)
-        const zipPath = await downloaderService.downloadInvoiceZip(inv, token, targetDir);
+        const zipPath = await downloaderService.downloadInvoiceZip(inv, activeToken, targetDir);
         if (!zipPath) {
           errors.push(`Invoice ${inv.shdon}: Failed to download ZIP.`);
           continue;

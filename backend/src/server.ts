@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import prisma from './utils/db.js';
 import invoiceRoutes from './routes/invoice.routes.js';
+import authRoutes from './routes/auth.routes.js';
 
 // Load environment variables
 dotenv.config();
@@ -16,6 +17,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/auth', authRoutes);
 
 // Basic health check route
 app.get('/health', async (req: Request, res: Response) => {
