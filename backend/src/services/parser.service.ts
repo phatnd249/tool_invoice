@@ -86,12 +86,34 @@ export class ParserService {
   }
 
   /**
-   * Safe conversion of string to number
+   * Helper to safely extract text from tag even if it has attributes
+   */
+  private getSafeText(val: any): string {
+    if (val === undefined || val === null) return '';
+    if (typeof val === 'object') {
+      if (val['#text'] !== undefined) {
+        return String(val['#text']).trim();
+      }
+      return '';
+    }
+    return String(val).trim();
+  }
+
+  /**
+   * Safe conversion of string or object with text to number
    */
   private toNumber(val: any): number {
     if (val === undefined || val === null) return 0;
-    if (typeof val === 'number') return val;
-    const cleanStr = String(val).replace(/,/g, '').trim();
+    let actualVal = val;
+    if (typeof val === 'object') {
+      if (val['#text'] !== undefined) {
+        actualVal = val['#text'];
+      } else {
+        return 0;
+      }
+    }
+    if (typeof actualVal === 'number') return actualVal;
+    const cleanStr = String(actualVal).replace(/,/g, '').trim();
     const num = parseFloat(cleanStr);
     return isNaN(num) ? 0 : num;
   }
@@ -124,13 +146,13 @@ export class ParserService {
         }
         for (const item of hhdVuList) {
           items.push({
-            lineNumber: String(item.STT || '').trim() || undefined,
-            name: String(item.THHDVu || '').trim(),
-            unit: item.DVTinh ? String(item.DVTinh).trim() : undefined,
+            lineNumber: this.getSafeText(item.STT) || undefined,
+            name: this.getSafeText(item.THHDVu),
+            unit: item.DVTinh ? this.getSafeText(item.DVTinh) : undefined,
             quantity: item.SLuong !== undefined ? this.toNumber(item.SLuong) : undefined,
             price: item.DGia !== undefined ? this.toNumber(item.DGia) : undefined,
             amount: this.toNumber(item.ThTien),
-            taxRate: item.TSuat ? String(item.TSuat).trim() : undefined,
+            taxRate: item.TSuat ? this.getSafeText(item.TSuat) : undefined,
           });
         }
       }
@@ -145,15 +167,15 @@ export class ParserService {
         ttinList = [ttinList];
       }
       for (const ttin of ttinList) {
-        if (ttin.TTruong === 'MaTraCuu') {
-          lookupCode = String(ttin.DLieu || '').trim();
+        if (this.getSafeText(ttin.TTruong) === 'MaTraCuu') {
+          lookupCode = this.getSafeText(ttin.DLieu);
           break;
         }
       }
     }
 
     // Try parsing date (e.g. 2026-05-09T08:30:15 or 2026-05-09)
-    const nlapStr = this.getNestedValue(ttChung, ['NLap']) || '';
+    const nlapStr = this.getSafeText(this.getNestedValue(ttChung, ['NLap'])) || '';
     let invoiceDate = new Date();
     if (nlapStr) {
       const parsedDate = Date.parse(nlapStr);
@@ -164,36 +186,36 @@ export class ParserService {
 
     return {
       xmlFile: xmlFileName,
-      version: this.getNestedValue(ttChung, ['PBan']),
-      invoiceName: this.getNestedValue(ttChung, ['THDon']),
-      templateSymbol: String(this.getNestedValue(ttChung, ['KHMSHDon']) || '').trim(),
-      invoiceSymbol: String(this.getNestedValue(ttChung, ['KHHDon']) || '').trim(),
-      invoiceNumber: String(this.getNestedValue(ttChung, ['SHDon']) || '').trim(),
+      version: this.getSafeText(this.getNestedValue(ttChung, ['PBan'])) || undefined,
+      invoiceName: this.getSafeText(this.getNestedValue(ttChung, ['THDon'])) || undefined,
+      templateSymbol: this.getSafeText(this.getNestedValue(ttChung, ['KHMSHDon'])),
+      invoiceSymbol: this.getSafeText(this.getNestedValue(ttChung, ['KHHDon'])),
+      invoiceNumber: this.getSafeText(this.getNestedValue(ttChung, ['SHDon'])),
       invoiceDate,
-      currency: String(this.getNestedValue(ttChung, ['DVTTe']) || 'VND').trim(),
+      currency: this.getSafeText(this.getNestedValue(ttChung, ['DVTTe']) || 'VND'),
       exchangeRate: this.toNumber(this.getNestedValue(ttChung, ['TGia']) || 1),
-      paymentMethod: this.getNestedValue(ttChung, ['HTTToan']),
-      gdtProviderTaxCode: this.getNestedValue(ttChung, ['MSTTCGP']),
-      taxAuthorityCode: this.getNestedValue(root, ['MCCQT']),
+      paymentMethod: this.getSafeText(this.getNestedValue(ttChung, ['HTTToan'])) || undefined,
+      gdtProviderTaxCode: this.getSafeText(this.getNestedValue(ttChung, ['MSTTCGP'])) || undefined,
+      taxAuthorityCode: this.getSafeText(this.getNestedValue(root, ['MCCQT'])) || undefined,
       lookupCode: lookupCode || undefined,
 
       // Seller
-      sellerName: String(this.getNestedValue(nBan, ['Ten']) || '').trim(),
-      sellerTaxCode: String(this.getNestedValue(nBan, ['MST']) || '').trim(),
-      sellerAddress: this.getNestedValue(nBan, ['DChi']),
-      sellerPhone: this.getNestedValue(nBan, ['SDThoai']),
+      sellerName: this.getSafeText(this.getNestedValue(nBan, ['Ten'])),
+      sellerTaxCode: this.getSafeText(this.getNestedValue(nBan, ['MST'])),
+      sellerAddress: this.getSafeText(this.getNestedValue(nBan, ['DChi'])) || undefined,
+      sellerPhone: this.getSafeText(this.getNestedValue(nBan, ['SDThoai'])) || undefined,
 
       // Buyer
-      buyerName: String(this.getNestedValue(nMua, ['Ten']) || '').trim(),
-      buyerTaxCode: String(this.getNestedValue(nMua, ['MST']) || '').trim(),
-      buyerAddress: this.getNestedValue(nMua, ['DChi']),
-      buyerCustomerId: this.getNestedValue(nMua, ['MKHang']),
+      buyerName: this.getSafeText(this.getNestedValue(nMua, ['Ten'])),
+      buyerTaxCode: this.getSafeText(this.getNestedValue(nMua, ['MST'])),
+      buyerAddress: this.getSafeText(this.getNestedValue(nMua, ['DChi'])) || undefined,
+      buyerCustomerId: this.getSafeText(this.getNestedValue(nMua, ['MKHang'])) || undefined,
 
       // Financial
       totalBeforeTax: this.toNumber(this.getNestedValue(tToan, ['TgTCThue'])),
       taxAmount: this.toNumber(this.getNestedValue(tToan, ['TgTThue'])),
       totalAmount: this.toNumber(this.getNestedValue(tToan, ['TgTTTBSo'])),
-      totalAmountInWords: this.getNestedValue(tToan, ['TgTTTBChu']),
+      totalAmountInWords: this.getSafeText(this.getNestedValue(tToan, ['TgTTTBChu'])) || undefined,
 
       items,
     };
