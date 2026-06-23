@@ -1,0 +1,9 @@
+{
+  "name": "tool-invoice-root",
+  "version": "1.0.0",
+  "description": "Root workspace for tool-invoice",
+  "type": "module",
+  "scripts": {
+    "build:executable": "node build-executable.js"
+  }
+}
