@@ -4,8 +4,12 @@ import * as os from 'os';
 import * as net from 'net';
 import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+let _dirname = '';
+try {
+  _dirname = __dirname;
+} catch {
+  _dirname = path.dirname(fileURLToPath(import.meta.url));
+}
 
 // Helper to check if port is in use
 function checkPort(port: number): Promise<boolean> {
@@ -57,8 +61,8 @@ export function initializeEnvironment(): { dbPath: string; invoicesDir: string }
     // Resolve template database path
     // We check multiple locations depending on whether we run standalone, pkg, or inside developer workspace
     const possibleTemplates = [
-      path.join(__dirname, '../../prisma/dev.db'),
-      path.join(__dirname, '../prisma/dev.db'),
+      path.join(_dirname, '../../prisma/dev.db'),
+      path.join(_dirname, '../prisma/dev.db'),
       path.join(process.cwd(), 'prisma/dev.db'),
       path.join(process.cwd(), 'backend/prisma/dev.db'),
     ];
@@ -85,6 +89,25 @@ export function initializeEnvironment(): { dbPath: string; invoicesDir: string }
   // Set environment variables dynamically so Prisma and controllers use them
   process.env.DATABASE_URL = `file:${dbPath.replace(/\\/g, '/')}`;
   process.env.INVOICES_DIR = invoicesDir;
+
+  // Resolve PRISMA_QUERY_ENGINE_LIBRARY dynamically on physical disk next to executable when packaged
+  if (typeof (process as any).pkg !== 'undefined') {
+    const execDir = path.dirname(process.execPath);
+    const clientDir = path.join(execDir, 'node_modules/.prisma/client');
+    if (fs.existsSync(clientDir)) {
+      try {
+        const files = fs.readdirSync(clientDir);
+        const engineFile = files.find(f => (f.startsWith('libquery_engine-') || f.startsWith('query_engine-')) && f.endsWith('.node'));
+        if (engineFile) {
+          const enginePath = path.join(clientDir, engineFile);
+          process.env.PRISMA_QUERY_ENGINE_LIBRARY = enginePath;
+          console.log(`[Setup] Set PRISMA_QUERY_ENGINE_LIBRARY dynamically to: ${enginePath}`);
+        }
+      } catch (err) {
+        console.error('[Setup] Failed to scan native Prisma client folder:', err);
+      }
+    }
+  }
 
   return { dbPath, invoicesDir };
 }
