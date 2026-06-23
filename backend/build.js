@@ -15,13 +15,13 @@ async function runBuild() {
       bundle: true,
       platform: 'node',
       target: 'node20',
-      format: 'esm',
-      outfile: path.join(__dirname, 'dist/server.js'),
+      format: 'cjs',
+      outfile: path.join(__dirname, 'dist/server.cjs'),
       external: ['sharp', '@prisma/client'],
       sourcemap: true,
       minify: true,
     });
-    console.log('[Backend Build] esbuild bundled successfully to dist/server.js');
+    console.log('[Backend Build] esbuild bundled successfully to dist/server.cjs');
     
     // Prune unnecessary Prisma engine files to save space
     prunePrismaEngines();
