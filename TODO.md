@@ -114,6 +114,13 @@ Chuyển đổi sản phẩm từ bản chạy thử nghiệm trên trình duy�
 - [x] 25. Cấu hình đóng gói ứng dụng Portable bằng `electron-builder`.
 - [x] 26. Thiết lập quy trình tối ưu hóa dung lượng ứng dụng (dưới 150MB).
 
+### Giai đoạn 5: Chuyển đổi sang Local Web App và Đóng gói Standalone (Kế hoạch mới)
+- [ ] 27. Cấu hình Backend (Express) để phục vụ (serve) thư mục build React tĩnh (`frontend/dist`).
+- [ ] 28. Tích hợp thư viện `open` để tự động kích hoạt Trình duyệt mặc định khi chạy Backend.
+- [ ] 29. Thiết lập cơ chế tự sao chép database mẫu (`dev.db`) và khởi tạo thư mục `invoices` trong thư mục Home/Documents của người dùng khi ứng dụng CLI khởi chạy.
+- [ ] 30. Cài đặt và cấu hình `@vercel/pkg` hoặc Single Executable Applications (SEA) để đóng gói Backend thành 1 file nhị phân chạy độc lập (`.exe` trên Windows, `.bin` trên Linux).
+- [ ] 31. Tạo script build tự động nén toàn bộ luồng (Vite build -> Node build -> Đóng gói nhị phân) ra thư mục `dist-executable`.
+
 ---
 
 ## 8. Kế hoạch Tối ưu hóa Dung lượng Đóng gói Electron
@@ -136,4 +143,38 @@ Mặc định Prisma tải về nhiều tệp thực thi engine phục vụ cho 
 
 ### Bước 4: Tự động hóa quy trình qua Scripts
 * Viết script Node.js hoặc Bash tự động dọn dẹp tài nguyên thừa (Prisma Engine, Dev-dependencies) trước khi chạy `electron-builder` nhằm đảm bảo dung lượng file đóng gói luôn ở mức tối ưu nhất.
+
+---
+
+## 9. Kế hoạch Chuyển đổi sang Local Web Utility (Node.js Standalone Executable)
+Nhằm giảm thiểu dung lượng ứng dụng tải xuống xuống mức tối thiểu (dưới 40MB) và đơn giản hóa kiến trúc phân phối phần mềm, ta sẽ thay thế Electron bằng mô hình Local Web Utility.
+
+### Bước 1: Tích hợp Giao diện React vào Express Backend
+* Chạy `npm run build` trên Frontend React để tạo các tệp HTML/CSS/JS tĩnh tại `frontend/dist`.
+* Trong file `backend/src/server.ts`, cấu hình Express để phục vụ (serve) các file tĩnh này như giao diện chính:
+  ```typescript
+  app.use(express.static(path.join(__dirname, '../../frontend/dist')));
+  // Redirect mọi route không khớp API về trang index.html để hỗ trợ SPA routing
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
+  });
+  ```
+
+### Bước 2: Tự động Mở Trình duyệt mặc định khi chạy ứng dụng
+* Cài đặt thư viện `open` ở backend.
+* Khi khởi động Express thành công và phát hiện môi trường Production, tự động gọi trình duyệt mở đường dẫn:
+  ```typescript
+  import open from 'open';
+  open(`http://localhost:${PORT}`);
+  ```
+
+### Bước 3: Xử lý Tự động Dò tìm Cổng và Khởi tạo Thư mục làm việc
+* Tích hợp cơ chế tự động dò tìm cổng rỗi (bắt đầu từ 3000) giống như đã làm bên Electron.
+* Khi khởi chạy file nhị phân độc lập, tự động phát hiện đường dẫn dữ liệu người dùng (`Documents/InvoiceDownloader`) và sao chép cơ sở dữ liệu SQLite trống (`dev.db`) và cấu hình thư mục lưu trữ hóa đơn nếu chưa tồn tại.
+
+### Bước 4: Đóng gói thành tệp thực thi duy nhất bằng `@vercel/pkg`
+* Cài đặt `pkg` ở backend.
+* Cấu hình file `package.json` của backend để bao gồm các tệp asset cần thiết (cơ sở dữ liệu mẫu, giao diện React tĩnh).
+* Biên dịch ứng dụng thành tệp nhị phân độc lập tùy chọn nền tảng (ví dụ: `tool-invoice-linux`, `tool-invoice-win.exe`). Người dùng chỉ cần đúp click để chạy.
+
 
