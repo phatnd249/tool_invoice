@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, Menu } from 'electron';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import isDev from 'electron-is-dev';
@@ -91,6 +91,9 @@ function startBackend(port: string) {
 }
 
 function createWindow(port: string) {
+  // Hide menu bar globally (especially for macOS)
+  Menu.setApplicationMenu(null);
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -101,10 +104,14 @@ function createWindow(port: string) {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      devTools: isDev, // Disable DevTools in production
     },
     // Customize style: sleek frame
     backgroundColor: '#0f172a',
   });
+
+  // Hide menu bar for Windows/Linux
+  mainWindow.setMenu(null);
 
   const startUrl = isDev
     ? `http://localhost:5173?port=${port}`
