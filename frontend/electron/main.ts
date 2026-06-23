@@ -3,6 +3,7 @@ import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import isDev from 'electron-is-dev';
 import * as net from 'net';
+import * as fs from 'fs';
 
 // __filename and __dirname are automatically injected by Node.js in CommonJS format.
 // No need to redeclare them.
@@ -45,9 +46,32 @@ function startBackend(port: string) {
     : path.join(process.resourcesPath, 'backend/dist/server.js');
     
   const invoicesDir = path.join(app.getPath('documents'), 'InvoiceDownloader', 'invoices');
+  
+  // Resolve writable database path inside userData directory
+  const dbPath = path.join(app.getPath('userData'), 'database.db');
+  const templateDbPath = isDev 
+    ? path.join(__dirname, '../../backend/prisma/dev.db')
+    : path.join(process.resourcesPath, 'backend/prisma/dev.db');
+
+  if (!fs.existsSync(dbPath)) {
+    try {
+      if (fs.existsSync(templateDbPath)) {
+        fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+        fs.copyFileSync(templateDbPath, dbPath);
+        console.log(`[Electron] Database initialized successfully at: ${dbPath}`);
+      } else {
+        console.error(`[Electron] Template database not found at: ${templateDbPath}`);
+      }
+    } catch (dbErr) {
+      console.error('[Electron] Failed to initialize database in userData:', dbErr);
+    }
+  }
+
+  const databaseUrl = `file:${dbPath.replace(/\\/g, '/')}`;
+
   try {
     backendProcess = spawn('node', [backendPath], {
-      env: { ...process.env, PORT: port, INVOICES_DIR: invoicesDir }
+      env: { ...process.env, PORT: port, INVOICES_DIR: invoicesDir, DATABASE_URL: databaseUrl }
     });
 
     backendProcess.stdout?.on('data', (data) => {
