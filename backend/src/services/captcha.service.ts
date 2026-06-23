@@ -14,8 +14,6 @@ export class CaptchaService {
     const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey) {
       this.genAI = new GoogleGenerativeAI(apiKey);
-    } else {
-      console.warn('[CaptchaService] WARNING: GEMINI_API_KEY is not defined in environment variables.');
     }
   }
 
