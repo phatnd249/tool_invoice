@@ -112,7 +112,7 @@ Chuyển đổi sản phẩm từ bản chạy thử nghiệm trên trình duy�
 - [x] 23. Tích hợp Axios kết nối React với Backend API cục bộ.
 - [x] 24. Cấu hình quy trình chạy đồng thời (Concurrently) cho môi trường dev.
 - [x] 25. Cấu hình đóng gói ứng dụng Portable bằng `electron-builder`.
-- [ ] 26. Thiết lập quy trình tối ưu hóa dung lượng ứng dụng (dưới 150MB).
+- [x] 26. Thiết lập quy trình tối ưu hóa dung lượng ứng dụng (dưới 150MB).
 
 ---
 
