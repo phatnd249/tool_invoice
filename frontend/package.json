@@ -58,7 +58,9 @@
         "from": "../backend/node_modules",
         "to": "backend/node_modules",
         "filter": [
-          "**/*"
+          "@prisma/**/*",
+          ".prisma/**/*",
+          "sharp/**/*"
         ]
       },
       {
