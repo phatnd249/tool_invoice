@@ -17,8 +17,8 @@ Dựa trên việc phân tích mã nguồn `script.py` và yêu cầu tích hợ
 
 ## 2. Kế hoạch điều chỉnh Schema Cơ sở dữ liệu (Prisma + SQLite)
 Để lưu trữ đầy đủ các thông tin hóa đơn và các mặt hàng hàng hóa/dịch vụ liên quan:
-- Cập nhật Model `Invoice` với các thông tin chi tiết (Ký hiệu, mẫu, địa chỉ, HTTT, tổng tiền bằng chữ, mã tra cứu, mã CQ Thuế...).
-- Tạo thêm Model `InvoiceItem` lưu trữ chi tiết dòng hóa đơn (Tên hàng hóa, ĐVT, Số lượng, Đơn giá, Thuế suất...).
+- Cập nhật Model `Invoice` với các thông tin chi tiết.
+- Tạo thêm Model `InvoiceItem` lưu trữ chi tiết dòng hóa đơn.
 
 ---
 
@@ -50,27 +50,35 @@ Quy trình đăng nhập Tổng cục Thuế yêu cầu vượt mã Captcha dạ
 ---
 
 ## 5. Kế hoạch xây dựng Giao diện Demo HTML/TailwindCSS
-Để người dùng dễ dàng kiểm thử toàn bộ chức năng mà không cần dùng cURL, ta thiết kế một trang Dashboard Demo tĩnh tại `backend/public/index.html` được phục vụ qua Express Static files:
-
-### Bước 1: Cấu hình Static Files
-- Khai báo middleware `app.use(express.static('public'))` trong `server.ts` để phục vụ thư mục `backend/public/`.
-
-### Bước 2: Thiết kế giao diện HTML (index.html)
-- Tích hợp **TailwindCSS (CDN)** và **FontAwesome (CDN)**.
-- Xây dựng layout chia thành:
-  - **Sidebar:** Điều hướng các mục.
-  - **Màn hình Tải hóa đơn:** Form nhập các thông số (MST, Mật khẩu, Từ ngày, Đến ngày, Loại hóa đơn, Token thủ công), nút bấm chạy tác vụ và phần hiển thị Log thời gian thực.
-  - **Màn hình Lịch sử:** Bảng hiển thị danh sách hóa đơn (Số HĐ, Ngày lập, Người bán, Người mua, Tổng thanh toán, Nút tải file XML về máy tính), tích hợp các checkbox trên mỗi dòng.
-  - **Xuất Excel:** Chọn các dòng hóa đơn trên bảng và bấm nút "Xuất báo cáo tổng hợp" để tải file Excel `.xlsx` về máy.
-
-### Bước 3: Triển khai JavaScript Client-side
-- Fetch danh sách hóa đơn từ `GET /api/invoices` và cập nhật DOM động.
-- Gửi yêu cầu download tới `POST /api/invoices/download` (hiển thị trạng thái loading/log).
-- Gửi yêu cầu xuất Excel tới `POST /api/invoices/export` và nhận file dạng Blob để tải về trình duyệt.
+Để người dùng dễ dàng kiểm thử toàn bộ chức năng mà không cần dùng cURL, ta thiết kế một trang Dashboard Demo tĩnh tại `backend/public/index.html` được phục vụ qua Express Static files.
 
 ---
 
-## 6. Danh sách công việc (TODO List)
+## 6. Kế hoạch xây dựng Giao diện người dùng Desktop (ReactJS + ElectronJS)
+Chuyển đổi sản phẩm từ bản chạy thử nghiệm trên trình duyệt sang ứng dụng Desktop hoàn chỉnh có thể giải nén và chạy ngay (Portable):
+
+### Bước 1: Khởi tạo dự án Frontend React
+- Sử dụng Vite để khởi tạo dự án React + TypeScript tại thư mục `frontend/`.
+- Cấu hình TailwindCSS và FontAwesome cho React.
+
+### Bước 2: Tích hợp ElectronJS (Main Process & Preload)
+- Xây dựng file khởi tạo cửa sổ ứng dụng Electron `main.ts` (quản lý kích thước cửa sổ, vòng đời app).
+- Xây dựng file `preload.ts` để thiết lập cầu nối liên lạc IPC (Inter-Process Communication) an toàn giữa React và Node.js.
+- Cấu hình quy trình khởi động đồng thời (Concurrently) cho Backend và Frontend trong lúc phát triển.
+
+### Bước 3: Phát triển các React Component
+- Chuyển giao diện tĩnh từ `index.html` sang React:
+  - **`DashboardLayout`:** Layout chia sidebar và main content.
+  - **`InvoiceDownloader`:** Màn hình cấu hình tải hóa đơn + Ghi nhận log trực quan thông qua State.
+  - **`InvoiceHistory`:** Bảng hiển thị danh sách hóa đơn, checkbox chọn nhiều để gọi API xuất Excel, tải file XML/ZIP.
+  - **`SchedulePanel`:** Màn hình lập lịch hẹn giờ tự động tải hóa đơn định kỳ.
+
+### Bước 4: Đóng gói Ứng dụng (Packaging)
+- Cấu hình `electron-builder` để đóng gói toàn bộ dự án (React Frontend + Node.js Backend + SQLite + Prisma) thành một tệp tin Portable duy nhất, người dùng chỉ cần giải nén là sử dụng được ngay.
+
+---
+
+## 7. Danh sách công việc (TODO List)
 
 ### Giai đoạn 1: Tải hóa đơn & Xuất báo cáo (Đã Hoàn Thành)
 - [x] 1. Điều chỉnh `schema.prisma` và chạy Prisma Migrate để cập nhật SQLite database.
@@ -90,8 +98,17 @@ Quy trình đăng nhập Tổng cục Thuế yêu cầu vượt mã Captcha dạ
 
 ### Giai đoạn 3: Xây dựng Giao diện Demo HTML/TailwindCSS (Đã Hoàn Thành)
 - [x] 13. Cấu hình Express Static Files phục vụ thư mục `public/`.
-- [x] 14. Tạo file `backend/public/index.html` với đầy đủ cấu trúc UI và CSS.
+- [x] 14. Tạo file `backend/public/index.html` với đầy đủ cấu trúc UI và CSS (Đã có tính năng thu gọn Sidebar).
 - [x] 15. Triển khai JS gọi API `/api/invoices/download` hiển thị Log/Loading trực quan.
-- [x] 16. Triển khai JS gọi API `/api/invoices` đổ dữ liệu vào bảng danh sách.
-- [x] 17. Triển khai JS gọi API `/api/invoices/export` để tải file Excel tổng hợp các hoá đơn đã chọn.
-- [x] 18. Hỗ trợ tải file XML của hoá đơn từ thư mục backend về trình duyệt người dùng.
+- [x] 16. Triển khai JS gọi API `/api/invoices` đổ dữ liệu vào bảng danh sách (Đã sửa lỗi hiển thị file bị thiếu).
+- [x] 17. Triển khai JS gọi API `/api/invoices/export` để tải file Excel tổng hợp (Đã sửa lỗi công thức Excel).
+- [x] 18. Hỗ trợ tải file XML/ZIP của hoá đơn về trình duyệt người dùng.
+
+### Giai đoạn 4: Xây dựng Frontend Desktop bằng ReactJS & ElectronJS (Đang hoàn thiện)
+- [x] 19. Khởi tạo cấu trúc thư mục `frontend/` bằng Vite (React + TypeScript).
+- [x] 20. Cấu hình TailwindCSS và tích hợp bộ icon FontAwesome/Lucide React.
+- [x] 21. Cài đặt và cấu hình ElectronJS (Main process & Preload script).
+- [x] 22. Phát triển các React Component cho giao diện Dashboard (Tải hóa đơn, Lịch sử, Đặt lịch hẹn giờ).
+- [x] 23. Tích hợp Axios kết nối React với Backend API cục bộ.
+- [x] 24. Cấu hình quy trình chạy đồng thời (Concurrently) cho môi trường dev.
+- [x] 25. Cấu hình đóng gói ứng dụng Portable bằng `electron-builder`.
