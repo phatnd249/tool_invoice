@@ -2,17 +2,17 @@
   "name": "tool-invoice-backend",
   "version": "1.0.0",
   "description": "Backend API for Invoice Downloader and Manager",
-  "main": "dist/server.js",
+  "main": "dist/server.cjs",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "node build.js",
-    "start": "node dist/server.js",
+    "start": "node dist/server.cjs",
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:studio": "prisma studio",
     "pkg": "pkg ."
   },
-  "bin": "dist/server.js",
+  "bin": "dist/server.cjs",
   "pkg": {
     "assets": [
       "prisma/schema.prisma",
@@ -36,7 +36,7 @@
     "express": "^4.19.2",
     "fast-xml-parser": "^5.9.3",
     "open": "^11.0.0",
-    "sharp": "^0.35.2"
+    "sharp": "^0.32.6"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
