@@ -45,9 +45,10 @@ function startBackend(port: string) {
     ? path.join(__dirname, '../../backend/dist/server.js')
     : path.join(process.resourcesPath, 'backend/dist/server.js');
     
+  const invoicesDir = path.join(app.getPath('documents'), 'InvoiceDownloader', 'invoices');
   try {
     backendProcess = spawn('node', [backendPath], {
-      env: { ...process.env, PORT: port }
+      env: { ...process.env, PORT: port, INVOICES_DIR: invoicesDir }
     });
 
     backendProcess.stdout?.on('data', (data) => {
