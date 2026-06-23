@@ -1,6 +1,5 @@
 import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 import { spawn, ChildProcess } from 'child_process';
 import isDev from 'electron-is-dev';
 import * as net from 'net';
