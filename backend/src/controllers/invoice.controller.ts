@@ -125,7 +125,7 @@ export class InvoiceController {
       console.warn('[InvoiceController] Could not fetch company name from DB:', dbError);
     }
 
-    const baseDir = outputDir || path.join(process.cwd(), 'invoices');
+    const baseDir = outputDir || process.env.INVOICES_DIR || path.join(process.cwd(), 'invoices');
     let targetDir = companyFolderResolved ? path.join(baseDir, companyFolder) : baseDir;
 
     // Split date range to prevent tax server query limits
