@@ -4,6 +4,8 @@ jspm_packages/
 
 # Build outputs
 dist/
+dist-executable/
+dist-desktop/
 build/
 out/
 
