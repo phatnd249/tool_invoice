@@ -58,7 +58,10 @@
         "from": "../backend",
         "to": "backend",
         "filter": [
-          "**/*",
+          "dist/**/*",
+          "prisma/**/*",
+          "package.json",
+          "node_modules/**/*",
           "!node_modules/.cache",
           "!prisma/dev.db-journal"
         ]
