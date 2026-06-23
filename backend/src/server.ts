@@ -16,8 +16,12 @@ import prisma from './utils/db.js';
 import invoiceRoutes from './routes/invoice.routes.js';
 import authRoutes from './routes/auth.routes.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+let _dirname = '';
+try {
+  _dirname = __dirname;
+} catch {
+  _dirname = path.dirname(fileURLToPath(import.meta.url));
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -53,8 +57,8 @@ app.get('/health', async (req: Request, res: Response) => {
 // Serve React SPA Frontend static files
 // Note: We traverse relatively based on pkg (/snapshot) or standard build outputs
 const frontendDistPath = typeof (process as any).pkg !== 'undefined'
-  ? path.join(__dirname, '../../frontend/dist')
-  : path.join(__dirname, '../../../frontend/dist');
+  ? path.join(_dirname, '../../frontend/dist')
+  : path.join(_dirname, '../../../frontend/dist');
 
 if (fs.existsSync(frontendDistPath)) {
   console.log(`[Server] Serving frontend static assets from: ${frontendDistPath}`);
@@ -67,7 +71,7 @@ if (fs.existsSync(frontendDistPath)) {
 } else {
   console.warn(`[Server] WARNING: Frontend build path not found at: ${frontendDistPath}. Running API-only server.`);
   // Fallback to serving public/ directory if it exists
-  const publicPath = path.join(__dirname, '../public');
+  const publicPath = path.join(_dirname, '../public');
   if (fs.existsSync(publicPath)) {
     app.use(express.static(publicPath));
   }
