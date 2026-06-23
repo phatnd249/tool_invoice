@@ -37,6 +37,7 @@ export class AuthService {
   public async loginAndGetToken(
     username: string, 
     password: string, 
+    geminiApiKey?: string,
     maxRetries: number = 3
   ): Promise<string> {
     const loginUrl = 'https://hoadondientu.gdt.gov.vn/api/security-taxpayer/authenticate';
@@ -60,7 +61,7 @@ export class AuthService {
         const pngBuffer = await captchaService.convertSvgToPng(captcha.content);
 
         // Step 3: Solve Captcha using Gemini API
-        const cvalue = await captchaService.solveCaptcha(pngBuffer);
+        const cvalue = await captchaService.solveCaptcha(pngBuffer, geminiApiKey);
 
         if (!cvalue || cvalue.length !== 6) {
           console.warn(`[AuthService] Resolved captcha "${cvalue}" is invalid length (expected 6 characters). Retrying...`);

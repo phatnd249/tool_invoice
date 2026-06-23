@@ -16,6 +16,7 @@ export default function InvoiceDownloader() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [invoiceType, setInvoiceType] = useState('SELL');
+  const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       time: new Date().toLocaleTimeString(),
@@ -24,6 +25,11 @@ export default function InvoiceDownloader() {
     },
   ]);
   const [loading, setLoading] = useState(false);
+
+  const handleApiKeyChange = (val: string) => {
+    setGeminiApiKey(val);
+    localStorage.setItem('gemini_api_key', val);
+  };
 
   const addLog = (message: string, type: 'info' | 'error' | 'warning' | 'system' = 'info') => {
     setLogs((prev) => [
@@ -80,6 +86,9 @@ export default function InvoiceDownloader() {
     } else if (username.trim() && password.trim()) {
       payload.username = username.trim();
       payload.password = password.trim();
+      if (geminiApiKey.trim()) {
+        payload.geminiApiKey = geminiApiKey.trim();
+      }
       addLog(`Sử dụng tài khoản MST: ${username.trim()}. Sẽ tự động đăng nhập và giải captcha qua Gemini AI...`, 'info');
     } else {
       addLog('Lỗi: Bạn cần điền Token hoặc Cặp tài khoản/mật khẩu để xác thực.', 'error');
@@ -136,6 +145,17 @@ export default function InvoiceDownloader() {
                 placeholder="Nhập mật khẩu trang thuế"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">Gemini API Key (Dùng để giải captcha tự động)</label>
+            <input
+              type="password"
+              value={geminiApiKey}
+              onChange={(e) => handleApiKeyChange(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              placeholder="Nhập Gemini API Key của bạn (nếu dùng MST/Mật khẩu)"
+            />
           </div>
 
           <div className="relative py-2">

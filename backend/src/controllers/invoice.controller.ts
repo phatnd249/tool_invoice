@@ -32,7 +32,7 @@ export class InvoiceController {
    * Triggers querying GDT portal, downloading zip files, parsing XML, and saving to database
    */
   public static async downloadInvoices(req: Request, res: Response): Promise<void> {
-    const { startDate, endDate, token, username, password, invoiceType = 'SELL', saveToDb = true, outputDir } = req.body;
+    const { startDate, endDate, token, username, password, invoiceType = 'SELL', saveToDb = true, outputDir, geminiApiKey } = req.body;
 
     if (!startDate || !endDate) {
       res.status(400).json({ error: 'Missing required parameters: startDate, endDate' });
@@ -61,7 +61,7 @@ export class InvoiceController {
         } else {
           try {
             console.log(`[InvoiceController] Cached token is missing or expired. Attempting automatic GDT login for MST ${username}...`);
-            activeToken = await authService.loginAndGetToken(username, password);
+            activeToken = await authService.loginAndGetToken(username, password, geminiApiKey);
             
             // Save/Update the token in the Database cache
             if (dbCompany) {
@@ -144,7 +144,7 @@ export class InvoiceController {
       if (is401 && username && password) {
         console.warn(`[InvoiceController] GDT token expired or failed with 401. Resolving a new token...`);
         try {
-          activeToken = await authService.loginAndGetToken(username, password);
+          activeToken = await authService.loginAndGetToken(username, password, geminiApiKey);
           
           // Update DB Cache
           await prisma.company.upsert({

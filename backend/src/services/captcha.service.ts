@@ -60,16 +60,18 @@ export class CaptchaService {
     }
   }
 
-  /**
-   * Call Gemini API to perform OCR on the Captcha image buffer
-   */
-  public async solveCaptcha(imageBuffer: Buffer): Promise<string> {
-    if (!this.genAI) {
-      throw new Error('Gemini API is not initialized. Please set GEMINI_API_KEY in .env file.');
+  public async solveCaptcha(imageBuffer: Buffer, apiKeyOverride?: string): Promise<string> {
+    let client = this.genAI;
+    if (apiKeyOverride) {
+      client = new GoogleGenerativeAI(apiKeyOverride);
+    }
+
+    if (!client) {
+      throw new Error('Gemini API is not initialized. Please configure Gemini API Key.');
     }
 
     try {
-      const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = client.getGenerativeModel({ model: 'gemini-2.5-flash' });
       
       const prompt = 'Extract the alphanumeric characters in this captcha image. Return only the captcha characters in uppercase, without any spaces, punctuation, or extra text.';
       
