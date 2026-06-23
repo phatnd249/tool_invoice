@@ -112,3 +112,28 @@ Chuyển đổi sản phẩm từ bản chạy thử nghiệm trên trình duy�
 - [x] 23. Tích hợp Axios kết nối React với Backend API cục bộ.
 - [x] 24. Cấu hình quy trình chạy đồng thời (Concurrently) cho môi trường dev.
 - [x] 25. Cấu hình đóng gói ứng dụng Portable bằng `electron-builder`.
+- [ ] 26. Thiết lập quy trình tối ưu hóa dung lượng ứng dụng (dưới 150MB).
+
+---
+
+## 8. Kế hoạch Tối ưu hóa Dung lượng Đóng gói Electron
+Để giảm dung lượng ứng dụng sau khi đóng gói từ 1.4 GB xuống dưới mức ~150MB, ta sẽ thực hiện 4 bước tối ưu hóa sau:
+
+### Bước 1: Sử dụng Esbuild để bundle Backend
+Thay vì copy toàn bộ thư mục `backend/node_modules` khổng lồ vào trong gói cài đặt, ta sẽ:
+* Cài đặt `esbuild` ở backend.
+* Biên dịch toàn bộ code TypeScript backend và các dependency dạng pure JS thành một file bundle duy nhất tại `backend/dist/server.js`.
+* Nhờ đó, ta hoàn toàn có thể loại bỏ `node_modules` của backend khi đóng gói, chỉ giữ lại các module dạng native binary (như Sharp, Prisma Query Engine).
+
+### Bước 2: Tối ưu và lọc bỏ các Prisma Engine dư thừa
+Mặc định Prisma tải về nhiều tệp thực thi engine phục vụ cho việc migration, CLI, định dạng schema. Trong môi trường production, ta chỉ cần giữ lại duy nhất tệp nhị phân `query-engine` chạy cho hệ điều hành đích:
+* Xóa các tệp: `schema-engine`, `introspection-engine`, `migration-engine` trong node_modules.
+* Chỉ copy file query engine phù hợp với hệ điều hành đích (ví dụ: `query-engine-debian-openssl...` cho Linux, `query-engine-windows...` cho Windows).
+
+### Bước 3: Chỉ cài đặt Production Dependencies cho Sharp
+* Thư viện xử lý ảnh `sharp` sử dụng native C++ binary nên khó bundle hoàn toàn bằng esbuild.
+* Ta sẽ cấu hình đóng gói chỉ giữ lại thư mục `sharp` đã được tối ưu hóa cho nền tảng đích.
+
+### Bước 4: Tự động hóa quy trình qua Scripts
+* Viết script Node.js hoặc Bash tự động dọn dẹp tài nguyên thừa (Prisma Engine, Dev-dependencies) trước khi chạy `electron-builder` nhằm đảm bảo dung lượng file đóng gói luôn ở mức tối ưu nhất.
+
