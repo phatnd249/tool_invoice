@@ -25,6 +25,7 @@ interface Company {
   token?: string | null;
   tokenExpiredAt?: string | null;
   loginMode: 'AUTO' | 'MANUAL';
+  downloadCount?: number;
   createdAt: string;
 }
 
@@ -370,6 +371,7 @@ export default function ConfigPanel() {
                   <th className="p-3">Mã Số Thuế</th>
                   <th className="p-3">Tên Doanh Nghiệp</th>
                   <th className="p-3">Chế Độ</th>
+                  <th className="p-3">Số Lần Tải</th>
                   <th className="p-3">Trạng Thái Token</th>
                   <th className="p-3">Ngày Tạo</th>
                   <th className="p-3 text-center">Thao Tác</th>
@@ -378,13 +380,13 @@ export default function ConfigPanel() {
               <tbody className="divide-y divide-slate-850 text-slate-300">
                 {companiesLoading && companies.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-500">
+                    <td colSpan={7} className="p-8 text-center text-slate-500">
                       Đang tải danh sách...
                     </td>
                   </tr>
                 ) : companies.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-500">
+                    <td colSpan={7} className="p-8 text-center text-slate-500">
                       Chưa có doanh nghiệp nào được lưu cấu hình.
                     </td>
                   </tr>
@@ -413,6 +415,9 @@ export default function ConfigPanel() {
                           }`}>
                             {c.loginMode === 'AUTO' ? 'Tự động' : 'Thủ công'}
                           </span>
+                        </td>
+                        <td className="p-3 font-semibold text-indigo-400 font-mono">
+                          {c.downloadCount || 0}
                         </td>
                         <td className="p-3">
                           <span className={`px-2 py-1 rounded-lg border text-xxs font-medium ${tokenStatus.color}`}>

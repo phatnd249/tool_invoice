@@ -10,17 +10,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id               Int               @id @default(autoincrement())
+  username         String            @unique
+  password         String
+  role             String            @default("STAFF") // "ADMIN" or "STAFF"
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  companies        UserCompany[]
+  downloadHistories DownloadHistory[]
+}
+
 model Company {
-  id             Int       @id @default(autoincrement())
-  taxCode        String    @unique
+  id             Int           @id @default(autoincrement())
+  taxCode        String        @unique
   name           String
   lookupPassword String
   token          String?
   tokenExpiredAt DateTime?
-  loginMode      String    @default("AUTO") // "AUTO" or "MANUAL"
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  loginMode      String        @default("AUTO") // "AUTO" or "MANUAL"
+  downloadCount  Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   schedules      Schedule[]
+  users          UserCompany[]
+}
+
+model UserCompany {
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([userId, companyId])
 }
 
 model Invoice {
@@ -90,6 +113,9 @@ model DownloadHistory {
   status          String   // "SUCCESS" or "FAILED" or "PARTIAL"
   log             String?
   countDownloaded Int      @default(0)
+  userId          Int?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  username        String?
 }
 
 model Schedule {

@@ -6,6 +6,7 @@ import { AuthService } from '../services/auth.service.js';
 import prisma from '../utils/db.js';
 import * as path from 'path';
 import * as fs from 'fs';
+import { AuthRequest } from '../middleware/auth.middleware.js';
 
 const downloaderService = new DownloaderService();
 const parserService = new ParserService();
@@ -31,11 +32,16 @@ export class InvoiceController {
    * POST /api/invoices/download
    * Triggers querying GDT portal, downloading zip files, parsing XML, and saving to database
    */
-  public static async downloadInvoices(req: Request, res: Response): Promise<void> {
+  public static async downloadInvoices(req: AuthRequest, res: Response): Promise<void> {
     const { startDate, endDate, companyId, token, username, password, invoiceType = 'SELL', saveToDb = true, outputDir, geminiApiKey } = req.body;
 
     if (!startDate || !endDate) {
       res.status(400).json({ error: 'Missing required parameters: startDate, endDate' });
+      return;
+    }
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
       return;
     }
 
@@ -44,6 +50,44 @@ export class InvoiceController {
     let effectiveUsername = username;
     let effectivePassword = password;
     let effectiveGeminiKey = geminiApiKey;
+
+    // Access control for non-admin
+    if (req.user.role !== 'ADMIN') {
+      const targetCid = companyId ? Number(companyId) : null;
+      let checkCompanyId = targetCid;
+
+      if (!checkCompanyId && username) {
+        try {
+          const resolvedComp = await prisma.company.findUnique({
+            where: { taxCode: username }
+          });
+          if (resolvedComp) {
+            checkCompanyId = resolvedComp.id;
+          }
+        } catch (err) {
+          console.warn('[InvoiceController] Failed to check access:', err);
+        }
+      }
+
+      if (!checkCompanyId) {
+        res.status(403).json({ error: 'Bạn không có quyền thực hiện hành động này.' });
+        return;
+      }
+
+      const hasAccess = await prisma.userCompany.findUnique({
+        where: {
+          userId_companyId: {
+            userId: req.user.id,
+            companyId: checkCompanyId
+          }
+        }
+      });
+
+      if (!hasAccess) {
+        res.status(403).json({ error: 'Bạn không có quyền truy cập doanh nghiệp này.' });
+        return;
+      }
+    }
 
     // 1. Resolve company by ID if provided
     if (companyId) {
@@ -428,8 +472,26 @@ export class InvoiceController {
         status,
         log: errors.length > 0 ? errors.join('\n') : 'Download completed successfully.',
         countDownloaded: successCount,
+        userId: req.user?.id || null,
+        username: req.user?.username || null,
       },
     });
+
+    // Update Company statistics count
+    if (dbCompany && successCount > 0) {
+      try {
+        await prisma.company.update({
+          where: { id: dbCompany.id },
+          data: {
+            downloadCount: {
+              increment: successCount
+            }
+          }
+        });
+      } catch (statErr) {
+        console.error('[InvoiceController] Failed to update company stats:', statErr);
+      }
+    }
 
     res.json({
       message: `Tải hóa đơn hoàn tất. Thành công: ${successCount}/${allQueryInvoices.length}`,
@@ -450,8 +512,13 @@ export class InvoiceController {
    * GET /api/invoices
    * Retrieve list of saved invoices from SQLite database with filters
    */
-  public static async getInvoices(req: Request, res: Response): Promise<void> {
+  public static async getInvoices(req: AuthRequest, res: Response): Promise<void> {
     const { type, sellerTaxCode, buyerTaxCode, startDate, endDate } = req.query;
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
 
     const whereClause: any = {};
     if (type) {
@@ -470,6 +537,34 @@ export class InvoiceController {
       }
       if (endDate) {
         whereClause.invoiceDate.lte = new Date(String(endDate));
+      }
+    }
+
+    if (req.user.role !== 'ADMIN') {
+      try {
+        const assignedCompanies = await prisma.userCompany.findMany({
+          where: { userId: req.user.id },
+          include: {
+            company: {
+              select: { taxCode: true }
+            }
+          }
+        });
+        const allowedMsts = assignedCompanies.map(uc => uc.company.taxCode);
+
+        whereClause.AND = [
+          ...(whereClause.AND || []),
+          {
+            OR: [
+              { sellerTaxCode: { in: allowedMsts } },
+              { buyerTaxCode: { in: allowedMsts } }
+            ]
+          }
+        ];
+      } catch (err) {
+        console.error('[InvoiceController] Failed to check staff permissions:', err);
+        res.status(500).json({ error: 'Không thể xác thực quyền hạn.' });
+        return;
       }
     }
 
@@ -493,8 +588,13 @@ export class InvoiceController {
    * POST /api/invoices/export
    * Accepts list of invoice IDs and exports a premium Excel XLSX report
    */
-  public static async exportInvoices(req: Request, res: Response): Promise<void> {
+  public static async exportInvoices(req: AuthRequest, res: Response): Promise<void> {
     const { invoiceIds } = req.body;
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
 
     if (!invoiceIds || !Array.isArray(invoiceIds) || invoiceIds.length === 0) {
       res.status(400).json({ error: 'Missing required parameter: invoiceIds (must be non-empty array)' });
@@ -502,10 +602,31 @@ export class InvoiceController {
     }
 
     try {
+      let whereClause: any = { id: { in: invoiceIds } };
+
+      if (req.user.role !== 'ADMIN') {
+        const assignedCompanies = await prisma.userCompany.findMany({
+          where: { userId: req.user.id },
+          include: {
+            company: {
+              select: { taxCode: true }
+            }
+          }
+        });
+        const allowedMsts = assignedCompanies.map(uc => uc.company.taxCode);
+
+        whereClause.AND = [
+          {
+            OR: [
+              { sellerTaxCode: { in: allowedMsts } },
+              { buyerTaxCode: { in: allowedMsts } }
+            ]
+          }
+        ];
+      }
+
       const invoices = await prisma.invoice.findMany({
-        where: {
-          id: { in: invoiceIds },
-        },
+        where: whereClause,
         include: {
           items: true,
         },
@@ -568,8 +689,13 @@ export class InvoiceController {
    * GET /api/invoices/:id/xml
    * Download raw XML file of invoice
    */
-  public static async downloadXml(req: Request, res: Response): Promise<void> {
+  public static async downloadXml(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
 
     try {
       const invoice = await prisma.invoice.findUnique({
@@ -579,6 +705,24 @@ export class InvoiceController {
       if (!invoice || !invoice.xmlPath) {
         res.status(404).json({ error: 'Invoice XML not found' });
         return;
+      }
+
+      // Check staff permissions
+      if (req.user.role !== 'ADMIN') {
+        const assignedCompanies = await prisma.userCompany.findMany({
+          where: { userId: req.user.id },
+          include: {
+            company: {
+              select: { taxCode: true }
+            }
+          }
+        });
+        const allowedMsts = assignedCompanies.map(uc => uc.company.taxCode);
+        const hasAccess = allowedMsts.includes(invoice.sellerTaxCode) || allowedMsts.includes(invoice.buyerTaxCode);
+        if (!hasAccess) {
+          res.status(403).json({ error: 'Bạn không có quyền truy cập hóa đơn này.' });
+          return;
+        }
       }
 
       if (!fs.existsSync(invoice.xmlPath)) {
@@ -598,8 +742,13 @@ export class InvoiceController {
    * GET /api/invoices/:id/zip
    * Download raw ZIP file of invoice
    */
-  public static async downloadZip(req: Request, res: Response): Promise<void> {
+  public static async downloadZip(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
 
     try {
       const invoice = await prisma.invoice.findUnique({
@@ -609,6 +758,24 @@ export class InvoiceController {
       if (!invoice || !invoice.zipPath) {
         res.status(404).json({ error: 'Invoice ZIP not found' });
         return;
+      }
+
+      // Check staff permissions
+      if (req.user.role !== 'ADMIN') {
+        const assignedCompanies = await prisma.userCompany.findMany({
+          where: { userId: req.user.id },
+          include: {
+            company: {
+              select: { taxCode: true }
+            }
+          }
+        });
+        const allowedMsts = assignedCompanies.map(uc => uc.company.taxCode);
+        const hasAccess = allowedMsts.includes(invoice.sellerTaxCode) || allowedMsts.includes(invoice.buyerTaxCode);
+        if (!hasAccess) {
+          res.status(403).json({ error: 'Bạn không có quyền truy cập hóa đơn này.' });
+          return;
+        }
       }
 
       if (!fs.existsSync(invoice.zipPath)) {
@@ -621,6 +788,40 @@ export class InvoiceController {
       res.sendFile(invoice.zipPath);
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to download ZIP file', details: error.message });
+    }
+  }
+
+  /**
+   * GET /api/invoices/download-history
+   * Retrieve audit logs and download stats history
+   */
+  public static async getDownloadHistory(req: AuthRequest, res: Response): Promise<void> {
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
+    try {
+      let histories;
+      if (req.user.role === 'ADMIN') {
+        histories = await prisma.downloadHistory.findMany({
+          orderBy: { downloadDate: 'desc' }
+        });
+      } else {
+        // Staff: only get logs for companies they have access to
+        const assignedCompanies = await prisma.userCompany.findMany({
+          where: { userId: req.user.id },
+          include: { company: { select: { taxCode: true } } }
+        });
+        const allowedMsts = assignedCompanies.map(uc => uc.company.taxCode);
+        histories = await prisma.downloadHistory.findMany({
+          where: { taxCode: { in: allowedMsts } },
+          orderBy: { downloadDate: 'desc' }
+        });
+      }
+      res.json(histories);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to retrieve download history', details: error.message });
     }
   }
 }

@@ -1,19 +1,40 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service.js';
 import prisma from '../utils/db.js';
+import { AuthRequest } from '../middleware/auth.middleware.js';
 
 const authService = new AuthService();
 
 export class CompanyController {
   /**
    * GET /api/companies
-   * Fetch all companies
+   * Fetch all companies (filtered by user access for staff)
    */
-  public static async getCompanies(req: Request, res: Response): Promise<void> {
+  public static async getCompanies(req: AuthRequest, res: Response): Promise<void> {
     try {
-      const companies = await prisma.company.findMany({
-        orderBy: { createdAt: 'desc' }
-      });
+      if (!req.user) {
+        res.status(401).json({ error: 'Yêu cầu xác thực.' });
+        return;
+      }
+
+      let companies;
+      if (req.user.role === 'ADMIN') {
+        companies = await prisma.company.findMany({
+          orderBy: { createdAt: 'desc' }
+        });
+      } else {
+        // STAFF: only return companies assigned to them
+        companies = await prisma.company.findMany({
+          where: {
+            users: {
+              some: {
+                userId: req.user.id
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+      }
       res.json(companies);
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to retrieve companies', details: error.message });
@@ -24,7 +45,12 @@ export class CompanyController {
    * POST /api/companies
    * Add new company and verify login
    */
-  public static async createCompany(req: Request, res: Response): Promise<void> {
+  public static async createCompany(req: AuthRequest, res: Response): Promise<void> {
+    if (!req.user || req.user.role !== 'ADMIN') {
+      res.status(403).json({ error: 'Bạn không có quyền thực hiện hành động này.' });
+      return;
+    }
+
     const { taxCode, name, lookupPassword, loginMode = 'AUTO', ckey, cvalue } = req.body;
 
     if (!taxCode || !lookupPassword) {
@@ -90,7 +116,12 @@ export class CompanyController {
    * PUT /api/companies/:id
    * Update company details
    */
-  public static async updateCompany(req: Request, res: Response): Promise<void> {
+  public static async updateCompany(req: AuthRequest, res: Response): Promise<void> {
+    if (!req.user || req.user.role !== 'ADMIN') {
+      res.status(403).json({ error: 'Bạn không có quyền thực hiện hành động này.' });
+      return;
+    }
+
     const { id } = req.params;
     const { name, lookupPassword, loginMode } = req.body;
 
@@ -113,7 +144,12 @@ export class CompanyController {
    * DELETE /api/companies/:id
    * Delete company (Prisma cascade deletes schedules)
    */
-  public static async deleteCompany(req: Request, res: Response): Promise<void> {
+  public static async deleteCompany(req: AuthRequest, res: Response): Promise<void> {
+    if (!req.user || req.user.role !== 'ADMIN') {
+      res.status(403).json({ error: 'Bạn không có quyền thực hiện hành động này.' });
+      return;
+    }
+
     const { id } = req.params;
 
     try {
@@ -130,10 +166,30 @@ export class CompanyController {
    * POST /api/companies/:id/refresh
    * Refresh token for AUTO mode companies
    */
-  public static async refreshToken(req: Request, res: Response): Promise<void> {
+  public static async refreshToken(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
 
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
     try {
+      if (req.user.role !== 'ADMIN') {
+        const hasAccess = await prisma.userCompany.findUnique({
+          where: {
+            userId_companyId: {
+              userId: req.user.id,
+              companyId: Number(id)
+            }
+          }
+        });
+        if (!hasAccess) {
+          res.status(403).json({ error: 'Bạn không có quyền thực hiện hành động này đối với doanh nghiệp này.' });
+          return;
+        }
+      }
+
       const company = await prisma.company.findUnique({
         where: { id: Number(id) }
       });
@@ -176,9 +232,14 @@ export class CompanyController {
    * POST /api/companies/:id/login-manual
    * Login manually for MANUAL mode companies
    */
-  public static async loginManual(req: Request, res: Response): Promise<void> {
+  public static async loginManual(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
     const { ckey, cvalue } = req.body;
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
 
     if (!ckey || !cvalue) {
       res.status(400).json({ error: 'Thiếu mã captcha xác thực.' });
@@ -186,6 +247,21 @@ export class CompanyController {
     }
 
     try {
+      if (req.user.role !== 'ADMIN') {
+        const hasAccess = await prisma.userCompany.findUnique({
+          where: {
+            userId_companyId: {
+              userId: req.user.id,
+              companyId: Number(id)
+            }
+          }
+        });
+        if (!hasAccess) {
+          res.status(403).json({ error: 'Bạn không có quyền thực hiện hành động này đối với doanh nghiệp này.' });
+          return;
+        }
+      }
+
       const company = await prisma.company.findUnique({
         where: { id: Number(id) }
       });

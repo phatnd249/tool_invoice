@@ -1,12 +1,10 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/auth.controller.js';
+import { authenticateToken } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
-// Route to get token using GDT portal credentials
-router.post('/token', AuthController.authenticate);
-
-// Route to fetch a new captcha SVG from GDT
-router.get('/captcha', AuthController.getCaptcha);
+router.post('/login', AuthController.login);
+router.get('/me', authenticateToken as any, AuthController.me as any);
 
 export default router;
