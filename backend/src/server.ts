@@ -18,6 +18,7 @@ import authRoutes from './routes/auth.routes.js';
 import companyRoutes from './routes/company.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
 import userRoutes from './routes/user.routes.js';
+import feedbackRoutes from './routes/feedback.routes.js';
 import { AuthController } from './controllers/auth.controller.js';
 
 let _dirname = '';
@@ -41,6 +42,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/feedbacks', feedbackRoutes);
 
 // Basic health check route
 app.get('/health', async (req: Request, res: Response) => {

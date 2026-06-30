@@ -20,6 +20,7 @@ model User {
   updatedAt        DateTime          @updatedAt
   companies        UserCompany[]
   downloadHistories DownloadHistory[]
+  feedbacks        Feedback[]
 }
 
 model Company {
@@ -133,4 +134,14 @@ model Schedule {
 model Setting {
   key   String @id
   value String
+}
+
+model Feedback {
+  id        Int      @id @default(autoincrement())
+  content   String
+  status    String   @default("PENDING") // "PENDING", "RESOLVED", "REJECTED"
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
