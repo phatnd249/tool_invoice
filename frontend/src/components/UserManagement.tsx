@@ -235,7 +235,7 @@ export default function UserManagement() {
                           ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' 
                           : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
                       }`}>
-                        {user.role === 'ADMIN' ? 'Quản trị (Admin)' : 'Nhân viên'}
+                        {user.role === 'ADMIN' ? 'Quản trị viên' : 'Nhân viên'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
