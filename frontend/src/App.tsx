@@ -5,12 +5,14 @@ import {
   History,
   CalendarDays,
   Menu,
+  Settings,
 } from 'lucide-react';
 import InvoiceDownloader from './components/InvoiceDownloader';
 import InvoiceHistory from './components/InvoiceHistory';
 import SchedulePanel from './components/SchedulePanel';
+import ConfigPanel from './components/ConfigPanel';
 
-type Tab = 'download' | 'history' | 'schedules';
+type Tab = 'download' | 'history' | 'schedules' | 'config';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('download');
@@ -24,6 +26,8 @@ export default function App() {
         return 'Lịch Sử Hoá Đơn Đã Tải';
       case 'schedules':
         return 'Lập Lịch Tải Định Kỳ';
+      case 'config':
+        return 'Cấu Hình Hệ Thống';
     }
   };
 
@@ -78,6 +82,17 @@ export default function App() {
               <CalendarDays className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
               {!sidebarCollapsed && <span>Đặt Lịch Tải</span>}
             </button>
+            <button
+              onClick={() => setActiveTab('config')}
+              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${
+                activeTab === 'config'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <Settings className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
+              {!sidebarCollapsed && <span>Cấu Hình</span>}
+            </button>
           </nav>
         </div>
         {!sidebarCollapsed && (
@@ -111,6 +126,7 @@ export default function App() {
           {activeTab === 'download' && <InvoiceDownloader />}
           {activeTab === 'history' && <InvoiceHistory />}
           {activeTab === 'schedules' && <SchedulePanel />}
+          {activeTab === 'config' && <ConfigPanel />}
         </div>
       </main>
     </div>

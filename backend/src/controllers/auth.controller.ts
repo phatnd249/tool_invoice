@@ -23,4 +23,17 @@ export class AuthController {
       res.status(401).json({ error: 'Authentication failed', details: error.message });
     }
   }
+
+  /**
+   * GET /api/auth/captcha
+   * Fetches a new GDT Captcha (key and SVG content)
+   */
+  public static async getCaptcha(req: Request, res: Response): Promise<void> {
+    try {
+      const captcha = await authService.getNewCaptcha();
+      res.json(captcha);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch captcha from GDT', details: error.message });
+    }
+  }
 }

@@ -15,6 +15,8 @@ import { fileURLToPath } from 'url';
 import prisma from './utils/db.js';
 import invoiceRoutes from './routes/invoice.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import companyRoutes from './routes/company.routes.js';
+import settingsRoutes from './routes/settings.routes.js';
 
 let _dirname = '';
 try {
@@ -34,6 +36,8 @@ app.use(express.json());
 // Routes
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/companies', companyRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Basic health check route
 app.get('/health', async (req: Request, res: Response) => {
