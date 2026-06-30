@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Play, Sliders, Terminal, Trash2 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
+
+interface Company {
+  id: number;
+  taxCode: string;
+  name: string;
+}
 
 interface LogEntry {
   time: string;
@@ -10,13 +16,13 @@ interface LogEntry {
 }
 
 export default function InvoiceDownloader() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [token, setToken] = useState('');
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [invoiceType, setInvoiceType] = useState('SELL');
-  const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       time: new Date().toLocaleTimeString(),
@@ -26,10 +32,25 @@ export default function InvoiceDownloader() {
   ]);
   const [loading, setLoading] = useState(false);
 
-  const handleApiKeyChange = (val: string) => {
-    setGeminiApiKey(val);
-    localStorage.setItem('gemini_api_key', val);
+  // Fetch registered companies on mount
+  const fetchCompanies = async () => {
+    setCompaniesLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/companies`);
+      setCompanies(res.data);
+      if (res.data.length > 0) {
+        setSelectedCompanyId(String(res.data[0].id));
+      }
+    } catch (err) {
+      console.error('Failed to load companies:', err);
+    } finally {
+      setCompaniesLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchCompanies();
+  }, []);
 
   const addLog = (message: string, type: 'info' | 'error' | 'warning' | 'system' = 'info') => {
     setLogs((prev) => [
@@ -62,6 +83,11 @@ export default function InvoiceDownloader() {
     e.preventDefault();
     if (loading) return;
 
+    if (!selectedCompanyId) {
+      addLog('Lỗi: Bạn cần cấu hình và chọn một Doanh nghiệp trước khi tải.', 'error');
+      return;
+    }
+
     const formattedStart = formatDatePayload(startDate);
     const formattedEnd = formatDatePayload(endDate);
 
@@ -70,36 +96,19 @@ export default function InvoiceDownloader() {
       return;
     }
 
+    const activeCompany = companies.find(c => String(c.id) === selectedCompanyId);
     setLoading(true);
-    addLog(`Khởi chạy luồng tải hóa đơn từ ${formattedStart} đến ${formattedEnd}...`, 'info');
-
-    const payload: any = {
-      startDate: formattedStart,
-      endDate: formattedEnd,
-      invoiceType,
-      saveToDb: true,
-    };
-
-    if (token.trim()) {
-      payload.token = token.trim();
-      addLog('Sử dụng token xác thực có sẵn được cung cấp.', 'info');
-    } else if (username.trim() && password.trim()) {
-      payload.username = username.trim();
-      payload.password = password.trim();
-      if (geminiApiKey.trim()) {
-        payload.geminiApiKey = geminiApiKey.trim();
-      }
-      addLog(`Sử dụng tài khoản MST: ${username.trim()}. Sẽ tự động đăng nhập và giải captcha qua Gemini AI...`, 'info');
-    } else {
-      addLog('Lỗi: Bạn cần điền Token hoặc Cặp tài khoản/mật khẩu để xác thực.', 'error');
-      setLoading(false);
-      return;
-    }
+    addLog(`Khởi chạy luồng tải hóa đơn cho [${activeCompany?.name}] từ ${formattedStart} đến ${formattedEnd}...`, 'info');
 
     try {
-      // Connect to the local backend dynamically
-      const response = await axios.post(`${API_BASE_URL}/api/invoices/download`, payload);
-      
+      const response = await axios.post(`${API_BASE_URL}/api/invoices/download`, {
+        companyId: Number(selectedCompanyId),
+        startDate: formattedStart,
+        endDate: formattedEnd,
+        invoiceType,
+        saveToDb: true,
+      });
+
       if (response.status === 200) {
         addLog(`Hoàn tất tải hóa đơn! ${response.data.message || ''}`, 'info');
         if (response.data.errors && response.data.errors.length > 0) {
@@ -110,7 +119,7 @@ export default function InvoiceDownloader() {
       }
     } catch (err: any) {
       const errMsg = err.response?.data?.error || err.response?.data?.details || err.message;
-      addLog(`Lỗi kết nối server: ${errMsg}`, 'error');
+      addLog(`Lỗi tải hoá đơn: ${errMsg}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -121,61 +130,29 @@ export default function InvoiceDownloader() {
       {/* Configuration Form Card */}
       <div className="lg:col-span-2 bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl space-y-6">
         <h2 className="text-lg font-semibold text-indigo-400 flex items-center">
-          <Sliders className="w-5 h-5 mr-2" /> Cấu Hình Tải Hoá Đơn
+          <Sliders className="w-5 h-5 mr-2" /> Tham Số Tải Hoá Đơn
         </h2>
         <form onSubmit={handleDownload} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">Mã Số Thuế (MST)</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                placeholder="Nhập MST doanh nghiệp"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">Mật khẩu tra cứu</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                placeholder="Nhập mật khẩu trang thuế"
-              />
-            </div>
-          </div>
-
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Gemini API Key (Dùng để giải captcha tự động)</label>
-            <input
-              type="password"
-              value={geminiApiKey}
-              onChange={(e) => handleApiKeyChange(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              placeholder="Nhập Gemini API Key của bạn (nếu dùng MST/Mật khẩu)"
-            />
-          </div>
-
-          <div className="relative py-2">
-            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-              <div className="w-full border-t border-slate-800"></div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">Doanh Nghiệp (MST)</label>
+            <div className="relative">
+              <select
+                value={selectedCompanyId}
+                onChange={(e) => setSelectedCompanyId(e.target.value)}
+                disabled={companiesLoading || companies.length === 0}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer disabled:opacity-50"
+              >
+                {companies.length === 0 ? (
+                  <option value="">(Chưa cấu hình doanh nghiệp nào - Vui lòng vào Cấu Hình)</option>
+                ) : (
+                  companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.taxCode})
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
-            <div className="relative flex justify-center text-xs font-medium uppercase">
-              <span className="bg-slate-950 px-2 text-slate-500">Hoặc sử dụng Token có sẵn</span>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">GDT Authorization Token</label>
-            <textarea
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              rows={2}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              placeholder="Dán JWT Bearer Token tại đây (nếu không dùng mật khẩu)"
-            ></textarea>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -186,7 +163,7 @@ export default function InvoiceDownloader() {
                 required
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
@@ -196,7 +173,7 @@ export default function InvoiceDownloader() {
                 required
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
@@ -204,7 +181,7 @@ export default function InvoiceDownloader() {
               <select
                 value={invoiceType}
                 onChange={(e) => setInvoiceType(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
               >
                 <option value="SELL">Hóa đơn Bán ra</option>
                 <option value="BUY">Hóa đơn Mua vào</option>
@@ -214,8 +191,8 @@ export default function InvoiceDownloader() {
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-indigo-500/20 flex items-center justify-center space-x-2"
+            disabled={loading || companies.length === 0}
+            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-indigo-500/20 flex items-center justify-center space-x-2 cursor-pointer"
           >
             {loading ? (
               <span className="flex items-center space-x-2">
@@ -241,7 +218,7 @@ export default function InvoiceDownloader() {
           <h2 className="text-lg font-semibold text-cyan-400 flex items-center">
             <Terminal className="w-5 h-5 mr-2" /> Tiến Trình Tải
           </h2>
-          <button onClick={clearLogs} className="text-xs text-slate-500 hover:text-slate-350 flex items-center space-x-1">
+          <button onClick={clearLogs} className="text-xs text-slate-500 hover:text-slate-350 flex items-center space-x-1 cursor-pointer">
             <Trash2 className="w-3.5 h-3.5" />
             <span>Xóa log</span>
           </button>

@@ -109,4 +109,92 @@ export class AuthService {
     
     throw new Error('Authentication failed.');
   }
+
+  /**
+   * Decode the GDT JWT Token expiration date
+   */
+  public getTokenExpiration(token: string): Date | null {
+    try {
+      const parts = token.split('.');
+      if (parts.length >= 2) {
+        const payloadB64 = parts[1];
+        const buffer = Buffer.from(payloadB64, 'base64');
+        const payload = JSON.parse(buffer.toString('utf-8'));
+        if (payload && payload.exp) {
+          return new Date(payload.exp * 1000);
+        }
+      }
+    } catch (error) {
+      console.error('[AuthService] Error decoding token expiration:', error);
+    }
+    return null;
+  }
+
+  /**
+   * Fetch a new Captcha key and content
+   */
+  public async getNewCaptcha(): Promise<{ key: string; content: string }> {
+    return await captchaService.getCaptcha();
+  }
+
+  /**
+   * Log in to the Tax Portal manually using credentials and pre-solved captcha
+   */
+  public async loginManual(
+    username: string,
+    password: string,
+    ckey: string,
+    cvalue: string
+  ): Promise<string> {
+    const loginUrl = 'https://hoadondientu.gdt.gov.vn/api/security-taxpayer/authenticate';
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0',
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/plain, */*',
+      Referer: 'https://hoadondientu.gdt.gov.vn/',
+    };
+
+    const payload = {
+      username,
+      password,
+      cvalue,
+      ckey,
+    };
+
+    try {
+      const response = await axios.post(loginUrl, payload, { headers, timeout: 20000 });
+      if (response.data && response.data.token) {
+        return response.data.token;
+      }
+      throw new Error('GDT authentication did not return a session token.');
+    } catch (error: any) {
+      const errorData = error.response?.data;
+      const errorMsg = errorData?.message || errorData?.error || error.message;
+      console.error(`[AuthService] Manual login failed for MST ${username}. Details:`, errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
+
+  /**
+   * Fetch company name from hoadondientu profile
+   */
+  public async getTaxpayerName(token: string): Promise<string> {
+    const profileUrl = 'https://hoadondientu.gdt.gov.vn/api/security-taxpayer/profile';
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0',
+      'Authorization': `Bearer ${token}`,
+      Accept: 'application/json, text/plain, */*',
+      Referer: 'https://hoadondientu.gdt.gov.vn/',
+    };
+
+    try {
+      const response = await axios.get(profileUrl, { headers, timeout: 15000 });
+      if (response.data && response.data.name) {
+        return response.data.name;
+      }
+    } catch (error: any) {
+      console.error('[AuthService] Failed to fetch taxpayer profile name:', error.message);
+    }
+    return '';
+  }
 }
