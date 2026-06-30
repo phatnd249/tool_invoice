@@ -15,6 +15,11 @@ import { fileURLToPath } from 'url';
 import prisma from './utils/db.js';
 import invoiceRoutes from './routes/invoice.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import companyRoutes from './routes/company.routes.js';
+import settingsRoutes from './routes/settings.routes.js';
+import userRoutes from './routes/user.routes.js';
+import feedbackRoutes from './routes/feedback.routes.js';
+import { AuthController } from './controllers/auth.controller.js';
 
 let _dirname = '';
 try {
@@ -34,6 +39,10 @@ app.use(express.json());
 // Routes
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/companies', companyRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/feedbacks', feedbackRoutes);
 
 // Basic health check route
 app.get('/health', async (req: Request, res: Response) => {
@@ -63,7 +72,7 @@ const frontendDistPath = typeof (process as any).pkg !== 'undefined'
 if (fs.existsSync(frontendDistPath)) {
   console.log(`[Server] Serving frontend static assets from: ${frontendDistPath}`);
   app.use(express.static(frontendDistPath));
-  
+
   // Wildcard fallback to serve index.html for SPA routing
   app.get(/^(?!\/api).*$/, (req, res) => {
     res.sendFile(path.join(frontendDistPath, 'index.html'));
@@ -78,11 +87,14 @@ if (fs.existsSync(frontendDistPath)) {
 }
 
 // Find a free port and start server
-findFreePort(Number(PORT)).then((freePort) => {
+findFreePort(Number(PORT)).then(async (freePort) => {
+  // Seed initial administrator account if needed
+  await AuthController.seedInitialAdmin();
+
   app.listen(freePort, () => {
     const localUrl = `http://localhost:${freePort}`;
     console.log(`🚀 Backend server (TypeScript) is running at ${localUrl}`);
-    
+
     // Auto-open browser in production mode
     if (isProduction) {
       console.log(`[Server] Auto-opening browser at ${localUrl}...`);
