@@ -17,7 +17,10 @@
     "assets": [
       "prisma/schema.prisma",
       "prisma/dev.db",
-      "../frontend/dist/**/*"
+      "../frontend/dist/**/*",
+      "node_modules/.prisma/client/*.js",
+      "node_modules/.prisma/client/package.json",
+      "node_modules/.prisma/client/schema.prisma"
     ],
     "targets": [
       "node18-linux-x64",
