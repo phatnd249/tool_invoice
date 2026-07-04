@@ -119,15 +119,11 @@ export class DownloaderService {
     const shdon = invoice.shdon;         // Invoice number
     const mhdon = invoice.mhdon;         // Tax Authority Code (MCCQT/hash)
 
-    let zipFileName = '';
-    if (mhdon) {
-      zipFileName = `${mhdon}.zip`;
-    } else if (nbmst && khhdon && shdon !== undefined && khmshdon !== undefined) {
-      zipFileName = `${nbmst}_${khmshdon}_${khhdon}_${shdon}.zip`;
-    } else {
+    if (!nbmst || shdon === undefined || !khmshdon || !khhdon) {
       console.warn(`[DownloaderService] Missing fields to construct zip name for ID: ${invoice.id}`);
       return null;
     }
+    const zipFileName = `${nbmst}-${shdon}.zip`;
 
     const zipPath = path.join(outputDir, zipFileName);
 

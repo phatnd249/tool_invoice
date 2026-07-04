@@ -28,6 +28,24 @@ function parseDateString(dateStr: string): Date {
   return new Date(year, month, day);
 }
 
+/**
+ * Resolve target directory for saving invoice files.
+ * Structure: <baseDir>/<companyName>/<type-dir>/<YYYY-MM>/
+ */
+function resolveTargetDir(
+  baseDir: string,
+  companyName: string,
+  type: 'BUY' | 'SELL',
+  invoiceDate: Date,
+): string {
+  const cleanName = companyName.replace(/[\\/*?:"<>|]/g, '').trim();
+  const typeDir = type === 'SELL' ? 'hoa-don-ban-ra' : 'hoa-don-mua-vao';
+  const mm = String(invoiceDate.getMonth() + 1).padStart(2, '0');
+  const yyyy = invoiceDate.getFullYear();
+  const monthDir = `${yyyy}-${mm}`;
+  return path.join(baseDir, cleanName, typeDir, monthDir);
+}
+
 export class InvoiceController {
   /**
    * POST /api/invoices/download
@@ -194,7 +212,6 @@ export class InvoiceController {
 
     // Determine company folder name based on DB name or fallback to MST
     let companyFolder = '';
-    let companyFolderResolved = false;
     try {
       const company = await prisma.company.findUnique({
         where: { taxCode: tokenMst },
@@ -202,14 +219,12 @@ export class InvoiceController {
       if (company && company.name) {
         // Clean folder name from illegal characters
         companyFolder = company.name.replace(/[\\/*?:"<>|]/g, '').trim();
-        companyFolderResolved = true;
       }
     } catch (dbError) {
       console.warn('[InvoiceController] Could not fetch company name from DB:', dbError);
     }
 
     const baseDir = outputDir || process.env.INVOICES_DIR || path.join(process.cwd(), 'invoices');
-    let targetDir = companyFolderResolved ? path.join(baseDir, companyFolder) : baseDir;
 
     // Split date range to prevent tax server query limits
     const dateChunks = downloaderService.splitDateRange(start, end);
@@ -308,7 +323,7 @@ export class InvoiceController {
         for (const chunk of dateChunks) {
           try {
             const excelPath = await downloaderService.downloadExcelReport(
-              chunk.start, chunk.end, activeToken, type, targetDir
+              chunk.start, chunk.end, activeToken, type, baseDir
             );
             if (excelPath) {
               console.log(`[InvoiceController] Excel report saved: ${path.basename(excelPath)}`);
@@ -325,12 +340,28 @@ export class InvoiceController {
       const typeErrors: string[] = [];
       const typeParsedList: ParsedInvoice[] = [];
 
-      // Use rate-limited processing: batch + delay + retry
+// Use rate-limited processing: batch + delay + retry
       await processWithRateLimit(allQueryInvoices, async (inv) => {
         try {
-          // Download into targetDir (initially baseDir, then companyFolder after resolving)
+          // Resolve target directory for this specific invoice
+          // Use inv.tdlap (ngay lap) for date, fallback to today
+          const invoiceDateRaw = inv.tdlap || inv.ngay;
+          let invoiceDate: Date;
+          try {
+            const cleaned = invoiceDateRaw?.toString().split(' ')[0];
+            invoiceDate = cleaned ? parseDateString(cleaned) : new Date();
+          } catch {
+            invoiceDate = new Date();
+          }
+
+          const sellerTaxCode = inv.nbmst || tokenMst;
+          const invCompanyName = companyFolder || sellerTaxCode;
+
+          const invoiceTargetDir = resolveTargetDir(baseDir, invCompanyName, type, invoiceDate);
+
+          // Download ZIP into the resolved directory
           const zipPath = await withRetry(
-            () => downloaderService.downloadInvoiceZip(inv, activeToken, targetDir),
+            () => downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir),
             { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 12000 }
           );
           if (!zipPath) {
@@ -345,58 +376,17 @@ export class InvoiceController {
           return;
         }
 
-        let parsed = parserService.extractAndParseZip(zipPath, targetDir);
+        let parsed = parserService.extractAndParseZip(zipPath, invoiceTargetDir);
         if (!parsed) {
           typeErrors.push(`[${type}] Invoice ${inv.shdon}: Failed to unzip or parse XML.`);
           return;
         }
 
-        // Dynamically resolve and create the company folder based on first parsed XML data
-        if (!companyFolderResolved) {
-          const companyName = type === 'SELL' ? parsed.sellerName : parsed.buyerName;
-          const companyMst = type === 'SELL' ? parsed.sellerTaxCode : parsed.buyerTaxCode;
+        // Set paths for DB
+        parsed.zipPath = zipPath;
+        parsed.xmlFile = path.join(invoiceTargetDir, parsed.xmlFile);
 
-          if (companyName && companyMst) {
-            const cleanCompanyName = companyName.replace(/[\\/*?:"<>|]/g, '').trim();
-            const folderName = `${cleanCompanyName} - ${companyMst}`;
-            const newTargetDir = path.join(baseDir, folderName);
-
-            // Create target folder
-            fs.mkdirSync(newTargetDir, { recursive: true });
-
-            // Move the first downloaded ZIP to new directory
-            const oldZipPath = zipPath;
-            const newZipPath = path.join(newTargetDir, path.basename(zipPath));
-            if (fs.existsSync(oldZipPath)) {
-              if (fs.existsSync(newZipPath)) {
-                fs.unlinkSync(newZipPath);
-              }
-              fs.renameSync(oldZipPath, newZipPath);
-            }
-
-            // Move the first extracted XML to new directory
-            const oldXmlPath = path.join(targetDir, parsed.xmlFile);
-            const newXmlPath = path.join(newTargetDir, parsed.xmlFile);
-            if (fs.existsSync(oldXmlPath)) {
-              if (fs.existsSync(newXmlPath)) {
-                fs.unlinkSync(newXmlPath);
-              }
-              fs.renameSync(oldXmlPath, newXmlPath);
-            }
-
-            // Re-point paths to the resolved target directory
-            targetDir = newTargetDir;
-            parsed.zipPath = newZipPath;
-            parsed.xmlFile = path.basename(newXmlPath);
-            companyFolderResolved = true;
-          } else {
-            parsed.zipPath = zipPath;
-          }
-        } else {
-          parsed.zipPath = zipPath;
-        }
-
-        typeParsedList.push(parsed);
+        
         typeSuccessCount++;
 
         // Save to Database if required
@@ -437,7 +427,7 @@ export class InvoiceController {
               totalAmountInWords: parsed.totalAmountInWords,
               type,
               pdfPath: parsed.pdfPath,
-              xmlPath: path.join(targetDir, parsed.xmlFile),
+              xmlPath: parsed.xmlFile,
               zipPath: parsed.zipPath,
               isSavedToDb: true,
             };
