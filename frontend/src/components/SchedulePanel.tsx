@@ -23,15 +23,24 @@ export default function SchedulePanel() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
-  const [cronExpression, setCronExpression] = useState('0 9 * * *');
   const [invoiceType, setInvoiceType] = useState<'BUY' | 'SELL'>('SELL');
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
+  // Schedule timing state
+  const [repeatMode, setRepeatMode] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily');
+  const [scheduleHour, setScheduleHour] = useState('09');
+  const [scheduleMinute, setScheduleMinute] = useState('00');
+  const [customCron, setCustomCron] = useState('0 9 * * *');
+
+  // Compute cron from preset or use custom
+  const cronExpression = repeatMode === 'custom'
+    ? customCron
+    : `${scheduleMinute} ${scheduleHour} * * ${repeatMode === 'weekly' ? '1' : repeatMode === 'monthly' ? '1' : '*'}`;
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Connect to the local backend dynamically
       const [schedulesRes, companiesRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/schedules`).catch(() => ({ data: [] })),
         axios.get(`${API_BASE_URL}/api/companies`).catch(() => ({ data: [] })),
@@ -123,23 +132,85 @@ export default function SchedulePanel() {
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Cấu hình Cron (Cron Expression)</label>
-            <input
-              type="text"
-              required
-              value={cronExpression}
-              onChange={(e) => setCronExpression(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
-              placeholder="e.g. 0 9 * * *"
-            />
-            <span className="block text-xxs text-slate-500 mt-1">
-              Định dạng 5 ký tự (phút giờ ngày tháng thứ). &quot;0 9 * * *&quot; nghĩa là 9:00 sáng mỗi ngày.
-            </span>
+          <div className="space-y-3">
+            <label className="block text-xs font-semibold text-slate-400">Chu Kỳ Tự Động Tải</label>
+
+            {/* Repeat mode presets */}
+            <div className="grid grid-cols-4 gap-2">
+              {([
+                { value: 'daily' as const, label: 'Hàng ngày' },
+                { value: 'weekly' as const, label: 'Hàng tuần' },
+                { value: 'monthly' as const, label: 'Hàng tháng' },
+                { value: 'custom' as const, label: 'Tuỳ chỉnh' },
+              ]).map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setRepeatMode(opt.value)}
+                  className={`py-2 px-1 rounded-xl border text-xs font-medium transition cursor-pointer ${
+                    repeatMode === opt.value
+                      ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Time picker (hidden for custom mode) */}
+            {repeatMode !== 'custom' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-slate-400">Vào lúc</span>
+                <select
+                  value={scheduleHour}
+                  onChange={(e) => setScheduleHour(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).map(h => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+                <span className="text-slate-400">:</span>
+                <select
+                  value={scheduleMinute}
+                  onChange={(e) => setScheduleMinute(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  {['00', '15', '30', '45'].map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                <span className="text-xs text-slate-500">
+                  ({repeatMode === 'daily' ? 'mỗi ngày' : repeatMode === 'weekly' ? 'thứ 2 hàng tuần' : 'ngày 1 hàng tháng'})
+                </span>
+              </div>
+            )}
+
+            {/* Custom cron input */}
+            {repeatMode === 'custom' && (
+              <div>
+                <input
+                  type="text"
+                  value={customCron}
+                  onChange={(e) => setCustomCron(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
+                  placeholder="0 9 * * *"
+                />
+                <span className="block text-xxs text-slate-500 mt-1">
+                  Định dạng: phút giờ ngày tháng thứ. VD: <code className="text-indigo-400">0 9 * * *</code> = 9:00 mỗi ngày.
+                </span>
+              </div>
+            )}
+
+            {/* Computed cron preview */}
+            <div className="text-xxs text-slate-500 bg-slate-900/50 rounded-lg px-3 py-2 font-mono">
+              Cron: <span className="text-cyan-400">{cronExpression}</span>
+            </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Loại Hoá Đơn Tra Cứu</label>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">Loại hoá đơn</label>
             <div className="grid grid-cols-2 gap-4">
               <button
                 type="button"
