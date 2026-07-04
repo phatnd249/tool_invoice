@@ -200,7 +200,7 @@ export default function App() {
       {/* Sidebar */}
       <aside
         className={`${sidebarCollapsed ? 'w-20' : 'w-64'
-          } bg-slate-950 border-r border-slate-800 flex flex-col justify-between shrink-0 transition-all duration-300`}
+          } h-screen sticky top-0 overflow-y-auto bg-slate-950 border-r border-slate-800 flex flex-col justify-between shrink-0 transition-all duration-300`}
       >
         <div>
           <div className="h-16 flex items-center px-6 border-b border-slate-800 bg-slate-950">
