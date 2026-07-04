@@ -1,9 +1,18 @@
 {
-  "name": "tool-invoice-root",
-  "version": "1.0.0",
-  "description": "Root workspace for tool-invoice",
+  "name": "tool-invoice-monorepo",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
   "type": "module",
   "scripts": {
+    "dev": "concurrently -n be,fe -c cyan,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
     "build:executable": "node build-executable.js"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
   }
 }
