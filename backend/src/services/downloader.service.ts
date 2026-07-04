@@ -185,8 +185,8 @@ export class DownloaderService {
     const startStr = formatGdtDate(startDate, false);
     const endStr = formatGdtDate(endDate, true);
 
-    const apiPath = type === 'BUY' ? 'purchase' : 'sold';
-    const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${apiPath}/export-excel?sort=tdlap:desc&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
+    // GDT export-excel uses a single endpoint (no sold/purchase distinction unlike query)
+    const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/export-excel?sort=tdlap:desc&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
 
     const headers = {
       Authorization: `Bearer ${token}`,
