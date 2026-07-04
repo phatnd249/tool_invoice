@@ -108,7 +108,7 @@ export class CompanyController {
 
       res.json(company);
     } catch (error: any) {
-      res.status(401).json({ error: 'Xác thực tài khoản với Tổng cục Thuế thất bại.', details: error.message });
+      res.status(400).json({ error: 'Xác thực tài khoản với Tổng cục Thuế thất bại.', details: error.message });
     }
   }
 
@@ -282,7 +282,7 @@ export class CompanyController {
 
       res.json({ token: updated.token, tokenExpiredAt: updated.tokenExpiredAt });
     } catch (error: any) {
-      res.status(401).json({ error: 'Đăng nhập thủ công thất bại.', details: error.message });
+      res.status(400).json({ error: 'Đăng nhập thủ công thất bại.', details: error.message });
     }
   }
 }

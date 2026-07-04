@@ -67,9 +67,22 @@ export default function App() {
     const interceptor = axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-          const errMsg = error.response.data?.error || 'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.';
-          handleLogout(errMsg);
+        if (error.response) {
+          const status = error.response.status;
+          const errMsg = error.response.data?.error || '';
+
+          // Only logout on actual auth errors (JWT expired / missing / insufficient permissions).
+          // Errors from third-party services (GDT login, captcha) should NOT trigger logout.
+          const isRealAuthError =
+            (status === 401 || status === 403) &&
+            (errMsg.includes('Yêu cầu xác thực') ||
+             errMsg.includes('không có quyền') ||
+             errMsg.includes('hết hạn') ||
+             errMsg.includes('Phiên'));
+
+          if (isRealAuthError) {
+            handleLogout(errMsg || 'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.');
+          }
         }
         return Promise.reject(error);
       }

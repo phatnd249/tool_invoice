@@ -1,83 +1,61 @@
-# Thêm chức năng tải đồng thời cả 2 loại hoá đơn (Bán ra + Mua vào)
+# Sửa lỗi redirect về login khi Gemini giải captcha sai 3 lần
 
-## Hiện trạng
+## Vấn đề
 
-Người dùng chỉ chọn được **1 loại** hoá đơn trong dropdown: "Bán ra" hoặc "Mua vào". Muốn tải cả 2 phải chạy 2 lần.
+Khi thêm doanh nghiệp mới với chế độ AUTO (Gemini), nếu Gemini giải captcha sai 3 lần liên tiếp, backend `auth.service.ts` throw exception. Controller `company.controller.ts` bắt lỗi và trả về:
 
-## Mục tiêu
-
-Thêm lựa chọn thứ 3 trong dropdown frontend: **"Cả hai loại"** (BOTH). Khi chọn BOTH, backend sẽ query và tải đồng thời cả BUY và SELL trong cùng 1 lần gọi API.
-
-## Các bước thực hiện
-
-### Bước 1: Cập nhật frontend `InvoiceDownloader.tsx`
-
-Thêm option vào dropdown:
-
-```tsx
-<select value={invoiceType} ...>
-  <option value="SELL">Hóa đơn Bán ra</option>
-  <option value="BUY">Hóa đơn Mua vào</option>
-  <option value="BOTH">Cả hai loại</option>
-</select>
+```ts
+res.status(401).json({ error: 'Xác thực tài khoản với Tổng cục Thuế thất bại.', ... });
 ```
 
-Thay đổi duy nhất: thêm 1 dòng `<option value="BOTH">Cả hai loại</option>`.
+Frontend `App.tsx` có **axios interceptor** bắt `status === 401`:
 
-### Bước 2: Cập nhật backend `invoice.controller.ts`
-
-Trong hàm `downloadInvoices()`, xử lý logic `BOTH`:
-
-Hiện tại:
 ```ts
-const type = invoiceType === 'BUY' ? 'BUY' : 'SELL';
-// ... query type
-// ... download type
-```
-
-Sửa thành:
-```ts
-const types: Array<'BUY' | 'SELL'> = invoiceType === 'BOTH' 
-  ? ['BUY', 'SELL'] 
-  : [invoiceType === 'BUY' ? 'BUY' : 'SELL'];
-
-let totalSuccessCount = 0;
-const allErrors: string[] = [];
-
-for (const type of types) {
-  console.log(`[InvoiceController] Processing ${type} invoices...`);
-  
-  // ── Query invoices ── (logic hiện tại, wrap trong loop)
-  const allQueryInvoices: any[] = [];
-  // ... query + retry logic cho từng type ...
-  
-  // ── Download Excel ──
-  // ... downloadExcelReport cho từng type ...
-  
-  // ── Download ZIPs ── (giữ nguyên processWithRateLimit)
-  // ... download logic ...
-  
-  totalSuccessCount += successCount;
-  allErrors.push(...errors);
+if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+  handleLogout(errMsg);  // → redirect về login!
 }
-
-// ── Response ──
-res.json({
-  message: `Download completed: ${totalSuccessCount} invoices downloaded`,
-  successCount: totalSuccessCount,
-  errors: allErrors,
-});
 ```
 
-**Chi tiết:** Wrap toàn bộ logic từ `const allQueryInvoices: any[] = [];` đến `successCount` trong 1 vòng `for (const type of types)`. Không thay đổi logic bên trong, chỉ bọc lại và tổng hợp kết quả.
+→ HTTP 401 bị hiểu nhầm là "phiên hết hạn" thay vì "GDT từ chối captcha".
 
-**Lưu ý quan trọng:** `dbCompany` và token refresh cần được share giữa 2 lần chạy (không refresh lại token nếu đã có). Token đã lấy từ lần BUY có thể dùng cho SELL luôn.
+## Giải pháp
 
-### Bước 3: Kiểm tra
+### Bước 1: Sửa backend `company.controller.ts` — đổi HTTP status
 
-- Chọn "Cả hai loại" → tải cả BUY và SELL
-- Log hiển thị rõ từng loại: `[InvoiceController] Processing BUY invoices...`
-- Response tổng hợp số lượng từ cả 2 loại
+Khi lỗi xác thực với GDT (captcha sai), trả về **HTTP 400** (Bad Request) thay vì 401 (Unauthorized). 401 chỉ nên dùng cho lỗi token JWT của chính ứng dụng, không phải lỗi với bên thứ 3.
+
+```ts
+// Hiện tại
+res.status(401).json({ error: 'Xác thực tài khoản với Tổng cục Thuế thất bại.', details: error.message });
+
+// Sửa thành
+res.status(400).json({ error: 'Xác thực tài khoản với Tổng cục Thuế thất bại.', details: error.message });
+```
+
+Kiểm tra toàn bộ file — tất cả `res.status(401)` mà liên quan đến lỗi GDT (không phải lỗi token JWT) đều đổi thành 400.
+
+### Bước 2: Sửa frontend axios interceptor — chỉ logout khi thực sự hết hạn
+
+Trong `App.tsx`, thêm phân biệt:
+
+```ts
+if (error.response) {
+  const status = error.response.status;
+  // Chỉ logout nếu là lỗi token JWT (401/403 từ backend auth middleware)
+  // Các 401 do bên thứ 3 không nên trigger logout
+  const errorMsg = error.response.data?.error || '';
+  const isAuthError = 
+    (status === 401 || status === 403) &&
+    (errorMsg.includes('Yêu cầu xác thực') || 
+     errorMsg.includes('không có quyền') ||
+     errorMsg.includes('hết hạn') ||
+     errorMsg.includes('Phiên'));
+  
+  if (isAuthError) {
+    handleLogout(errorMsg);
+  }
+}
+```
 
 ---
 
@@ -85,5 +63,5 @@ res.json({
 
 | File | Hành động |
 |---|---|
-| `frontend/src/components/InvoiceDownloader.tsx` | **Thêm** option `BOTH` vào dropdown |
-| `backend/src/controllers/invoice.controller.ts` | **Sửa** — wrap query + download trong vòng `for (const type of types)` |
+| `backend/src/controllers/company.controller.ts` | Đổi mã lỗi GDT từ 401 → 400 (dòng 111, 173, 285) |
+| `frontend/src/App.tsx` | Thêm logic phân biệt lỗi auth thật và lỗi third-party |
