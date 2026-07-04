@@ -166,6 +166,35 @@ export default function App() {
 
   const isAdmin = user.role === 'ADMIN';
 
+  // Sidebar navigation structure with groups
+  const sidebarGroups = [
+    {
+      label: 'HOÁ ĐƠN',
+      items: [
+        { id: 'download' as Tab, label: 'Tải Hoá Đơn', icon: CloudDownload },
+        { id: 'history' as Tab, label: 'Lịch Sử', icon: History },
+        { id: 'schedules' as Tab, label: 'Đặt Lịch', icon: CalendarDays },
+        { id: 'tax-lookup' as Tab, label: 'Tra Cứu MST', icon: Search },
+      ],
+    },
+    {
+      label: 'QUẢN TRỊ',
+      adminOnly: true,
+      items: [
+        { id: 'companies' as Tab, label: 'Doanh Nghiệp', icon: Building2 },
+        { id: 'users' as Tab, label: 'Thành Viên', icon: Users },
+        { id: 'feedbacks' as Tab, label: 'Ý Kiến', icon: MessageSquare },
+      ],
+    },
+    {
+      label: 'HỆ THỐNG',
+      adminOnly: true,
+      items: [
+        { id: 'config' as Tab, label: 'API Key', icon: Key },
+      ],
+    },
+  ];
+
   return (
     <div className="bg-slate-900 text-slate-100 min-h-screen flex w-full relative">
       {/* Sidebar */}
@@ -182,103 +211,39 @@ export default function App() {
               </span>
             )}
           </div>
-          <nav className="p-4 space-y-2">
-            <button
-              onClick={() => setActiveTab('download')}
-              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'download'
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`}
-            >
-              <CloudDownload className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-              {!sidebarCollapsed && <span>Tải Hoá Đơn</span>}
-            </button>
+                    <nav className="p-4 space-y-2">
+            {sidebarGroups.map(group => {
+              // Hide entire group if admin-only and user is not admin
+              const visibleItems = group.adminOnly && !isAdmin ? [] : group.items;
+              if (visibleItems.length === 0) return null;
 
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'history'
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`}
-            >
-              <History className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-              {!sidebarCollapsed && <span>Lịch Sử Hoá Đơn</span>}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('schedules')}
-              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'schedules'
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`}
-            >
-              <CalendarDays className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-              {!sidebarCollapsed && <span>Đặt Lịch Tải</span>}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('tax-lookup')}
-              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'tax-lookup'
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`}
-            >
-              <Search className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-              {!sidebarCollapsed && <span>Tra Cứu MST</span>}
-            </button>
-
-            {isAdmin && (
-              <button
-                onClick={() => setActiveTab('companies')}
-                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'companies'
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-              >
-                <Building2 className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-                {!sidebarCollapsed && <span>Doanh Nghiệp</span>}
-              </button>
-            )}
-
-            {isAdmin && (
-              <button
-                onClick={() => setActiveTab('users')}
-                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'users'
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-              >
-                <Users className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-                {!sidebarCollapsed && <span>Quản Lý Thành Viên</span>}
-              </button>
-            )}
-
-            {isAdmin && (
-              <button
-                onClick={() => setActiveTab('feedbacks')}
-                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'feedbacks'
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-              >
-                <MessageSquare className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-                {!sidebarCollapsed && <span>Ý Kiến Đóng Góp</span>}
-              </button>
-            )}
-
-            {isAdmin && (
-              <button
-                onClick={() => setActiveTab('config')}
-                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'config'
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-              >
-                <Key className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-                {!sidebarCollapsed && <span>API Key</span>}
-              </button>
-            )}
+              return (
+                <div key={group.label} className="mb-2">
+                  {!sidebarCollapsed && (
+                    <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2 mt-2">
+                      {group.label}
+                    </p>
+                  )}
+                  {visibleItems.map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer mb-1 ${
+                        activeTab === item.id
+                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <item.icon className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
+                      {!sidebarCollapsed && <span>{item.label}</span>}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
           </nav>
+
+
         </div>
 
         {/* User Info and Logout Section */}
