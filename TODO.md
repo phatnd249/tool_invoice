@@ -1,94 +1,115 @@
-# Tách Danh Sách Doanh Nghiệp thành trang riêng
+# Xử lý Rate Limit HTTP 429 khi tải hoá đơn hàng loạt
 
-## Hiện trạng
+## Vấn đề
 
-File `frontend/src/components/ConfigPanel.tsx` (~560 dòng) chứa cả 2 chức năng:
+Khi tải một lượng lớn hoá đơn (10+ invoices), server GDT (hoadondientu.gdt.gov.vn) trả về HTTP 429 (Too Many Requests) và 500 (Internal Server Error) sau một vài request đầu tiên. Nguyên nhân là không có cơ chế giới hạn tốc độ (rate limiting) và retry trong quá trình tải ZIP.
 
-| Chức năng | Mô tả | Giữ lại? |
-|---|---|---|
-| **Cấu hình Gemini API Key** | Form lưu API key toàn cục | ✅ Giữ trong ConfigPanel |
-| **Danh Sách Doanh Nghiệp** | Bảng danh sách, Thêm/Sửa/Xoá, Relogin | ❌ Tách ra trang mới |
+Hiện tại, vòng lặp `for (const inv of allQueryInvoices)` trong `invoice.controller.ts` gửi **tuần tự nhưng không có delay giữa các request**, dẫn đến GDT chặn sau khoảng 3-4 request.
 
-## Mục tiêu
+```
+Log: 10 invoices
+  1-2: OK
+  3:   500 (server overload)
+  4:   429 (rate limit)
+  5-9: 429 (rate limit)
+```
 
-- **ConfigPanel**: chỉ còn Gemini API Key (gọn, ~80 dòng)
-- **CompanyManager** (mới): toàn bộ logic doanh nghiệp + modal Add/Edit/Relogin
-- Thêm tab mới **"Doanh Nghiệp"** vào sidebar (giữa "Tra Cứu MST" và "Quản Lý Thành Viên")
+## Giải pháp
+
+### 1. Thêm delay giữa các request (Throttle)
+
+Thêm hàm `delay(ms)` và gọi sau mỗi lần download ZIP thành công hoặc thất bại:
+
+```ts
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+for (const inv of allQueryInvoices) {
+  // ... tải ZIP ...
+  await delay(1500); // 1.5 giây giữa mỗi request
+}
+```
+
+### 2. Thêm retry với exponential backoff
+
+Khi gặp 429 hoặc 500, không bỏ qua ngay mà **retry** với delay tăng dần:
+
+```ts
+async function downloadWithRetry(downloadFn, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await downloadFn();
+      return result;
+    } catch (error) {
+      if (attempt < maxRetries && isRetryable(error)) {
+        const waitMs = Math.min(2000 * Math.pow(2, attempt - 1), 10000); // 2s, 4s, 8s
+        await delay(waitMs);
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+```
+
+### 3. Batch processing với sleep dài hơn giữa các batch
+
+Thay vì xử lý 1-1, chia thành batch nhỏ (ví dụ: 5 invoices/batch), sau mỗi batch sleep lâu hơn (10 giây):
+
+```ts
+const BATCH_SIZE = 5;
+const BATCH_DELAY = 10000; // 10 giây
+
+for (let i = 0; i < invoices.length; i += BATCH_SIZE) {
+  const batch = invoices.slice(i, i + BATCH_SIZE);
+  for (const inv of batch) {
+    await downloadWithRetry(...);
+    await delay(1500);
+  }
+  if (i + BATCH_SIZE < invoices.length) {
+    await delay(BATCH_DELAY); // Nghỉ lâu giữa các batch
+  }
+}
+```
 
 ---
 
-## Các bước thực hiện
+## Kế hoạch triển khai
 
-### Bước 1: Tạo file `frontend/src/components/CompanyManager.tsx`
+### Bước 1: Tạo `backend/src/utils/rate-limiter.ts`
 
-Copy toàn bộ phần "Danh Sách Doanh Nghiệp" từ `ConfigPanel.tsx` sang file mới, bao gồm:
+File utility mới, chứa các hàm dùng chung:
 
-- **State & hooks**: `companies`, `companiesLoading`, các state cho Add/Edit/Relogin modal
-- **Functions**: `fetchCompanies`, `handleAddCompany`, `handleAutoRefreshToken`, `handleDeleteCompany`, `handleUpdateCompany`, `handleReloginManualSubmit`, `fetchNewCaptcha`, `fetchReloginCaptcha`, `getTokenStatus`
-- **JSX**: phần "2. Companies Table List" và các modal Edit/Add/Relogin
-
-**Component signature:**
-```tsx
-export default function CompanyManager() { ... }
+```ts
+// delay(ms) - sleep trong ms milliseconds
+// isRetryableError(error) - kiểm tra lỗi có nên retry không (429, 500, ECONNRESET)
+// downloadWithRetry(fn, maxRetries) - retry với exponential backoff
+// processWithRateLimit(items, processor, options) - xử lý batch với delay
 ```
 
-**Không cần thay đổi logic**, chỉ tách file. Import `{ API_BASE_URL }` từ `../config`.
+### Bước 2: Sửa `invoice.controller.ts`
 
-### Bước 2: Rút gọn `ConfigPanel.tsx`
+- Import `delay` và `downloadWithRetry` từ `rate-limiter.ts`
+- Thêm `await delay(1500)` sau mỗi lần tải ZIP (cả thành công lẫn thất bại)
+- Wrap `downloaderService.downloadInvoiceZip()` trong `downloadWithRetry` với max 3 lần thử
+- Báo cáo tiến độ: log mỗi 5 invoices (vd: "5/10 downloaded")
 
-- **Xoá** tất cả code liên quan đến doanh nghiệp (state, hooks, functions, JSX)
-- **Giữ lại** phần Gemini API Key (section 1 + style cuối cùng)
-- **State giữ lại**: `geminiApiKey`, `settingsLoading`, `settingsMessage`
-- **Functions giữ lại**: `fetchSettings`, `handleSaveSettings`
-- **Import giữ lại**: `Key`, `RefreshCw`, `Save`, `AlertCircle`, `CheckCircle2` (bỏ `Building2`, `Plus`, `Trash2`, `Lock`, `Edit2`, `Eye`, `EyeOff`, `X` nếu không còn dùng)
+### Bước 3: Tuỳ chọn — cấu hình qua biến môi trường
 
-### Bước 3: Cập nhật `App.tsx`
+Thêm vào `.env` (có giá trị mặc định trong code):
 
-**Thêm import:**
-```tsx
-import CompanyManager from './components/CompanyManager';
-```
-
-**Thêm tab type mới:**
-```tsx
-type Tab = 'download' | 'history' | 'schedules' | 'companies' | 'config' | 'users' | 'feedbacks' | 'tax-lookup';
-```
-
-**Thêm case trong `getPageTitle()`:**
-```tsx
-case 'companies':
-  return 'Quản Lý Doanh Nghiệp';
-```
-
-**Thêm nút sidebar mới** (giữa Tra Cứu MST và Quản Lý Thành Viên), chỉ hiển thị cho ADMIN:
-```tsx
-{isAdmin && (
-  <button onClick={() => setActiveTab('companies')} ...>
-    <Building2 ... />
-    {!sidebarCollapsed && <span>Doanh Nghiệp</span>}
-  </button>
-)}
-```
-
-**Thêm render:**
-```tsx
-{activeTab === 'companies' && <CompanyManager />}
-```
-
-**Đổi tên nút "Cấu Hinh" → "API Key"** (vì không còn chứa doanh nghiệp):
-```tsx
-// Folder hiện tại: <Settings /> + "Cấu Hinh"
-// Folder mới:   <Key /> + "API Key"
+```env
+# Rate limiting settings for invoice download
+DOWNLOAD_DELAY_MS=1500
+DOWNLOAD_BATCH_SIZE=5
+DOWNLOAD_BATCH_DELAY_MS=10000
+DOWNLOAD_MAX_RETRIES=3
 ```
 
 ### Bước 4: Kiểm tra
 
-- Nút "Doanh Nghiệp" chỉ hiện với ADMIN
-- Trang CompanyManager hiển thị danh sách doanh nghiệp
-- Thêm/Sửa/Xoá doanh nghiệp hoạt động bình thường
-- Token refresh và re-login manual hoạt động
-- Trang ConfigPanel chỉ còn Gemini API Key
-- Build không lỗi TypeScript
+- Chạy tải 10+ invoices, không còn lỗi 429
+- Retry hoạt động: nếu request lỗi 429 → delay 2s → thử lại → OK
+- Log hiển thị rõ: `[Downloader] Retrying invoice 123 (attempt 2/3)...`
 
 ---
 
@@ -96,6 +117,7 @@ case 'companies':
 
 | File | Hành động |
 |---|---|
-| `frontend/src/components/CompanyManager.tsx` | **Tạo mới** — tách toàn bộ phần doanh nghiệp |
-| `frontend/src/components/ConfigPanel.tsx` | **Sửa** — chỉ giữ Gemini API Key |
-| `frontend/src/App.tsx` | **Sửa** — thêm tab, sidebar button, render |
+| `backend/src/utils/rate-limiter.ts` | **Tạo mới** — delay, retry, batch processing utilities |
+| `backend/src/controllers/invoice.controller.ts` | **Sửa** — thêm delay + retry vào vòng download |
+| `backend/.env` | **Sửa** — thêm biến cấu hình rate limit (optional) |
+| `backend/.env.example` | **Sửa** — thêm biến mẫu |

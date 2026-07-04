@@ -4,6 +4,7 @@ import { ParserService, ParsedInvoice } from '../services/parser.service.js';
 import { ExcelService } from '../services/excel.service.js';
 import { AuthService } from '../services/auth.service.js';
 import prisma from '../utils/db.js';
+import { withRetry, processWithRateLimit } from '../utils/rate-limiter.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { AuthRequest } from '../middleware/auth.middleware.js';
@@ -296,10 +297,14 @@ export class InvoiceController {
     let successCount = 0;
     const errors: string[] = [];
 
-    for (const inv of allQueryInvoices) {
+    // Use rate-limited processing: batch + delay + retry
+    await processWithRateLimit(allQueryInvoices, async (inv) => {
       try {
         // Download into targetDir (initially baseDir, then companyFolder after resolving)
-        const zipPath = await downloaderService.downloadInvoiceZip(inv, activeToken, targetDir);
+        const zipPath = await withRetry(
+          () => downloaderService.downloadInvoiceZip(inv, activeToken, targetDir),
+          { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 12000 }
+        );
         if (!zipPath) {
           errors.push(`Invoice ${inv.shdon}: Failed to download ZIP.`);
           if (saveToDb) {
@@ -309,13 +314,13 @@ export class InvoiceController {
               console.error(`[InvoiceController] Failed to save basic invoice ${inv.shdon} metadata:`, dbError.message);
             }
           }
-          continue;
+          return;
         }
 
         let parsed = parserService.extractAndParseZip(zipPath, targetDir);
         if (!parsed) {
           errors.push(`Invoice ${inv.shdon}: Failed to unzip or parse XML.`);
-          continue;
+          return;
         }
 
         // Dynamically resolve and create the company folder based on first parsed XML data
@@ -459,9 +464,9 @@ export class InvoiceController {
           });
         }
       } catch (err: any) {
-        errors.push(`Invoice ${inv.shdon}: Database save error: ${err.message}`);
+        errors.push(`Inv ${inv.shdon}: Database save error: ${err.message}`);
       }
-    }
+    });
 
     // GDT success / partial logging
     const status = successCount === allQueryInvoices.length ? 'SUCCESS' : (successCount > 0 ? 'PARTIAL' : 'FAILED');
