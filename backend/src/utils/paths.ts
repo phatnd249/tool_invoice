@@ -1,26 +1,32 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 
 /**
- * Resolve __dirname safely across all runtimes:
- *   - tsx (ESM):  import.meta.url → file path
- *   - node CJS:   __dirname available natively
- *   - esbuild CJS: __dirname natively (bundled)
+ * Resolve the directory of the current script entry point.
+ *
+ * Strategy (no import.meta / no createRequire):
+ *   - process.argv[1] is always the absolute path to the executed script,
+ *     whether running via tsx (ESM), node (CJS), or esbuild bundle (CJS).
  */
 export const SCRIPT_DIR: string = (() => {
-  try {
+  // In bundled CJS, __dirname points to the bundle directory; use it if available.
+  if (typeof __dirname !== 'undefined') {
     return __dirname;
-  } catch {
-    return path.dirname(fileURLToPath(import.meta.url));
   }
+  // Fallback: derive from entry point
+  if (process.argv[1]) {
+    return path.dirname(path.resolve(process.argv[1]));
+  }
+  // Last resort: current working directory
+  return process.cwd();
 })();
 
 /**
  * Application root directory (backend/ folder).
  *
- * Resolved by walking up from SCRIPT_DIR until we find
- * prisma/schema.prisma or a directory named "backend".
+ * Walks up from SCRIPT_DIR looking for:
+ *   1. prisma/schema.prisma (primary marker)
+ *   2. directory named "backend"
  *
  * Works correctly in both:
  *   - Dev (tsx):    SCRIPT_DIR = .../backend/src/utils/  → walk up 2 levels

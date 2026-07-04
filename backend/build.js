@@ -20,6 +20,12 @@ async function runBuild() {
       external: ['sharp', '@prisma/client'],
       sourcemap: true,
       minify: true,
+      // Replace import.meta.url with a valid file URL derived from __filename
+      // (which exists in CJS bundles). This fixes dependencies like 'open' that
+      // call fileURLToPath(import.meta.url) in ESM-only code.
+      define: {
+        'import.meta.url': JSON.stringify('file://' + path.join(__dirname, 'dist/server.cjs')),
+      },
     });
     console.log('[Backend Build] esbuild bundled successfully to dist/server.cjs');
     
