@@ -22,7 +22,7 @@ export default function InvoiceDownloader() {
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [invoiceType, setInvoiceType] = useState('SELL');
+  const [invoiceType, setInvoiceType] = useState('BOTH');
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       time: new Date().toLocaleTimeString(),
