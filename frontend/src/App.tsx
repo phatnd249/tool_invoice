@@ -10,6 +10,7 @@ import {
   Users,
   LogOut,
   MessageSquare,
+  Search,
   X,
 } from 'lucide-react';
 import InvoiceDownloader from './components/InvoiceDownloader';
@@ -19,9 +20,10 @@ import ConfigPanel from './components/ConfigPanel';
 import UserManagement from './components/UserManagement';
 import FeedbackManager from './components/FeedbackManager';
 import Login from './components/Login';
+import TaxLookup from './components/TaxLookup';
 import { API_BASE_URL } from './config';
 
-type Tab = 'download' | 'history' | 'schedules' | 'config' | 'users' | 'feedbacks';
+type Tab = 'download' | 'history' | 'schedules' | 'config' | 'users' | 'feedbacks' | 'tax-lookup';
 
 interface User {
   id: number;
@@ -135,6 +137,8 @@ export default function App() {
         return 'Quản Lý Thành Viên';
       case 'feedbacks':
         return 'Ý Kiến Đóng Góp';
+      case 'tax-lookup':
+        return 'Tra Cứu Mã Số Thuế';
     }
   };
 
@@ -193,6 +197,17 @@ export default function App() {
             >
               <CalendarDays className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
               {!sidebarCollapsed && <span>Đặt Lịch Tải</span>}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('tax-lookup')}
+              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'tax-lookup'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
+            >
+              <Search className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
+              {!sidebarCollapsed && <span>Tra Cứu MST</span>}
             </button>
 
             {isAdmin && (
@@ -308,6 +323,7 @@ export default function App() {
           {activeTab === 'users' && <UserManagement />}
           {activeTab === 'feedbacks' && <FeedbackManager />}
           {activeTab === 'config' && <ConfigPanel />}
+          {activeTab === 'tax-lookup' && <TaxLookup />}
         </div>
       </main>
 

@@ -23,6 +23,28 @@ async function runBuild() {
     });
     console.log('[Backend Build] esbuild bundled successfully to dist/server.cjs');
     
+    // Patch dist/server.cjs to avoid pkg crashing on 'node:sqlite'
+    const serverCjsPath = path.join(__dirname, 'dist/server.cjs');
+    if (fs.existsSync(serverCjsPath)) {
+      let content = fs.readFileSync(serverCjsPath, 'utf8');
+      content = content.replace(/require\(['"]node:sqlite['"]\)/g, 'require("events")');
+      fs.writeFileSync(serverCjsPath, content);
+    }
+
+    // Patch node_modules/undici to avoid pkg crashing on 'node:sqlite'
+    const undiciFiles = [
+      path.join(__dirname, 'node_modules/undici/lib/cache/sqlite-cache-store.js'),
+      path.join(__dirname, 'node_modules/undici/lib/util/runtime-features.js')
+    ];
+    for (const f of undiciFiles) {
+      if (fs.existsSync(f)) {
+        let content = fs.readFileSync(f, 'utf8');
+        content = content.replace(/require\(['"]node:sqlite['"]\)/g, 'require("events")');
+        fs.writeFileSync(f, content);
+      }
+    }
+    console.log('[Backend Build] Patched files for pkg compatibility (node:sqlite)');
+
     // Prune unnecessary Prisma engine files to save space
     prunePrismaEngines();
   } catch (error) {
