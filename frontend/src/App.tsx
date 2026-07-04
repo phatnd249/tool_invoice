@@ -6,7 +6,8 @@ import {
   History,
   CalendarDays,
   Menu,
-  Settings,
+  Key,
+  Building2,
   Users,
   LogOut,
   MessageSquare,
@@ -17,13 +18,14 @@ import InvoiceDownloader from './components/InvoiceDownloader';
 import InvoiceHistory from './components/InvoiceHistory';
 import SchedulePanel from './components/SchedulePanel';
 import ConfigPanel from './components/ConfigPanel';
+import CompanyManager from './components/CompanyManager';
 import UserManagement from './components/UserManagement';
 import FeedbackManager from './components/FeedbackManager';
 import Login from './components/Login';
 import TaxLookup from './components/TaxLookup';
 import { API_BASE_URL } from './config';
 
-type Tab = 'download' | 'history' | 'schedules' | 'config' | 'users' | 'feedbacks' | 'tax-lookup';
+type Tab = 'download' | 'history' | 'schedules' | 'companies' | 'config' | 'users' | 'feedbacks' | 'tax-lookup';
 
 interface User {
   id: number;
@@ -131,8 +133,10 @@ export default function App() {
         return 'Lịch Sử Hoá Đơn Đã Tải';
       case 'schedules':
         return 'Lập Lịch Tải Định Kỳ';
+      case 'companies':
+        return 'Quản Lý Doanh Nghiệp';
       case 'config':
-        return 'Cấu Hình Hệ Thống';
+        return 'Cấu Hình API Key';
       case 'users':
         return 'Quản Lý Thành Viên';
       case 'feedbacks':
@@ -212,6 +216,19 @@ export default function App() {
 
             {isAdmin && (
               <button
+                onClick={() => setActiveTab('companies')}
+                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'companies'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`}
+              >
+                <Building2 className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
+                {!sidebarCollapsed && <span>Doanh Nghiệp</span>}
+              </button>
+            )}
+
+            {isAdmin && (
+              <button
                 onClick={() => setActiveTab('users')}
                 className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${activeTab === 'users'
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
@@ -244,8 +261,8 @@ export default function App() {
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   }`}
               >
-                <Settings className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-                {!sidebarCollapsed && <span>Cấu Hinh</span>}
+                <Key className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
+                {!sidebarCollapsed && <span>API Key</span>}
               </button>
             )}
           </nav>
@@ -322,6 +339,7 @@ export default function App() {
           {activeTab === 'schedules' && <SchedulePanel />}
           {activeTab === 'users' && <UserManagement />}
           {activeTab === 'feedbacks' && <FeedbackManager />}
+          {activeTab === 'companies' && <CompanyManager />}
           {activeTab === 'config' && <ConfigPanel />}
           {activeTab === 'tax-lookup' && <TaxLookup />}
         </div>
