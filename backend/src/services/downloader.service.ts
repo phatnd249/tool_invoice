@@ -162,4 +162,67 @@ export class DownloaderService {
       return null;
     }
   }
+
+  /**
+   * Download Excel report for a date range from GDT portal.
+   * Returns path to saved .xlsx file, or null on failure.
+   */
+  public async downloadExcelReport(
+    startDate: Date,
+    endDate: Date,
+    token: string,
+    type: 'BUY' | 'SELL',
+    outputDir: string
+  ): Promise<string | null> {
+    const formatGdtDate = (d: Date, endOfDay: boolean) => {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      const time = endOfDay ? 'T23:59:59' : 'T00:00:00';
+      return `${dd}/${mm}/${yyyy}${time}`;
+    };
+
+    const startStr = formatGdtDate(startDate, false);
+    const endStr = formatGdtDate(endDate, true);
+
+    const apiPath = type === 'BUY' ? 'purchase' : 'sold';
+    const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${apiPath}/export-excel?sort=tdlap:desc&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
+
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      Accept: 'application/json, text/plain, */*',
+      'Accept-Language': 'vi',
+    };
+
+    const dateLabel = `${startStr.replace(/[/:]/g, '-')}_to_${endStr.replace(/[/:]/g, '-')}`;
+    const fileName = `invoices_${type}_${dateLabel}.xlsx`;
+    const filePath = path.join(outputDir, fileName);
+
+    // Skip if already downloaded
+    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+      console.log(`[DownloaderService] Excel report already exists: ${filePath}`);
+      return filePath;
+    }
+
+    try {
+      fs.mkdirSync(outputDir, { recursive: true });
+
+      const response = await axios.get(url, {
+        headers,
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      });
+
+      if (response.status === 200) {
+        fs.writeFileSync(filePath, response.data);
+        console.log(`[DownloaderService] Downloaded Excel report: ${filePath}`);
+        return filePath;
+      }
+      return null;
+    } catch (error: any) {
+      console.error(`[DownloaderService] Failed to download Excel report: ${error.message}`);
+      return null;
+    }
+  }
 }

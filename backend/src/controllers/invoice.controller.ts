@@ -291,7 +291,26 @@ export class InvoiceController {
       }
     }
 
-    console.log(`[InvoiceController] Found total ${allQueryInvoices.length} invoices. Starting downloads...`);
+    console.log(`[InvoiceController] Found total ${allQueryInvoices.length} invoices.`);
+
+    // Download Excel report for each date chunk before downloading individual invoices
+    if (allQueryInvoices.length > 0) {
+      console.log(`[InvoiceController] Downloading Excel reports for ${dateChunks.length} date chunk(s)...`);
+      for (const chunk of dateChunks) {
+        try {
+          const excelPath = await downloaderService.downloadExcelReport(
+            chunk.start, chunk.end, activeToken, type, targetDir
+          );
+          if (excelPath) {
+            console.log(`[InvoiceController] Excel report saved: ${path.basename(excelPath)}`);
+          }
+        } catch (err: any) {
+          console.warn(`[InvoiceController] Failed to download Excel report for chunk: ${err.message}`);
+        }
+      }
+    }
+
+    console.log(`[InvoiceController] Starting individual invoice downloads...`);
 
     const parsedList: ParsedInvoice[] = [];
     let successCount = 0;

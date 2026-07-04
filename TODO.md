@@ -1,115 +1,123 @@
-# Xử lý Rate Limit HTTP 429 khi tải hoá đơn hàng loạt
+# Tải file Excel tổng hợp hoá đơn từ GDT
 
-## Vấn đề
+## Mục tiêu
 
-Khi tải một lượng lớn hoá đơn (10+ invoices), server GDT (hoadondientu.gdt.gov.vn) trả về HTTP 429 (Too Many Requests) và 500 (Internal Server Error) sau một vài request đầu tiên. Nguyên nhân là không có cơ chế giới hạn tốc độ (rate limiting) và retry trong quá trình tải ZIP.
+Ngoài việc tải từng file ZIP/XML cho mỗi hoá đơn, cần tải thêm **file Excel tổng hợp** (export-excel) từ GDT portal cho khoảng thời gian đã query. File này được tải sau khi query thành công và lưu vào cùng thư mục output.
 
-Hiện tại, vòng lặp `for (const inv of allQueryInvoices)` trong `invoice.controller.ts` gửi **tuần tự nhưng không có delay giữa các request**, dẫn đến GDT chặn sau khoảng 3-4 request.
+## Thông tin API (từ trình duyệt)
 
 ```
-Log: 10 invoices
-  1-2: OK
-  3:   500 (server overload)
-  4:   429 (rate limit)
-  5-9: 429 (rate limit)
+GET https://hoadondientu.gdt.gov.vn/api/query/invoices/export-excel
+  ?sort=tdlap:desc
+  &search=tdlap=ge=01/05/2026T00:00:00;tdlap=le=31/05/2026T23:59:59
+
+Headers:
+  Authorization: Bearer <token>
+  Accept: application/json, text/plain, */*
+  Accept-Language: vi
 ```
 
-## Giải pháp
+- Endpoint path khác nhau theo loại hoá đơn:
+  - Bán ra (SELL): `/api/query/invoices/sold/export-excel`
+  - Mua vào (BUY): `/api/query/invoices/purchase/export-excel`
 
-### 1. Thêm delay giữa các request (Throttle)
+## Luồng thực hiện
 
-Thêm hàm `delay(ms)` và gọi sau mỗi lần download ZIP thành công hoặc thất bại:
+```
+queryInvoicesInRange() → trả về dữ liệu JSON
+  ↓
+downloadExcelReport()  → tải file Excel cho toàn bộ khoảng thời gian
+  ↓
+downloadInvoiceZip()   → tải từng file ZIP/XML (như hiện tại)
+```
+
+## Các bước triển khai
+
+### Bước 1: Thêm method `downloadExcelReport()` trong `downloader.service.ts`
 
 ```ts
-const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+/**
+ * Download Excel report for a date range from GDT.
+ * Returns path to saved .xlsx file, or null on failure.
+ */
+public async downloadExcelReport(
+  startDate: Date,
+  endDate: Date,
+  token: string,
+  type: 'BUY' | 'SELL',
+  outputDir: string
+): Promise<string | null> {
+  const formatGdtDate = (d: Date, endOfDay: boolean) => {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const time = endOfDay ? 'T23:59:59' : 'T00:00:00';
+    return `${dd}/${mm}/${yyyy}${time}`;
+  };
 
-for (const inv of allQueryInvoices) {
-  // ... tải ZIP ...
-  await delay(1500); // 1.5 giây giữa mỗi request
-}
-```
+  const startStr = formatGdtDate(startDate, false);
+  const endStr = formatGdtDate(endDate, true);
 
-### 2. Thêm retry với exponential backoff
+  const apiPath = type === 'BUY' ? 'purchase' : 'sold';
+  const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${apiPath}/export-excel?sort=tdlap:desc&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
 
-Khi gặp 429 hoặc 500, không bỏ qua ngay mà **retry** với delay tăng dần:
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...',
+    Accept: 'application/json, text/plain, */*',
+    'Accept-Language': 'vi',
+  };
 
-```ts
-async function downloadWithRetry(downloadFn, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const result = await downloadFn();
-      return result;
-    } catch (error) {
-      if (attempt < maxRetries && isRetryable(error)) {
-        const waitMs = Math.min(2000 * Math.pow(2, attempt - 1), 10000); // 2s, 4s, 8s
-        await delay(waitMs);
-        continue;
-      }
-      throw error;
+  const fileName = `invoices_${type}_${startStr.replace(/[/:]/g, '-')}_to_${endStr.replace(/[/:]/g, '-')}.xlsx`;
+  const filePath = path.join(outputDir, fileName);
+
+  // Skip if already downloaded
+  if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+    console.log(`[DownloaderService] Excel report already exists: ${filePath}`);
+    return filePath;
+  }
+
+  try {
+    const response = await axios.get(url, {
+      headers,
+      responseType: 'arraybuffer',
+      timeout: 30000,
+    });
+
+    if (response.status === 200) {
+      fs.writeFileSync(filePath, response.data);
+      console.log(`[DownloaderService] Downloaded Excel report: ${filePath}`);
+      return filePath;
     }
+    return null;
+  } catch (error: any) {
+    console.error(`[DownloaderService] Failed to download Excel report: ${error.message}`);
+    return null;
   }
 }
 ```
 
-### 3. Batch processing với sleep dài hơn giữa các batch
+### Bước 2: Cập nhật `invoice.controller.ts` — gọi `downloadExcelReport()` sau khi query
 
-Thay vì xử lý 1-1, chia thành batch nhỏ (ví dụ: 5 invoices/batch), sau mỗi batch sleep lâu hơn (10 giây):
+Trong hàm `downloadInvoices()`, sau `queryInvoicesInRange` thành công và trước vòng lặp download ZIP, thêm:
 
 ```ts
-const BATCH_SIZE = 5;
-const BATCH_DELAY = 10000; // 10 giây
-
-for (let i = 0; i < invoices.length; i += BATCH_SIZE) {
-  const batch = invoices.slice(i, i + BATCH_SIZE);
-  for (const inv of batch) {
-    await downloadWithRetry(...);
-    await delay(1500);
-  }
-  if (i + BATCH_SIZE < invoices.length) {
-    await delay(BATCH_DELAY); // Nghỉ lâu giữa các batch
+// Tải file Excel tổng hợp cho toàn bộ khoảng thời gian
+for (const chunk of dateChunks) {
+  try {
+    const excelPath = await downloaderService.downloadExcelReport(
+      chunk.start, chunk.end, activeToken, type, targetDir
+    );
+    if (excelPath) {
+      console.log(`[InvoiceController] Excel report saved: ${excelPath}`);
+    }
+  } catch (err: any) {
+    console.warn(`[InvoiceController] Failed to download Excel report: ${err.message}`);
   }
 }
 ```
 
----
-
-## Kế hoạch triển khai
-
-### Bước 1: Tạo `backend/src/utils/rate-limiter.ts`
-
-File utility mới, chứa các hàm dùng chung:
-
-```ts
-// delay(ms) - sleep trong ms milliseconds
-// isRetryableError(error) - kiểm tra lỗi có nên retry không (429, 500, ECONNRESET)
-// downloadWithRetry(fn, maxRetries) - retry với exponential backoff
-// processWithRateLimit(items, processor, options) - xử lý batch với delay
-```
-
-### Bước 2: Sửa `invoice.controller.ts`
-
-- Import `delay` và `downloadWithRetry` từ `rate-limiter.ts`
-- Thêm `await delay(1500)` sau mỗi lần tải ZIP (cả thành công lẫn thất bại)
-- Wrap `downloaderService.downloadInvoiceZip()` trong `downloadWithRetry` với max 3 lần thử
-- Báo cáo tiến độ: log mỗi 5 invoices (vd: "5/10 downloaded")
-
-### Bước 3: Tuỳ chọn — cấu hình qua biến môi trường
-
-Thêm vào `.env` (có giá trị mặc định trong code):
-
-```env
-# Rate limiting settings for invoice download
-DOWNLOAD_DELAY_MS=1500
-DOWNLOAD_BATCH_SIZE=5
-DOWNLOAD_BATCH_DELAY_MS=10000
-DOWNLOAD_MAX_RETRIES=3
-```
-
-### Bước 4: Kiểm tra
-
-- Chạy tải 10+ invoices, không còn lỗi 429
-- Retry hoạt động: nếu request lỗi 429 → delay 2s → thử lại → OK
-- Log hiển thị rõ: `[Downloader] Retrying invoice 123 (attempt 2/3)...`
+Lưu ý: gọi cho từng chunk date vì GDT có thể giới hạn số lượng kết quả trong 1 lần export Excel.
 
 ---
 
@@ -117,7 +125,5 @@ DOWNLOAD_MAX_RETRIES=3
 
 | File | Hành động |
 |---|---|
-| `backend/src/utils/rate-limiter.ts` | **Tạo mới** — delay, retry, batch processing utilities |
-| `backend/src/controllers/invoice.controller.ts` | **Sửa** — thêm delay + retry vào vòng download |
-| `backend/.env` | **Sửa** — thêm biến cấu hình rate limit (optional) |
-| `backend/.env.example` | **Sửa** — thêm biến mẫu |
+| `backend/src/services/downloader.service.ts` | **Thêm** method `downloadExcelReport()` |
+| `backend/src/controllers/invoice.controller.ts` | **Gọi** `downloadExcelReport()` sau khi query, trước khi download ZIP |
