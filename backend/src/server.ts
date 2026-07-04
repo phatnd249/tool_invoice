@@ -21,7 +21,9 @@ import settingsRoutes from './routes/settings.routes.js';
 import userRoutes from './routes/user.routes.js';
 import feedbackRoutes from './routes/feedback.routes.js';
 import masothueRoutes from './routes/masothue.routes.js';
+import scheduleRoutes from './routes/schedule.routes.js';
 import { AuthController } from './controllers/auth.controller.js';
+import { schedulerService } from './services/scheduler.service.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,6 +41,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/feedbacks', feedbackRoutes);
 app.use('/api/masothue', masothueRoutes);
+app.use('/api/schedules', scheduleRoutes);
 
 // Basic health check route
 app.get('/health', async (req: Request, res: Response) => {
@@ -96,6 +99,7 @@ if (staticPath) {
 findFreePort(Number(PORT)).then(async (freePort) => {
   // Seed initial administrator account if needed
   await AuthController.seedInitialAdmin();
+  await schedulerService.startAll();
 
   app.listen(freePort, () => {
     const localUrl = `http://localhost:${freePort}`;

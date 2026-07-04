@@ -28,7 +28,7 @@ export default function SchedulePanel() {
   const [creating, setCreating] = useState(false);
 
   // Schedule timing state
-  const [repeatMode, setRepeatMode] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily');
+  const [repeatMode, setRepeatMode] = useState<'daily' | 'weekly' | 'monthly' | 'quarterly' | 'custom'>('daily');
   const [scheduleHour, setScheduleHour] = useState('09');
   const [scheduleMinute, setScheduleMinute] = useState('00');
   const [customCron, setCustomCron] = useState('0 9 * * *');
@@ -36,7 +36,9 @@ export default function SchedulePanel() {
   // Compute cron from preset or use custom
   const cronExpression = repeatMode === 'custom'
     ? customCron
-    : `${scheduleMinute} ${scheduleHour} * * ${repeatMode === 'weekly' ? '1' : repeatMode === 'monthly' ? '1' : '*'}`;
+    : repeatMode === 'quarterly'
+      ? `${scheduleMinute} ${scheduleHour} 1 1,4,7,10 *`
+      : `${scheduleMinute} ${scheduleHour} * * ${repeatMode === 'weekly' ? '1' : repeatMode === 'monthly' ? '1' : '*'}`;
 
   const fetchData = async () => {
     setLoading(true);
@@ -136,11 +138,12 @@ export default function SchedulePanel() {
             <label className="block text-xs font-semibold text-slate-400">Chu Kỳ Tự Động Tải</label>
 
             {/* Repeat mode presets */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {([
                 { value: 'daily' as const, label: 'Hàng ngày' },
                 { value: 'weekly' as const, label: 'Hàng tuần' },
                 { value: 'monthly' as const, label: 'Hàng tháng' },
+                { value: 'quarterly' as const, label: 'Hàng quý' },
                 { value: 'custom' as const, label: 'Tuỳ chỉnh' },
               ]).map(opt => (
                 <button
@@ -182,7 +185,7 @@ export default function SchedulePanel() {
                   ))}
                 </select>
                 <span className="text-xs text-slate-500">
-                  ({repeatMode === 'daily' ? 'mỗi ngày' : repeatMode === 'weekly' ? 'thứ 2 hàng tuần' : 'ngày 1 hàng tháng'})
+                  ({repeatMode === 'daily' ? 'mỗi ngày' : repeatMode === 'weekly' ? 'thứ 2 hàng tuần' : repeatMode === 'monthly' ? 'ngày 1 hàng tháng' : 'đầu mỗi quý'})
                 </span>
               </div>
             )}
