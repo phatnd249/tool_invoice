@@ -323,6 +323,7 @@ export class InvoiceController {
 
       let typeSuccessCount = 0;
       const typeErrors: string[] = [];
+      const typeParsedList: ParsedInvoice[] = [];
 
       // Use rate-limited processing: batch + delay + retry
       await processWithRateLimit(allQueryInvoices, async (inv) => {
