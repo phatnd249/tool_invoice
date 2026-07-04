@@ -185,6 +185,7 @@ export default function InvoiceDownloader() {
               >
                 <option value="SELL">Hóa đơn Bán ra</option>
                 <option value="BUY">Hóa đơn Mua vào</option>
+                <option value="BOTH">Cả hai loại</option>
               </select>
             </div>
           </div>

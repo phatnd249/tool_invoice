@@ -1,123 +1,83 @@
-# Tải file Excel tổng hợp hoá đơn từ GDT
+# Thêm chức năng tải đồng thời cả 2 loại hoá đơn (Bán ra + Mua vào)
+
+## Hiện trạng
+
+Người dùng chỉ chọn được **1 loại** hoá đơn trong dropdown: "Bán ra" hoặc "Mua vào". Muốn tải cả 2 phải chạy 2 lần.
 
 ## Mục tiêu
 
-Ngoài việc tải từng file ZIP/XML cho mỗi hoá đơn, cần tải thêm **file Excel tổng hợp** (export-excel) từ GDT portal cho khoảng thời gian đã query. File này được tải sau khi query thành công và lưu vào cùng thư mục output.
+Thêm lựa chọn thứ 3 trong dropdown frontend: **"Cả hai loại"** (BOTH). Khi chọn BOTH, backend sẽ query và tải đồng thời cả BUY và SELL trong cùng 1 lần gọi API.
 
-## Thông tin API (từ trình duyệt)
+## Các bước thực hiện
 
-```
-GET https://hoadondientu.gdt.gov.vn/api/query/invoices/export-excel
-  ?sort=tdlap:desc
-  &search=tdlap=ge=01/05/2026T00:00:00;tdlap=le=31/05/2026T23:59:59
+### Bước 1: Cập nhật frontend `InvoiceDownloader.tsx`
 
-Headers:
-  Authorization: Bearer <token>
-  Accept: application/json, text/plain, */*
-  Accept-Language: vi
-```
+Thêm option vào dropdown:
 
-- Endpoint path khác nhau theo loại hoá đơn:
-  - Bán ra (SELL): `/api/query/invoices/sold/export-excel`
-  - Mua vào (BUY): `/api/query/invoices/purchase/export-excel`
-
-## Luồng thực hiện
-
-```
-queryInvoicesInRange() → trả về dữ liệu JSON
-  ↓
-downloadExcelReport()  → tải file Excel cho toàn bộ khoảng thời gian
-  ↓
-downloadInvoiceZip()   → tải từng file ZIP/XML (như hiện tại)
+```tsx
+<select value={invoiceType} ...>
+  <option value="SELL">Hóa đơn Bán ra</option>
+  <option value="BUY">Hóa đơn Mua vào</option>
+  <option value="BOTH">Cả hai loại</option>
+</select>
 ```
 
-## Các bước triển khai
+Thay đổi duy nhất: thêm 1 dòng `<option value="BOTH">Cả hai loại</option>`.
 
-### Bước 1: Thêm method `downloadExcelReport()` trong `downloader.service.ts`
+### Bước 2: Cập nhật backend `invoice.controller.ts`
 
+Trong hàm `downloadInvoices()`, xử lý logic `BOTH`:
+
+Hiện tại:
 ```ts
-/**
- * Download Excel report for a date range from GDT.
- * Returns path to saved .xlsx file, or null on failure.
- */
-public async downloadExcelReport(
-  startDate: Date,
-  endDate: Date,
-  token: string,
-  type: 'BUY' | 'SELL',
-  outputDir: string
-): Promise<string | null> {
-  const formatGdtDate = (d: Date, endOfDay: boolean) => {
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yyyy = d.getFullYear();
-    const time = endOfDay ? 'T23:59:59' : 'T00:00:00';
-    return `${dd}/${mm}/${yyyy}${time}`;
-  };
-
-  const startStr = formatGdtDate(startDate, false);
-  const endStr = formatGdtDate(endDate, true);
-
-  const apiPath = type === 'BUY' ? 'purchase' : 'sold';
-  const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${apiPath}/export-excel?sort=tdlap:desc&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
-
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...',
-    Accept: 'application/json, text/plain, */*',
-    'Accept-Language': 'vi',
-  };
-
-  const fileName = `invoices_${type}_${startStr.replace(/[/:]/g, '-')}_to_${endStr.replace(/[/:]/g, '-')}.xlsx`;
-  const filePath = path.join(outputDir, fileName);
-
-  // Skip if already downloaded
-  if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
-    console.log(`[DownloaderService] Excel report already exists: ${filePath}`);
-    return filePath;
-  }
-
-  try {
-    const response = await axios.get(url, {
-      headers,
-      responseType: 'arraybuffer',
-      timeout: 30000,
-    });
-
-    if (response.status === 200) {
-      fs.writeFileSync(filePath, response.data);
-      console.log(`[DownloaderService] Downloaded Excel report: ${filePath}`);
-      return filePath;
-    }
-    return null;
-  } catch (error: any) {
-    console.error(`[DownloaderService] Failed to download Excel report: ${error.message}`);
-    return null;
-  }
-}
+const type = invoiceType === 'BUY' ? 'BUY' : 'SELL';
+// ... query type
+// ... download type
 ```
 
-### Bước 2: Cập nhật `invoice.controller.ts` — gọi `downloadExcelReport()` sau khi query
-
-Trong hàm `downloadInvoices()`, sau `queryInvoicesInRange` thành công và trước vòng lặp download ZIP, thêm:
-
+Sửa thành:
 ```ts
-// Tải file Excel tổng hợp cho toàn bộ khoảng thời gian
-for (const chunk of dateChunks) {
-  try {
-    const excelPath = await downloaderService.downloadExcelReport(
-      chunk.start, chunk.end, activeToken, type, targetDir
-    );
-    if (excelPath) {
-      console.log(`[InvoiceController] Excel report saved: ${excelPath}`);
-    }
-  } catch (err: any) {
-    console.warn(`[InvoiceController] Failed to download Excel report: ${err.message}`);
-  }
+const types: Array<'BUY' | 'SELL'> = invoiceType === 'BOTH' 
+  ? ['BUY', 'SELL'] 
+  : [invoiceType === 'BUY' ? 'BUY' : 'SELL'];
+
+let totalSuccessCount = 0;
+const allErrors: string[] = [];
+
+for (const type of types) {
+  console.log(`[InvoiceController] Processing ${type} invoices...`);
+  
+  // ── Query invoices ── (logic hiện tại, wrap trong loop)
+  const allQueryInvoices: any[] = [];
+  // ... query + retry logic cho từng type ...
+  
+  // ── Download Excel ──
+  // ... downloadExcelReport cho từng type ...
+  
+  // ── Download ZIPs ── (giữ nguyên processWithRateLimit)
+  // ... download logic ...
+  
+  totalSuccessCount += successCount;
+  allErrors.push(...errors);
 }
+
+// ── Response ──
+res.json({
+  message: `Download completed: ${totalSuccessCount} invoices downloaded`,
+  successCount: totalSuccessCount,
+  errors: allErrors,
+});
 ```
 
-Lưu ý: gọi cho từng chunk date vì GDT có thể giới hạn số lượng kết quả trong 1 lần export Excel.
+**Chi tiết:** Wrap toàn bộ logic từ `const allQueryInvoices: any[] = [];` đến `successCount` trong 1 vòng `for (const type of types)`. Không thay đổi logic bên trong, chỉ bọc lại và tổng hợp kết quả.
+
+**Lưu ý quan trọng:** `dbCompany` và token refresh cần được share giữa 2 lần chạy (không refresh lại token nếu đã có). Token đã lấy từ lần BUY có thể dùng cho SELL luôn.
+
+### Bước 3: Kiểm tra
+
+- Chọn "Cả hai loại" → tải cả BUY và SELL
+- Log hiển thị rõ từng loại: `[InvoiceController] Processing BUY invoices...`
+- Response tổng hợp số lượng từ cả 2 loại
 
 ---
 
@@ -125,5 +85,5 @@ Lưu ý: gọi cho từng chunk date vì GDT có thể giới hạn số lượn
 
 | File | Hành động |
 |---|---|
-| `backend/src/services/downloader.service.ts` | **Thêm** method `downloadExcelReport()` |
-| `backend/src/controllers/invoice.controller.ts` | **Gọi** `downloadExcelReport()` sau khi query, trước khi download ZIP |
+| `frontend/src/components/InvoiceDownloader.tsx` | **Thêm** option `BOTH` vào dropdown |
+| `backend/src/controllers/invoice.controller.ts` | **Sửa** — wrap query + download trong vòng `for (const type of types)` |

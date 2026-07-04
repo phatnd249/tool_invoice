@@ -171,7 +171,9 @@ export class InvoiceController {
       }
     }
 
-    const type = invoiceType === 'BUY' ? 'BUY' : 'SELL';
+    const types: Array<'BUY' | 'SELL'> = invoiceType === 'BOTH'
+      ? ['BUY', 'SELL']
+      : [invoiceType === 'BUY' ? 'BUY' : 'SELL'];
 
     let start: Date;
     let end: Date;
@@ -211,121 +213,127 @@ export class InvoiceController {
 
     // Split date range to prevent tax server query limits
     const dateChunks = downloaderService.splitDateRange(start, end);
-    const allQueryInvoices: any[] = [];
 
-    console.log(`[InvoiceController] Querying ${type} invoices in ${dateChunks.length} cycles...`);
+    // ─── Process each invoice type (BUY / SELL / BOTH) ───
+    let totalSuccessCount = 0;
+    const allErrors: string[] = [];
+    const allParsedList: ParsedInvoice[] = [];
 
-    try {
-      for (const chunk of dateChunks) {
-        const chunkRes = await downloaderService.queryInvoicesInRange(chunk.start, chunk.end, activeToken, type);
-        allQueryInvoices.push(...chunkRes);
-      }
-    } catch (error: any) {
-      const is401 = error.response?.status === 401 || String(error.message).includes('401');
-      const canAutoRefresh = dbCompany ? (dbCompany.loginMode === 'AUTO') : (username && password);
+    for (const type of types) {
+      const allQueryInvoices: any[] = [];
 
-      if (is401 && canAutoRefresh) {
-        console.warn(`[InvoiceController] GDT token expired or failed with 401. Resolving a new token...`);
-        try {
-          const refreshTaxCode = dbCompany ? dbCompany.taxCode : username;
-          const refreshPassword = dbCompany ? dbCompany.lookupPassword : password;
+      console.log(`[InvoiceController] Querying ${type} invoices in ${dateChunks.length} cycles...`);
 
-          const geminiSetting = await prisma.setting.findUnique({
-            where: { key: 'geminiApiKey' }
-          });
-          const refreshApiKey = dbCompany ? (geminiSetting?.value || process.env.GEMINI_API_KEY) : geminiApiKey;
+      try {
+        for (const chunk of dateChunks) {
+          const chunkRes = await downloaderService.queryInvoicesInRange(chunk.start, chunk.end, activeToken, type);
+          allQueryInvoices.push(...chunkRes);
+        }
+      } catch (error: any) {
+        const is401 = error.response?.status === 401 || String(error.message).includes('401');
+        const canAutoRefresh = dbCompany ? (dbCompany.loginMode === 'AUTO') : (username && password);
 
-          if (!refreshApiKey) {
-            throw new Error('Gemini API Key is not configured.');
-          }
+        if (is401 && canAutoRefresh) {
+          console.warn(`[InvoiceController] GDT token expired or failed with 401. Resolving a new token...`);
+          try {
+            const refreshTaxCode = dbCompany ? dbCompany.taxCode : username;
+            const refreshPassword = dbCompany ? dbCompany.lookupPassword : password;
 
-          activeToken = await authService.loginAndGetToken(refreshTaxCode, refreshPassword, refreshApiKey);
-          const tokenExpiredAt = authService.getTokenExpiration(activeToken);
-
-          if (dbCompany) {
-            await prisma.company.update({
-              where: { id: dbCompany.id },
-              data: { token: activeToken, tokenExpiredAt }
+            const geminiSetting = await prisma.setting.findUnique({
+              where: { key: 'geminiApiKey' }
             });
-          } else {
-            // Update DB Cache
-            await prisma.company.upsert({
-              where: { taxCode: refreshTaxCode },
-              update: { token: activeToken, tokenExpiredAt },
-              create: { taxCode: refreshTaxCode, name: refreshTaxCode, lookupPassword: refreshPassword, token: activeToken, tokenExpiredAt }
-            });
-          }
+            const refreshApiKey = dbCompany ? (geminiSetting?.value || process.env.GEMINI_API_KEY) : geminiApiKey;
 
-          // Retry query with new token
-          allQueryInvoices.length = 0;
-          for (const chunk of dateChunks) {
-            const chunkRes = await downloaderService.queryInvoicesInRange(chunk.start, chunk.end, activeToken, type);
-            allQueryInvoices.push(...chunkRes);
+            if (!refreshApiKey) {
+              throw new Error('Gemini API Key is not configured.');
+            }
+
+            activeToken = await authService.loginAndGetToken(refreshTaxCode, refreshPassword, refreshApiKey);
+            const tokenExpiredAt = authService.getTokenExpiration(activeToken);
+
+            if (dbCompany) {
+              await prisma.company.update({
+                where: { id: dbCompany.id },
+                data: { token: activeToken, tokenExpiredAt }
+              });
+            } else {
+              // Update DB Cache
+              await prisma.company.upsert({
+                where: { taxCode: refreshTaxCode },
+                update: { token: activeToken, tokenExpiredAt },
+                create: { taxCode: refreshTaxCode, name: refreshTaxCode, lookupPassword: refreshPassword, token: activeToken, tokenExpiredAt }
+              });
+            }
+
+            // Retry query with new token
+            allQueryInvoices.length = 0;
+            for (const chunk of dateChunks) {
+              const chunkRes = await downloaderService.queryInvoicesInRange(chunk.start, chunk.end, activeToken, type);
+              allQueryInvoices.push(...chunkRes);
+            }
+          } catch (retryError: any) {
+            await prisma.downloadHistory.create({
+              data: {
+                taxCode: tokenMst,
+                invoiceType: type,
+                status: 'FAILED',
+                log: `Retry GDT API Query failed: ${retryError.message}`,
+                countDownloaded: 0,
+              },
+            });
+            allErrors.push(`Query ${type}: ${retryError.message}`);
+            continue; // skip to next type
           }
-        } catch (retryError: any) {
+        } else {
+          // GDT error logging
           await prisma.downloadHistory.create({
             data: {
               taxCode: tokenMst,
               invoiceType: type,
               status: 'FAILED',
-              log: `Retry GDT API Query failed: ${retryError.message}`,
+              log: `GDT API Query failed: ${error.message}`,
               countDownloaded: 0,
             },
           });
-          res.status(502).json({ error: 'GDT portal query failed on retry', details: retryError.message });
-          return;
+          allErrors.push(`Query ${type}: ${error.message}`);
+          continue; // skip to next type
         }
-      } else {
-        // GDT error logging
-        await prisma.downloadHistory.create({
-          data: {
-            taxCode: tokenMst,
-            invoiceType: type,
-            status: 'FAILED',
-            log: `GDT API Query failed: ${error.message}`,
-            countDownloaded: 0,
-          },
-        });
-        res.status(502).json({ error: 'GDT portal query failed', details: error.message });
-        return;
       }
-    }
 
-    console.log(`[InvoiceController] Found total ${allQueryInvoices.length} invoices.`);
+      console.log(`[InvoiceController] Found ${allQueryInvoices.length} ${type} invoices.`);
 
-    // Download Excel report for each date chunk before downloading individual invoices
-    if (allQueryInvoices.length > 0) {
-      console.log(`[InvoiceController] Downloading Excel reports for ${dateChunks.length} date chunk(s)...`);
-      for (const chunk of dateChunks) {
-        try {
-          const excelPath = await downloaderService.downloadExcelReport(
-            chunk.start, chunk.end, activeToken, type, targetDir
-          );
-          if (excelPath) {
-            console.log(`[InvoiceController] Excel report saved: ${path.basename(excelPath)}`);
+      // Download Excel report for each date chunk before downloading individual invoices
+      if (allQueryInvoices.length > 0) {
+        console.log(`[InvoiceController] Downloading Excel reports for ${dateChunks.length} date chunk(s)...`);
+        for (const chunk of dateChunks) {
+          try {
+            const excelPath = await downloaderService.downloadExcelReport(
+              chunk.start, chunk.end, activeToken, type, targetDir
+            );
+            if (excelPath) {
+              console.log(`[InvoiceController] Excel report saved: ${path.basename(excelPath)}`);
+            }
+          } catch (err: any) {
+            console.warn(`[InvoiceController] Failed to download Excel report for chunk: ${err.message}`);
           }
-        } catch (err: any) {
-          console.warn(`[InvoiceController] Failed to download Excel report for chunk: ${err.message}`);
         }
       }
-    }
 
-    console.log(`[InvoiceController] Starting individual invoice downloads...`);
+      console.log(`[InvoiceController] Starting ${type} invoice downloads...`);
 
-    const parsedList: ParsedInvoice[] = [];
-    let successCount = 0;
-    const errors: string[] = [];
+      let typeSuccessCount = 0;
+      const typeErrors: string[] = [];
 
-    // Use rate-limited processing: batch + delay + retry
-    await processWithRateLimit(allQueryInvoices, async (inv) => {
-      try {
-        // Download into targetDir (initially baseDir, then companyFolder after resolving)
-        const zipPath = await withRetry(
-          () => downloaderService.downloadInvoiceZip(inv, activeToken, targetDir),
-          { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 12000 }
-        );
-        if (!zipPath) {
-          errors.push(`Invoice ${inv.shdon}: Failed to download ZIP.`);
+      // Use rate-limited processing: batch + delay + retry
+      await processWithRateLimit(allQueryInvoices, async (inv) => {
+        try {
+          // Download into targetDir (initially baseDir, then companyFolder after resolving)
+          const zipPath = await withRetry(
+            () => downloaderService.downloadInvoiceZip(inv, activeToken, targetDir),
+            { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 12000 }
+          );
+          if (!zipPath) {
+            typeErrors.push(`[${type}] Invoice ${inv.shdon}: Failed to download ZIP.`);
           if (saveToDb) {
             try {
               await saveBasicInvoiceFromGdt(inv, type);
@@ -338,7 +346,7 @@ export class InvoiceController {
 
         let parsed = parserService.extractAndParseZip(zipPath, targetDir);
         if (!parsed) {
-          errors.push(`Invoice ${inv.shdon}: Failed to unzip or parse XML.`);
+          typeErrors.push(`[${type}] Invoice ${inv.shdon}: Failed to unzip or parse XML.`);
           return;
         }
 
@@ -387,8 +395,8 @@ export class InvoiceController {
           parsed.zipPath = zipPath;
         }
 
-        parsedList.push(parsed);
-        successCount++;
+        typeParsedList.push(parsed);
+        typeSuccessCount++;
 
         // Save to Database if required
         if (saveToDb) {
@@ -483,46 +491,51 @@ export class InvoiceController {
           });
         }
       } catch (err: any) {
-        errors.push(`Inv ${inv.shdon}: Database save error: ${err.message}`);
+          typeErrors.push(`[${type}] Inv ${inv.shdon}: Database save error: ${err.message}`);
       }
     });
 
-    // GDT success / partial logging
-    const status = successCount === allQueryInvoices.length ? 'SUCCESS' : (successCount > 0 ? 'PARTIAL' : 'FAILED');
-    await prisma.downloadHistory.create({
-      data: {
-        taxCode: tokenMst,
-        invoiceType: type,
-        status,
-        log: errors.length > 0 ? errors.join('\n') : 'Download completed successfully.',
-        countDownloaded: successCount,
-        userId: req.user?.id || null,
-        username: req.user?.username || null,
-      },
-    });
+      // Log per-type results
+      const typeStatus = typeSuccessCount === allQueryInvoices.length
+        ? 'SUCCESS' : (typeSuccessCount > 0 ? 'PARTIAL' : 'FAILED');
+      await prisma.downloadHistory.create({
+        data: {
+          taxCode: tokenMst,
+          invoiceType: type,
+          status: typeStatus,
+          log: typeErrors.length > 0 ? typeErrors.join('\n') : 'Download completed successfully.',
+          countDownloaded: typeSuccessCount,
+          userId: req.user?.id || null,
+          username: req.user?.username || null,
+        },
+      });
 
-    // Update Company statistics count
-    if (dbCompany && successCount > 0) {
-      try {
-        await prisma.company.update({
-          where: { id: dbCompany.id },
-          data: {
-            downloadCount: {
-              increment: successCount
-            }
-          }
-        });
-      } catch (statErr) {
-        console.error('[InvoiceController] Failed to update company stats:', statErr);
+      totalSuccessCount += typeSuccessCount;
+      allErrors.push(...typeErrors);
+      allParsedList.push(...typeParsedList);
+
+      if (dbCompany && typeSuccessCount > 0) {
+        try {
+          await prisma.company.update({
+            where: { id: dbCompany.id },
+            data: { downloadCount: { increment: typeSuccessCount } }
+          });
+        } catch (statErr) {
+          console.error('[InvoiceController] Failed to update company stats:', statErr);
+        }
       }
     }
 
+    const finalStatus = totalSuccessCount > 0
+      ? (allErrors.length > 0 ? 'PARTIAL' : 'SUCCESS')
+      : 'FAILED';
+
     res.json({
-      message: `Tải hóa đơn hoàn tất. Thành công: ${successCount}/${allQueryInvoices.length}`,
-      status,
-      count: successCount,
-      errors: errors.length > 0 ? errors : undefined,
-      data: parsedList.map(p => ({
+      message: `Tải hoàn tất: ${totalSuccessCount} hóa đơn (${types.length} loại).`,
+      status: finalStatus,
+      count: totalSuccessCount,
+      errors: allErrors.length > 0 ? allErrors : undefined,
+      data: allParsedList.map(p => ({
         invoiceNumber: p.invoiceNumber,
         invoiceDate: p.invoiceDate,
         sellerName: p.sellerName,
