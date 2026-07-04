@@ -2,20 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as net from 'net';
 import { execSync } from 'child_process';
-import { fileURLToPath } from 'url';
-
-let _dirname = '';
-try {
-  _dirname = __dirname;
-} catch {
-  _dirname = path.dirname(fileURLToPath(import.meta.url));
-}
-
-/** Resolve path to prisma/schema.prisma relative to backend root */
-function getPrismaSchemaPath(): string {
-  const backendRoot = path.resolve(_dirname, '..');
-  return path.join(backendRoot, 'prisma', 'schema.prisma');
-}
+import { SCRIPT_DIR, BACKEND_ROOT, PRISMA_SCHEMA_PATH } from './paths.js';
 
 // Helper to check if port is in use
 function checkPort(port: number): Promise<boolean> {
@@ -52,13 +39,9 @@ export function ensureDatabaseSchema(): void {
     return;
   }
 
-  // db push was already called in initializeEnvironment, but calling again
-  // is idempotent and harmless. This handles the case where the database
-  // already existed but schema was outdated.
-  const schemaPath = getPrismaSchemaPath();
   console.log('[Setup] Verifying database schema...');
   try {
-    execSync(`npx prisma db push --skip-generate --schema="${schemaPath}"`, {
+    execSync(`npx prisma db push --skip-generate --schema="${PRISMA_SCHEMA_PATH}"`, {
       env: { ...process.env, DATABASE_URL: dbUrl },
       stdio: 'pipe',
       timeout: 30000,
@@ -77,13 +60,11 @@ export function ensureDatabaseSchema(): void {
  */
 export function initializeEnvironment(): { dbPath: string; invoicesDir: string } {
   // Read DATABASE_URL from .env (already loaded by dotenv.config in server.ts)
-  // If path is relative, resolve it relative to the backend root (where .env lives),
-  // NOT process.cwd() which could be the monorepo root when using npm workspaces.
-  const backendRoot = path.resolve(_dirname, '..');
-  let rawPath = (process.env.DATABASE_URL || 'file:./dev.db').replace(/^file:/, '');
+  // If path is relative, resolve it relative to BACKEND_ROOT (where .env lives),
+  let rawPath = (process.env.DATABASE_URL || 'file:./prisma/dev.db').replace(/^file:/, '');
   const dbPath = path.isAbsolute(rawPath)
     ? rawPath
-    : path.resolve(backendRoot, rawPath);
+    : path.resolve(BACKEND_ROOT, rawPath);
 
   // Directory containing the database file
   const dbDir = path.dirname(dbPath);
@@ -110,13 +91,12 @@ export function initializeEnvironment(): { dbPath: string; invoicesDir: string }
       fs.mkdirSync(dbDirAbsolute, { recursive: true });
     }
 
-    // Resolve template database path
-    // We check multiple locations depending on whether we run standalone, pkg, or inside developer workspace
+    // Resolve template database path from known locations
+    // BACKEND_ROOT is always correct regardless of dev or production
     const possibleTemplates = [
-      path.join(_dirname, '../../prisma/dev.db'),
-      path.join(_dirname, '../prisma/dev.db'),
-      path.join(process.cwd(), 'prisma/dev.db'),
-      path.join(process.cwd(), 'backend/prisma/dev.db'),
+      path.join(BACKEND_ROOT, 'prisma', 'dev.db'),
+      path.join(process.cwd(), 'prisma', 'dev.db'),
+      path.join(process.cwd(), 'backend', 'prisma', 'dev.db'),
     ];
 
     let templateFound = false;
@@ -141,9 +121,8 @@ export function initializeEnvironment(): { dbPath: string; invoicesDir: string }
   // If database was just copied from template, it may have an outdated schema.
   // Force db push to ensure all tables exist.
   if (fs.existsSync(dbPath)) {
-    const schemaPath = getPrismaSchemaPath();
     try {
-      execSync(`npx prisma db push --skip-generate --accept-data-loss --schema="${schemaPath}"`, {
+      execSync(`npx prisma db push --skip-generate --accept-data-loss --schema="${PRISMA_SCHEMA_PATH}"`, {
         env: { ...process.env, DATABASE_URL: `file:${dbPath.replace(/\\/g, '/')}` },
         stdio: 'pipe',
         timeout: 30000,
@@ -163,11 +142,9 @@ export function initializeEnvironment(): { dbPath: string; invoicesDir: string }
   // In that case, pkg extracts them to a temporary directory next to the executable.
   // We set PRISMA_QUERY_ENGINE_LIBRARY to point there.
   if (typeof (process as any).pkg !== 'undefined') {
-    // pkg extracts native addons to process.cwd() or next to execPath
-    // Try multiple locations
     const possibleClientDirs = [
-      path.join(path.dirname(process.execPath), 'node_modules/.prisma/client'),
-      path.join(process.cwd(), 'node_modules/.prisma/client'),
+      path.join(path.dirname(process.execPath), 'node_modules', '.prisma', 'client'),
+      path.join(process.cwd(), 'node_modules', '.prisma', 'client'),
     ];
 
     for (const clientDir of possibleClientDirs) {

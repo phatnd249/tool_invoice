@@ -12,7 +12,7 @@ import cors from 'cors';
 import open from 'open';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { PUBLIC_DIR, FRONTEND_DIST } from './utils/paths.js';
 import prisma from './utils/db.js';
 import invoiceRoutes from './routes/invoice.routes.js';
 import authRoutes from './routes/auth.routes.js';
@@ -23,19 +23,9 @@ import feedbackRoutes from './routes/feedback.routes.js';
 import masothueRoutes from './routes/masothue.routes.js';
 import { AuthController } from './controllers/auth.controller.js';
 
-let _dirname = '';
-try {
-  _dirname = __dirname;
-} catch {
-  _dirname = path.dirname(fileURLToPath(import.meta.url));
-}
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production' || typeof (process as any).pkg !== 'undefined';
-
-// Resolve __dirname for both dev and production
-const serverDir = _dirname;
 
 // Middlewares
 app.use(cors());
@@ -73,11 +63,10 @@ app.get('/health', async (req: Request, res: Response) => {
 // Priority:
 //   1. backend/public/ (production build, copied by npm run build)
 //   2. frontend/dist/ (dev mode, build output)
-//   3. backend/public/ fallback (empty or legacy)
-const publicPath = path.join(serverDir, '../public');
-const frontendDistPath = path.join(serverDir, '../../../frontend/dist');
+const publicPath = PUBLIC_DIR;
+const frontendDistPath = FRONTEND_DIST;
 
-let staticPath = null;
+let staticPath: string | null = null;
 
 if (isProduction && fs.existsSync(publicPath)) {
   // Production: frontend was copied to backend/public/ during build
