@@ -19,6 +19,16 @@ interface Schedule {
   lastRun?: string | null;
 }
 
+const WEEKDAYS = [
+  { value: 0, label: 'CN' },
+  { value: 1, label: 'T2' },
+  { value: 2, label: 'T3' },
+  { value: 3, label: 'T4' },
+  { value: 4, label: 'T5' },
+  { value: 5, label: 'T6' },
+  { value: 6, label: 'T7' },
+];
+
 export default function SchedulePanel() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -28,17 +38,31 @@ export default function SchedulePanel() {
   const [creating, setCreating] = useState(false);
 
   // Schedule timing state
-  const [repeatMode, setRepeatMode] = useState<'daily' | 'weekly' | 'monthly' | 'quarterly' | 'custom'>('daily');
-  const [scheduleHour, setScheduleHour] = useState('09');
-  const [scheduleMinute, setScheduleMinute] = useState('00');
+  const [repeatMode, setRepeatMode] = useState<'weekly' | 'monthly' | 'quarterly' | 'custom'>('weekly');
+  const [scheduleHour, setScheduleHour] = useState(9);
+  const [scheduleMinute, setScheduleMinute] = useState(0);
+  const [weekday, setWeekday] = useState(1);      // 0=CN, 1=T2... (for weekly)
+  const [monthDay, setMonthDay] = useState(1);    // 1-28 (for monthly/quarterly)
   const [customCron, setCustomCron] = useState('0 9 * * *');
 
-  // Compute cron from preset or use custom
-  const cronExpression = repeatMode === 'custom'
-    ? customCron
-    : repeatMode === 'quarterly'
-      ? `${scheduleMinute} ${scheduleHour} 1 1,4,7,10 *`
-      : `${scheduleMinute} ${scheduleHour} * * ${repeatMode === 'weekly' ? '1' : repeatMode === 'monthly' ? '1' : '*'}`;
+  // Validate hour/minute
+  const hour = Math.max(0, Math.min(23, scheduleHour));
+  const minute = Math.max(0, Math.min(59, scheduleMinute));
+  const day = Math.max(1, Math.min(28, monthDay));
+
+  // Compute cron from preset
+  const cronExpression = (() => {
+    switch (repeatMode) {
+      case 'weekly':
+        return `${minute} ${hour} * * ${weekday}`;
+      case 'monthly':
+        return `${minute} ${hour} ${day} * *`;
+      case 'quarterly':
+        return `${minute} ${hour} ${day} 1,4,7,10 *`;
+      case 'custom':
+        return customCron;
+    }
+  })();
 
   const fetchData = async () => {
     setLoading(true);
@@ -138,9 +162,8 @@ export default function SchedulePanel() {
             <label className="block text-xs font-semibold text-slate-400">Chu Kỳ Tự Động Tải</label>
 
             {/* Repeat mode presets */}
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {([
-                { value: 'daily' as const, label: 'Hàng ngày' },
                 { value: 'weekly' as const, label: 'Hàng tuần' },
                 { value: 'monthly' as const, label: 'Hàng tháng' },
                 { value: 'quarterly' as const, label: 'Hàng quý' },
@@ -161,32 +184,73 @@ export default function SchedulePanel() {
               ))}
             </div>
 
-            {/* Time picker (hidden for custom mode) */}
+            {/* Time + day/weekday pickers (hidden for custom) */}
             {repeatMode !== 'custom' && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-slate-400">Vào lúc</span>
-                <select
-                  value={scheduleHour}
-                  onChange={(e) => setScheduleHour(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
-                >
-                  {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).map(h => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-                <span className="text-slate-400">:</span>
-                <select
-                  value={scheduleMinute}
-                  onChange={(e) => setScheduleMinute(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
-                >
-                  {['00', '15', '30', '45'].map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-                <span className="text-xs text-slate-500">
-                  ({repeatMode === 'daily' ? 'mỗi ngày' : repeatMode === 'weekly' ? 'thứ 2 hàng tuần' : repeatMode === 'monthly' ? 'ngày 1 hàng tháng' : 'đầu mỗi quý'})
-                </span>
+              <div className="space-y-3 bg-slate-900/30 rounded-xl p-3">
+                {/* Time inputs */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 w-12 shrink-0">Giờ</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={23}
+                    value={scheduleHour}
+                    onChange={(e) => setScheduleHour(Number(e.target.value))}
+                    className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="text-slate-500 text-sm">:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={59}
+                    step={15}
+                    value={scheduleMinute}
+                    onChange={(e) => setScheduleMinute(Number(e.target.value))}
+                    className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="text-xs text-slate-500">
+                    (giờ:phút, 24h)
+                  </span>
+                </div>
+
+                {/* Weekday picker (weekly only) */}
+                {repeatMode === 'weekly' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 w-12 shrink-0">Thứ</span>
+                    <div className="flex gap-1">
+                      {WEEKDAYS.map(w => (
+                        <button
+                          key={w.value}
+                          type="button"
+                          onClick={() => setWeekday(w.value)}
+                          className={`w-9 h-9 rounded-lg text-xs font-medium transition cursor-pointer ${
+                            weekday === w.value
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-700'
+                          }`}
+                        >
+                          {w.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Month day picker (monthly + quarterly) */}
+                {(repeatMode === 'monthly' || repeatMode === 'quarterly') && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 w-12 shrink-0">Ngày</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={28}
+                      value={monthDay}
+                      onChange={(e) => setMonthDay(Number(e.target.value))}
+                      className="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <span className="text-xs text-slate-500">hàng tháng</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -201,24 +265,27 @@ export default function SchedulePanel() {
                   placeholder="0 9 * * *"
                 />
                 <span className="block text-xxs text-slate-500 mt-1">
-                  Định dạng: phút giờ ngày tháng thứ. VD: <code className="text-indigo-400">0 9 * * *</code> = 9:00 mỗi ngày.
+                  Định dạng: phút giờ ngày tháng thứ. VD: <code className="text-indigo-400">0 9 * * *</code>
                 </span>
               </div>
             )}
 
-            {/* Computed cron preview */}
-            <div className="text-xxs text-slate-500 bg-slate-900/50 rounded-lg px-3 py-2 font-mono">
-              Cron: <span className="text-cyan-400">{cronExpression}</span>
-            </div>
+            {/* Computed cron preview (hidden by default, shown only on hover/focus) */}
+            <details className="text-xxs text-slate-600 group">
+              <summary className="cursor-pointer hover:text-slate-400 transition">Xem cron expression</summary>
+              <div className="mt-1 bg-slate-900/50 rounded-lg px-3 py-2 font-mono">
+                <span className="text-cyan-400">{cronExpression}</span>
+              </div>
+            </details>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-1">Loại hoá đơn</label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setInvoiceType('SELL')}
-                className={`py-2 px-4 rounded-xl border text-sm font-medium transition ${
+                className={`py-2 px-3 rounded-xl border text-xs font-medium transition ${
                   invoiceType === 'SELL'
                     ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
                     : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
@@ -229,13 +296,24 @@ export default function SchedulePanel() {
               <button
                 type="button"
                 onClick={() => setInvoiceType('BUY')}
-                className={`py-2 px-4 rounded-xl border text-sm font-medium transition ${
+                className={`py-2 px-3 rounded-xl border text-xs font-medium transition ${
                   invoiceType === 'BUY'
                     ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
                     : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
                 }`}
               >
                 Mua vào
+              </button>
+              <button
+                type="button"
+                onClick={() => setInvoiceType('BOTH' as any)}
+                className={`py-2 px-3 rounded-xl border text-xs font-medium transition ${
+                  invoiceType === ('BOTH' as any)
+                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                }`}
+              >
+                Cả hai
               </button>
             </div>
           </div>
