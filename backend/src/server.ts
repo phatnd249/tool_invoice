@@ -3,8 +3,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Initialize DB URL and workspace folders dynamically before loading DB
-import { initializeEnvironment, findFreePort } from './utils/setup.js';
+import { initializeEnvironment, findFreePort, ensureDatabaseSchema } from './utils/setup.js';
 initializeEnvironment();
+ensureDatabaseSchema();
 
 import express, { Request, Response } from 'express';
 import cors from 'cors';

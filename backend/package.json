@@ -17,6 +17,7 @@
     "assets": [
       "prisma/schema.prisma",
       "prisma/dev.db",
+      "prisma/migrations/**/*",
       "../frontend/dist/**/*",
       "node_modules/.prisma/client/*.js",
       "node_modules/.prisma/client/package.json",

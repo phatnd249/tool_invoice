@@ -66,9 +66,9 @@ function prunePrismaEngines() {
     let prunedCount = 0;
     
     for (const file of files) {
+      // Keep migration-engine for auto-migrate on startup; remove only schema-engine & introspection-engine
       const isUnusedEngine = 
         file.startsWith('schema-engine') || 
-        file.startsWith('migration-engine') || 
         file.startsWith('introspection-engine') || 
         file.startsWith('query-engine') && !file.includes('debian') && !file.includes('windows') && !file.includes('library'); // keep windows & debian & library node engines
         
