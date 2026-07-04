@@ -265,7 +265,10 @@ export default function SchedulePanel() {
                   placeholder="0 9 * * *"
                 />
                 <span className="block text-xxs text-slate-500 mt-1">
-                  Định dạng: phút giờ ngày tháng thứ. VD: <code className="text-indigo-400">0 9 * * *</code>
+                  Định dạng: phút giờ ngày tháng thứ.{' '}
+                  <a href="https://crontab.guru" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 underline">
+                    Tham khảo crontab.guru
+                  </a>
                 </span>
               </div>
             )}
