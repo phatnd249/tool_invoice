@@ -344,14 +344,14 @@ export class InvoiceController {
       await processWithRateLimit(allQueryInvoices, async (inv) => {
         try {
           // Resolve target directory for this specific invoice
-          // Use inv.tdlap (ngay lap) for date, fallback to today
-          const invoiceDateRaw = inv.tdlap || inv.ngay;
-          let invoiceDate: Date;
-          try {
-            const cleaned = invoiceDateRaw?.toString().split(' ')[0];
-            invoiceDate = cleaned ? parseDateString(cleaned) : new Date();
-          } catch {
-            invoiceDate = new Date();
+          // Determine invoice date from GDT response (tdlap = ngày lập hoá đơn)
+          // tdlap can be a timestamp (number), ISO string, or dd/MM/yyyy
+          let invoiceDate = new Date();
+          if (inv.tdlap) {
+            const parsed = Date.parse(inv.tdlap);
+            if (!isNaN(parsed)) {
+              invoiceDate = new Date(parsed);
+            }
           }
 
           const sellerTaxCode = inv.nbmst || tokenMst;
