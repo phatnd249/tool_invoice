@@ -44,6 +44,8 @@ export default function SchedulePanel() {
   const [weekday, setWeekday] = useState(1);      // 0=CN, 1=T2... (for weekly)
   const [monthDay, setMonthDay] = useState(1);    // 1-28 (for monthly/quarterly)
   const [customCron, setCustomCron] = useState('0 9 * * *');
+  const [dateRangeDays, setDateRangeDays] = useState(7);
+  const [showDateRange, setShowDateRange] = useState(false);
 
   // Validate hour/minute
   const hour = Math.max(0, Math.min(23, scheduleHour));
@@ -99,6 +101,8 @@ export default function SchedulePanel() {
         companyId: Number(selectedCompanyId),
         cronExpression,
         invoiceType,
+        repeatMode,
+        dateRangeDays: repeatMode === 'custom' && showDateRange ? dateRangeDays : null,
       });
       fetchData();
     } catch (err: any) {
@@ -256,20 +260,47 @@ export default function SchedulePanel() {
 
             {/* Custom cron input */}
             {repeatMode === 'custom' && (
-              <div>
-                <input
-                  type="text"
-                  value={customCron}
-                  onChange={(e) => setCustomCron(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
-                  placeholder="0 9 * * *"
-                />
-                <span className="block text-xxs text-slate-500 mt-1">
-                  Định dạng: phút giờ ngày tháng thứ.{' '}
-                  <a href="https://crontab.guru" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 underline">
-                    Tham khảo crontab.guru
-                  </a>
-                </span>
+              <div className="space-y-3">
+                <div>
+                  <input
+                    type="text"
+                    value={customCron}
+                    onChange={(e) => setCustomCron(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
+                    placeholder="0 9 * * *"
+                  />
+                  <span className="block text-xxs text-slate-500 mt-1">
+                    Định dạng: phút giờ ngày tháng thứ.{' '}
+                    <a href="https://crontab.guru" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 underline">
+                      Tham khảo crontab.guru
+                    </a>
+                  </span>
+                </div>
+
+                {/* Date range toggle for custom mode */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showDateRange}
+                    onChange={(e) => setShowDateRange(e.target.checked)}
+                    className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-500 focus:ring-indigo-500"
+                  />
+                  <span className="text-xs text-slate-400">Giới hạn thời gian tải</span>
+                </label>
+                {showDateRange && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">Tải dữ liệu trong</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={dateRangeDays}
+                      onChange={(e) => setDateRangeDays(Number(e.target.value))}
+                      className="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <span className="text-xs text-slate-500">ngày qua</span>
+                  </div>
+                )}
               </div>
             )}
 

@@ -21,7 +21,7 @@ export class ScheduleController {
    * Create a new schedule and start its cron job.
    */
   static async create(req: AuthRequest, res: Response): Promise<void> {
-    const { companyId, cronExpression, invoiceType } = req.body;
+    const { companyId, cronExpression, invoiceType, repeatMode, dateRangeDays } = req.body;
 
     if (!companyId || !cronExpression || !invoiceType) {
       res.status(400).json({ error: 'Thiếu thông tin bắt buộc: companyId, cronExpression, invoiceType.' });
@@ -40,13 +40,15 @@ export class ScheduleController {
         companyId,
         cronExpression,
         invoiceType,
+        repeatMode: repeatMode || 'weekly',
+        dateRangeDays: dateRangeDays || null,
         isActive: true,
       },
       include: { company: true },
     });
 
     // Start the cron job immediately
-    schedulerService.startJob(schedule.id, cronExpression, companyId, company.taxCode, invoiceType);
+    schedulerService.startJob(schedule);
 
     res.status(201).json(schedule);
   }
@@ -74,7 +76,7 @@ export class ScheduleController {
     });
 
     if (updated.isActive) {
-      schedulerService.startJob(id, updated.cronExpression, schedule.companyId, schedule.company.taxCode, updated.invoiceType);
+      schedulerService.startJob(updated);
     } else {
       schedulerService.stopJob(id);
     }

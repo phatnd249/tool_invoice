@@ -2,6 +2,62 @@ import cron from 'node-cron';
 import prisma from '../utils/db.js';
 
 /**
+ * Format Date to dd/MM/yyyy string (GMT+7 safe).
+ */
+function formatDate(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+/**
+ * Compute date range for a schedule based on repeatMode and optional dateRangeDays.
+ */
+function getDateRange(schedule: {
+  repeatMode: string;
+  dateRangeDays: number | null;
+}): { startDate: string; endDate: string } {
+  const now = new Date();
+  const today = formatDate(now);
+
+  // Yesterday
+  const yesterday = (() => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 1);
+    return formatDate(d);
+  })();
+
+  // If user set a custom number of days → use it
+  if (schedule.dateRangeDays) {
+    const start = new Date(now);
+    start.setDate(start.getDate() - schedule.dateRangeDays);
+    return { startDate: formatDate(start), endDate: today };
+  }
+
+  // Auto-detect from repeatMode
+  switch (schedule.repeatMode) {
+    case 'weekly': {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return { startDate: formatDate(weekAgo), endDate: yesterday };
+    }
+    case 'monthly': {
+      const firstOfLast = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastOfLast = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { startDate: formatDate(firstOfLast), endDate: formatDate(lastOfLast) };
+    }
+    case 'quarterly': {
+      const threeMonthsAgo = new Date(now);
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      return { startDate: formatDate(threeMonthsAgo), endDate: yesterday };
+    }
+    default:
+      return { startDate: today, endDate: today };
+  }
+}
+
+/**
  * Manages cron jobs at runtime using a Map.
  * Jobs are persisted in DB (Schedule table) and re-created on server restart.
  */
@@ -20,7 +76,7 @@ class SchedulerService {
       });
 
       for (const s of schedules) {
-        this.startJob(s.id, s.cronExpression, s.companyId, s.company.taxCode, s.invoiceType);
+        this.startJob(s);
       }
 
       console.log(`[Scheduler] Started ${schedules.length} active schedule(s).`);
@@ -32,13 +88,18 @@ class SchedulerService {
   /**
    * Create and start a cron job for a schedule.
    */
-  startJob(
-    id: number,
-    cronExpression: string,
-    companyId: number,
-    taxCode: string,
-    invoiceType: string,
-  ): void {
+  startJob(schedule: {
+    id: number;
+    cronExpression: string;
+    companyId: number;
+    repeatMode: string;
+    dateRangeDays: number | null;
+    invoiceType: string;
+    company?: { taxCode: string };
+  }): void {
+    const { id, cronExpression, companyId, repeatMode, dateRangeDays, invoiceType } = schedule;
+    const taxCode = schedule.company?.taxCode || 'unknown';
+
     // Stop existing job if any
     this.stopJob(id);
 
@@ -51,12 +112,8 @@ class SchedulerService {
       console.log(`[Scheduler] Running schedule #${id} (${taxCode}, ${invoiceType})...`);
 
       try {
-        // Compute today's date range
-        const now = new Date();
-        const dd = String(now.getDate()).padStart(2, '0');
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        const yyyy = now.getFullYear();
-        const todayStr = `${dd}/${mm}/${yyyy}`;
+        const { startDate, endDate } = getDateRange({ repeatMode, dateRangeDays });
+        console.log(`[Scheduler] Date range: ${startDate} → ${endDate}`);
 
         // Import dynamically to avoid circular dependency at module level
         const { InvoiceController } = await import('../controllers/invoice.controller.js');
@@ -64,8 +121,8 @@ class SchedulerService {
         // Build a fake Request/Response for the download handler
         const mockReq = {
           body: {
-            startDate: todayStr,
-            endDate: todayStr,
+            startDate,
+            endDate,
             invoiceType,
             companyId,
           },
@@ -100,7 +157,7 @@ class SchedulerService {
     });
 
     this.jobs.set(id, job);
-    console.log(`[Scheduler] Job #${id} scheduled: ${cronExpression}`);
+    console.log(`[Scheduler] Job #${id} scheduled: ${cronExpression} (mode=${repeatMode}, days=${dateRangeDays ?? 'auto'})`);
   }
 
   /**

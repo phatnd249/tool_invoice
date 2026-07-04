@@ -124,6 +124,8 @@ model Schedule {
   companyId      Int
   company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   cronExpression String    // e.g., "0 9 * * *" (9 AM daily)
+  repeatMode     String    @default("weekly") // "weekly" | "monthly" | "quarterly" | "custom"
+  dateRangeDays  Int?      // Số ngày tải ngược từ hôm nay (null = auto-detect từ repeatMode)
   invoiceType    String    // "BUY" or "SELL"
   isActive       Boolean   @default(true)
   lastRun        DateTime?

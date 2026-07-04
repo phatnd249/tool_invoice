@@ -1,228 +1,158 @@
-# Triển khai Backend Schedules với node-cron
+# Thêm date range cho lịch tải hoá đơn
 
-## Hiện trạng
+## Vấn đề
 
-- Frontend `SchedulePanel` đã hoàn chỉnh, gọi API `/api/schedules`
-- Backend **chưa có** routes, controller, service cho schedules → lỗi 404
-- DB schema đã có bảng `Schedule` (prisma/schema.prisma)
+Hiện tại scheduler luôn tải `startDate = endDate = today`, không phù hợp với các chu kỳ khác nhau (tuần/tháng/quý).
 
 ## Mục tiêu
 
-1. CRUD schedules: tạo, xem danh sách, toggle on/off, xoá
-2. Chạy cron job thực tế: khi đến giờ, tự động gọi `InvoiceController.downloadInvoices()`
-3. Khởi động lại tất cả active jobs khi server start
+- Mỗi lần cron chạy, tự động tính date range phù hợp với chu kỳ
+- Người dùng custom cron có thể chọn số ngày trong quá khứ để tải
+- Không cần người dùng sửa lại date range sau này (dùng relative days)
 
 ---
 
 ## Các bước thực hiện
 
-### Bước 1: Cài `node-cron` và types
+### Bước 1: Thêm column vào Prisma schema
 
-```bash
-cd backend
-npm install node-cron
-npm install -D @types/node-cron
-```
-
-### Bước 2: Tạo `backend/src/services/scheduler.service.ts`
-
-Service quản lý cron jobs runtime:
-
-```ts
-import cron from 'node-cron';
-import prisma from '../utils/db.js';
-import { InvoiceController } from '../controllers/invoice.controller.js';
-
-class SchedulerService {
-  private jobs = new Map<number, cron.ScheduledTask>();
-
-  /** Khởi động tất cả active schedules khi server start */
-  async startAll() {
-    const schedules = await prisma.schedule.findMany({
-      where: { isActive: true },
-      include: { company: true },
-    });
-    for (const s of schedules) {
-      this.startJob(s.id, s.cronExpression, s.company.taxCode, s.invoiceType);
-    }
-    console.log(`[Scheduler] Started ${schedules.length} active schedule(s).`);
-  }
-
-  /** Tạo và chạy 1 cron job */
-  startJob(id: number, cronExpression: string, taxCode: string, invoiceType: string) {
-    if (!cron.validate(cronExpression)) {
-      console.error(`[Scheduler] Invalid cron "${cronExpression}" for schedule #${id}`);
-      return;
-    }
-
-    const job = cron.schedule(cronExpression, async () => {
-      console.log(`[Scheduler] Running schedule #${id} (${taxCode}, ${invoiceType})...`);
-      try {
-        // Tự động tính date range: hôm nay → hôm nay
-        const today = new Date();
-        const dd = String(today.getDate()).padStart(2, '0');
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const yyyy = today.getFullYear();
-        const todayStr = `${dd}/${mm}/${yyyy}`;
-
-        // Gọi download với date range = hôm nay
-        // Dùng companyId và token từ DB
-        await InvoiceController.downloadInvoices(
-          { body: { startDate: todayStr, endDate: todayStr, invoiceType, companyId: id } } as any,
-          { json: () => {}, status: () => ({ json: () => {} }) } as any
-        );
-
-        await prisma.schedule.update({
-          where: { id },
-          data: { lastRun: new Date() },
-        });
-      } catch (err: any) {
-        console.error(`[Scheduler] Schedule #${id} failed:`, err.message);
-      }
-    });
-
-    this.jobs.set(id, job);
-    console.log(`[Scheduler] Job #${id} started: ${cronExpression}`);
-  }
-
-  /** Dừng 1 job */
-  stopJob(id: number) {
-    const job = this.jobs.get(id);
-    if (job) {
-      job.stop();
-      this.jobs.delete(id);
-    }
-  }
-
-  /** Dừng tất cả jobs (dùng khi shutdown) */
-  stopAll() {
-    for (const [id, job] of this.jobs) {
-      job.stop();
-    }
-    this.jobs.clear();
-  }
-}
-
-export const schedulerService = new SchedulerService();
-```
-
-### Bước 3: Tạo `backend/src/controllers/schedule.controller.ts`
-
-Logic CRUD cơ bản, tích hợp với schedulerService:
-
-```ts
-import { Request, Response } from 'express';
-import prisma from '../utils/db.js';
-import { schedulerService } from '../services/scheduler.service.js';
-import { AuthRequest } from '../middleware/auth.middleware.js';
-
-export class ScheduleController {
-  // GET /api/schedules
-  static async list(_req: AuthRequest, res: Response) {
-    const schedules = await prisma.schedule.findMany({
-      include: { company: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    res.json(schedules);
-  }
-
-  // POST /api/schedules
-  static async create(req: AuthRequest, res: Response) {
-    const { companyId, cronExpression, invoiceType } = req.body;
-    if (!companyId || !cronExpression || !invoiceType) {
-      return res.status(400).json({ error: 'Thiếu thông tin bắt buộc.' });
-    }
-    const schedule = await prisma.schedule.create({
-      data: { companyId, cronExpression, invoiceType, isActive: true },
-      include: { company: true },
-    });
-    // Start job immediately
-    schedulerService.startJob(schedule.id, cronExpression, schedule.company.taxCode, invoiceType);
-    res.status(201).json(schedule);
-  }
-
-  // PATCH /api/schedules/:id — toggle isActive
-  static async toggle(req: AuthRequest, res: Response) {
-    const id = Number(req.params.id);
-    const schedule = await prisma.schedule.findUnique({ where: { id }, include: { company: true } });
-    if (!schedule) return res.status(404).json({ error: 'Không tìm thấy lịch.' });
-
-    const updated = await prisma.schedule.update({
-      where: { id },
-      data: { isActive: !schedule.isActive },
-      include: { company: true },
-    });
-
-    if (updated.isActive) {
-      schedulerService.startJob(id, updated.cronExpression, schedule.company.taxCode, updated.invoiceType);
-    } else {
-      schedulerService.stopJob(id);
-    }
-    res.json(updated);
-  }
-
-  // DELETE /api/schedules/:id
-  static async remove(req: AuthRequest, res: Response) {
-    const id = Number(req.params.id);
-    schedulerService.stopJob(id);
-    await prisma.schedule.delete({ where: { id } });
-    res.json({ success: true });
-  }
+```prisma
+model Schedule {
+  // ... existing fields ...
+  cronExpression String    // e.g., "0 9 * * *"
+  repeatMode     String    @default("weekly") // "weekly" | "monthly" | "quarterly" | "custom"
+  dateRangeDays  Int?      // Số ngày tải ngược (null = auto từ repeatMode)
+  invoiceType    String    // "BUY" or "SELL" or "BOTH"
+  isActive       Boolean   @default(true)
+  lastRun        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 ```
 
-### Bước 4: Tạo `backend/src/routes/schedule.routes.ts`
+Chạy migration: `npx prisma migrate dev --name add_schedule_date_range`
 
+### Bước 2: Cập nhật frontend `SchedulePanel.tsx`
+
+**State mới:**
 ```ts
-import { Router } from 'express';
-import { ScheduleController } from '../controllers/schedule.controller.js';
-import { authenticate } from '../middleware/auth.middleware.js';
-
-const router = Router();
-router.get('/', authenticate, ScheduleController.list);
-router.post('/', authenticate, ScheduleController.create);
-router.patch('/:id', authenticate, ScheduleController.toggle);
-router.delete('/:id', authenticate, ScheduleController.remove);
-export default router;
+const [dateRangeDays, setDateRangeDays] = useState(7);
+const [showDateRange, setShowDateRange] = useState(false); // toggle hiển thị
 ```
 
-### Bước 5: Đăng ký route trong `server.ts`
-
+**Gửi kèm khi tạo schedule:**
 ```ts
-import scheduleRoutes from './routes/schedule.routes.js';
-// ...
-app.use('/api/schedules', scheduleRoutes);
-```
-
-Và khởi động scheduler sau khi server start:
-
-```ts
-import { schedulerService } from './services/scheduler.service.js';
-// ...
-findFreePort(Number(PORT)).then(async (freePort) => {
-  await AuthController.seedInitialAdmin();
-  await schedulerService.startAll(); // <-- thêm dòng này
-
-  app.listen(freePort, () => { ... });
+await axios.post(`${API_BASE_URL}/api/schedules`, {
+  companyId: Number(selectedCompanyId),
+  cronExpression,
+  invoiceType,
+  repeatMode,
+  dateRangeDays: showDateRange ? dateRangeDays : null,
 });
 ```
 
-### Bước 6: Cập nhật frontend SchedulePanel — thêm preset "Hàng quý"
-
-Thêm nút thứ 5 vào preset:
+**UI mới cho phần custom:**
+Sau custom cron input, thêm 1 dòng toggle + input:
 
 ```tsx
-{ value: 'quarterly' as const, label: 'Hàng quý' },
+{/* Date range selector for custom mode */}
+{repeatMode === 'custom' && (
+  <div className="space-y-2">
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={showDateRange}
+        onChange={(e) => setShowDateRange(e.target.checked)}
+        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-500 focus:ring-indigo-500"
+      />
+      <span className="text-xs text-slate-400">Giới hạn thời gian tải</span>
+    </label>
+    {showDateRange && (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-slate-400">Tải dữ liệu trong</span>
+        <input
+          type="number" min={1} max={365}
+          value={dateRangeDays}
+          onChange={(e) => setDateRangeDays(Number(e.target.value))}
+          className="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        <span className="text-xs text-slate-500">ngày qua</span>
+      </div>
+    )}
+  </div>
+)}
 ```
 
-Và cập nhật cron expression:
+### Bước 3: Cập nhật `backend/src/services/scheduler.service.ts`
+
+**Hàm tính date range theo schedule:**
 
 ```ts
-const cronExpression = repeatMode === 'custom'
-  ? customCron
-  : repeatMode === 'quarterly'
-    ? `${scheduleMinute} ${scheduleHour} 1 1,4,7,10 *`
-    : `${scheduleMinute} ${scheduleHour} * * ${repeatMode === 'weekly' ? '1' : repeatMode === 'monthly' ? '1' : '*'}`;
+function getDateRange(schedule: any): { startDate: string; endDate: string } {
+  const now = new Date();
+  const format = (d: Date) => {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  const today = format(now);
+  const yesterday = (() => {
+    const d = new Date(now); d.setDate(d.getDate() - 1); return format(d);
+  })();
+
+  // Nếu có dateRangeDays → dùng nó
+  if (schedule.dateRangeDays) {
+    const start = new Date(now);
+    start.setDate(start.getDate() - schedule.dateRangeDays);
+    return { startDate: format(start), endDate: today };
+  }
+
+  // Auto-detect từ repeatMode
+  switch (schedule.repeatMode) {
+    case 'weekly': {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return { startDate: format(weekAgo), endDate: yesterday };
+    }
+    case 'monthly': {
+      const firstOfLast = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastOfLast = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { startDate: format(firstOfLast), endDate: format(lastOfLast) };
+    }
+    case 'quarterly': {
+      const threeMonthsAgo = new Date(now);
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      return { startDate: format(threeMonthsAgo), endDate: yesterday };
+    }
+    default:
+      return { startDate: today, endDate: today };
+  }
+}
+```
+
+**Dùng trong `startJob()`:**
+```ts
+const { startDate, endDate } = getDateRange({ repeatMode, dateRangeDays, ... });
+
+// Gọi downloadInvoices với date range tính được
+const mockReq = {
+  body: { startDate, endDate, invoiceType, companyId },
+  user: { id: null, username: 'scheduler', role: 'ADMIN' },
+};
+```
+
+### Bước 4: Cập nhật controller và route
+
+- `schedule.controller.ts`: nhận thêm `repeatMode` và `dateRangeDays` khi create
+- Route không cần thay đổi (POST body thêm field)
+
+### Bước 5: Migration
+
+```bash
+cd backend
+npx prisma migrate dev --name add_schedule_date_range
 ```
 
 ---
@@ -231,9 +161,24 @@ const cronExpression = repeatMode === 'custom'
 
 | File | Hành động |
 |---|---|
-| `backend/package.json` | Thêm `node-cron`, `@types/node-cron` |
-| `backend/src/services/scheduler.service.ts` | **Tạo mới** — quản lý cron jobs runtime |
-| `backend/src/controllers/schedule.controller.ts` | **Tạo mới** — CRUD REST endpoints |
-| `backend/src/routes/schedule.routes.ts` | **Tạo mới** — định nghĩa routes |
-| `backend/src/server.ts` | Đăng ký route + gọi `schedulerService.startAll()` |
-| `frontend/src/components/SchedulePanel.tsx` | Thêm preset "Hàng quý" |
+| `backend/prisma/schema.prisma` | Thêm `repeatMode` (String) và `dateRangeDays` (Int?) |
+| DB migration | `add_schedule_date_range` |
+| `frontend/src/components/SchedulePanel.tsx` | Thêm checkbox + input `dateRangeDays` cho custom mode |
+| `backend/src/services/scheduler.service.ts` | Thêm hàm `getDateRange()`, dùng khi gọi download |
+| `backend/src/controllers/schedule.controller.ts` | Nhận thêm `repeatMode`, `dateRangeDays` từ body |
+
+## Luồng mới
+
+```
+Cron chạy → scheduler.startJob
+  → getDateRange(schedule) → { startDate, endDate }
+    → InvoiceController.downloadInvoices(startDate, endDate)
+```
+
+| repeatMode | dateRangeDays | Kết quả |
+|---|---|---|
+| `weekly` | `null` | 7 ngày qua → hôm qua |
+| `monthly` | `null` | Đầu tháng trước → cuối tháng trước |
+| `quarterly` | `null` | 3 tháng qua → hôm qua |
+| `custom` | `30` | 30 ngày qua → hôm nay |
+| `custom` | `null` | Hôm nay |
