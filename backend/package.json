@@ -19,9 +19,7 @@
       "prisma/dev.db",
       "prisma/migrations/**/*",
       "../frontend/dist/**/*",
-      "node_modules/.prisma/client/*.js",
-      "node_modules/.prisma/client/package.json",
-      "node_modules/.prisma/client/schema.prisma"
+      "../node_modules/.prisma/client/**/*"
     ],
     "targets": [
       "node18-linux-x64",

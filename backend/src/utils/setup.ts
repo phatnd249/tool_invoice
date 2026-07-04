@@ -148,21 +148,32 @@ export function initializeEnvironment(): { dbPath: string; invoicesDir: string }
   process.env.DATABASE_URL = `file:${dbPath.replace(/\\/g, '/')}`;
   process.env.INVOICES_DIR = invoicesDir;
 
-  // Resolve PRISMA_QUERY_ENGINE_LIBRARY dynamically on physical disk next to executable when packaged
+  // When packaged with pkg, Prisma client (including engine .so.node) is bundled
+  // inside /snapshot/ but native addons cannot load from there.
+  // In that case, pkg extracts them to a temporary directory next to the executable.
+  // We set PRISMA_QUERY_ENGINE_LIBRARY to point there.
   if (typeof (process as any).pkg !== 'undefined') {
-    const execDir = path.dirname(process.execPath);
-    const clientDir = path.join(execDir, 'node_modules/.prisma/client');
-    if (fs.existsSync(clientDir)) {
-      try {
-        const files = fs.readdirSync(clientDir);
-        const engineFile = files.find(f => (f.startsWith('libquery_engine-') || f.startsWith('query_engine-')) && f.endsWith('.node'));
-        if (engineFile) {
-          const enginePath = path.join(clientDir, engineFile);
-          process.env.PRISMA_QUERY_ENGINE_LIBRARY = enginePath;
-          console.log(`[Setup] Set PRISMA_QUERY_ENGINE_LIBRARY dynamically to: ${enginePath}`);
+    // pkg extracts native addons to process.cwd() or next to execPath
+    // Try multiple locations
+    const possibleClientDirs = [
+      path.join(path.dirname(process.execPath), 'node_modules/.prisma/client'),
+      path.join(process.cwd(), 'node_modules/.prisma/client'),
+    ];
+
+    for (const clientDir of possibleClientDirs) {
+      if (fs.existsSync(clientDir)) {
+        try {
+          const files = fs.readdirSync(clientDir);
+          const engineFile = files.find(f => (f.startsWith('libquery_engine-') || f.startsWith('query_engine-')) && f.endsWith('.node'));
+          if (engineFile) {
+            const enginePath = path.join(clientDir, engineFile);
+            process.env.PRISMA_QUERY_ENGINE_LIBRARY = enginePath;
+            console.log(`[Setup] Set PRISMA_QUERY_ENGINE_LIBRARY dynamically to: ${enginePath}`);
+            break;
+          }
+        } catch (err) {
+          console.error('[Setup] Failed to scan native Prisma client folder:', err);
         }
-      } catch (err) {
-        console.error('[Setup] Failed to scan native Prisma client folder:', err);
       }
     }
   }

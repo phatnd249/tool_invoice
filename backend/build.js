@@ -54,9 +54,12 @@ async function runBuild() {
 }
 
 function prunePrismaEngines() {
-  const enginesDir = path.join(__dirname, 'node_modules/@prisma/engines');
+  // Prisma engines are now in root node_modules due to monorepo workspaces.
+  // Resolve path from root, not from backend/.
+  const rootDir = path.resolve(__dirname, '..');
+  const enginesDir = path.join(rootDir, 'node_modules/@prisma/engines');
   if (!fs.existsSync(enginesDir)) {
-    console.log('[Backend Build] @prisma/engines directory not found, skipping engine pruning.');
+    console.log('[Backend Build] @prisma/engines directory not found at root, skipping engine pruning.');
     return;
   }
 
@@ -64,14 +67,14 @@ function prunePrismaEngines() {
   try {
     const files = fs.readdirSync(enginesDir);
     let prunedCount = 0;
-    
+
     for (const file of files) {
-      // Keep migration-engine for auto-migrate on startup; remove only schema-engine & introspection-engine
-      const isUnusedEngine = 
-        file.startsWith('schema-engine') || 
-        file.startsWith('introspection-engine') || 
-        file.startsWith('query-engine') && !file.includes('debian') && !file.includes('windows') && !file.includes('library'); // keep windows & debian & library node engines
-        
+      // Keep all query engines for cross-platform compatibility.
+      // Remove only schema-engine & introspection-engine (not needed at runtime).
+      const isUnusedEngine =
+        file.startsWith('schema-engine') ||
+        file.startsWith('introspection-engine');
+
       if (isUnusedEngine) {
         const filePath = path.join(enginesDir, file);
         fs.unlinkSync(filePath);
