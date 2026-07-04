@@ -12,20 +12,14 @@ export function delay(ms: number): Promise<void> {
 }
 
 /**
- * Check if an error is retryable (rate limit, server overload, network issues).
+ * Check if an error is retryable.
+ * Only retry on HTTP 429 (Too Many Requests) from GDT rate limiting.
  */
 export function isRetryableError(error: any): boolean {
   const status = error?.response?.status;
-  const code = error?.code;
 
-  // HTTP 429 Too Many Requests — rate limited
+  // HTTP 429 Too Many Requests — rate limited, worth retrying after delay
   if (status === 429) return true;
-
-  // HTTP 500/502/503/504 — server-side issues, worth retrying
-  if (status === 500 || status === 502 || status === 503 || status === 504) return true;
-
-  // Network-level errors
-  if (code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ECONNREFUSED') return true;
 
   return false;
 }
