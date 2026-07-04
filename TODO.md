@@ -1,60 +1,121 @@
-# Sửa lỗi redirect về login khi Gemini giải captcha sai 3 lần
+# Thêm chức năng Search & Filter trong Quản Lý Doanh Nghiệp
 
-## Vấn đề
+## Hiện trạng
 
-Khi thêm doanh nghiệp mới với chế độ AUTO (Gemini), nếu Gemini giải captcha sai 3 lần liên tiếp, backend `auth.service.ts` throw exception. Controller `company.controller.ts` bắt lỗi và trả về:
+Trang `CompanyManager.tsx` hiển thị toàn bộ danh sách doanh nghiệp, không có cách lọc/tìm kiếm. Khi có nhiều doanh nghiệp (>20), khó tìm được doanh nghiệp cụ thể.
+
+## Mục tiêu
+
+Thêm thanh search + filter ngay trên bảng danh sách để:
+- **Tìm kiếm**: theo mã số thuế hoặc tên doanh nghiệp (text input)
+- **Lọc**: theo chế độ đăng nhập (Tự động / Thủ công / Tất cả) và trạng thái token (Còn hạn / Hết hạn / Tất cả)
+- Tất cả xử lý **phía frontend** (không cần API mới), vì danh sách companies đã được fetch toàn bộ
+
+## Các bước thực hiện
+
+### Bước 1: Thêm state filter trong `CompanyManager.tsx`
 
 ```ts
-res.status(401).json({ error: 'Xác thực tài khoản với Tổng cục Thuế thất bại.', ... });
+// Search & Filter State
+const [searchText, setSearchText] = useState('');
+const [filterLoginMode, setFilterLoginMode] = useState<'ALL' | 'AUTO' | 'MANUAL'>('ALL');
+const [filterTokenStatus, setFilterTokenStatus] = useState<'ALL' | 'VALID' | 'EXPIRED'>('ALL');
 ```
 
-Frontend `App.tsx` có **axios interceptor** bắt `status === 401`:
+### Bước 2: Tạo hàm filter (computed, không phải async)
 
 ```ts
-if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-  handleLogout(errMsg);  // → redirect về login!
-}
+const filteredCompanies = useMemo(() => {
+  return companies.filter(c => {
+    // Search by tax code or name (case-insensitive)
+    const keyword = searchText.toLowerCase().trim();
+    if (keyword) {
+      const matchesTaxCode = c.taxCode.toLowerCase().includes(keyword);
+      const matchesName = c.name.toLowerCase().includes(keyword);
+      if (!matchesTaxCode && !matchesName) return false;
+    }
+
+    // Filter by login mode
+    if (filterLoginMode !== 'ALL' && c.loginMode !== filterLoginMode) return false;
+
+    // Filter by token status
+    if (filterTokenStatus === 'VALID') {
+      if (!c.tokenExpiredAt || new Date(c.tokenExpiredAt) < new Date()) return false;
+    } else if (filterTokenStatus === 'EXPIRED') {
+      if (c.tokenExpiredAt && new Date(c.tokenExpiredAt) >= new Date()) return false;
+    }
+
+    return true;
+  });
+}, [companies, searchText, filterLoginMode, filterTokenStatus]);
 ```
 
-→ HTTP 401 bị hiểu nhầm là "phiên hết hạn" thay vì "GDT từ chối captcha".
+### Bước 3: Thêm UI filter bar giữa title và bảng
 
-## Giải pháp
+Thay thế dòng `Danh Sách Doanh Nghiệp Đăng Ký ({companies.length})` bằng phần header mới có chứa search + filter:
 
-### Bước 1: Sửa backend `company.controller.ts` — đổi HTTP status
+```tsx
+<div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+  <h2 className="text-lg font-semibold text-indigo-400 flex items-center">
+    <Building2 className="w-5 h-5 mr-2" /> 
+    Danh Sách Doanh Nghiệp ({filteredCompanies.length}/{companies.length})
+  </h2>
+  <button onClick={() => setIsAddModalOpen(true)} ...>
+    <Plus /> <span>Thêm Doanh Nghiệp</span>
+  </button>
+</div>
 
-Khi lỗi xác thực với GDT (captcha sai), trả về **HTTP 400** (Bad Request) thay vì 401 (Unauthorized). 401 chỉ nên dùng cho lỗi token JWT của chính ứng dụng, không phải lỗi với bên thứ 3.
+{/* Search & Filter Bar */}
+<div className="flex flex-wrap items-center gap-3 mb-4">
+  {/* Search input */}
+  <div className="relative flex-1 min-w-[200px]">
+    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+    <input
+      type="text"
+      value={searchText}
+      onChange={(e) => setSearchText(e.target.value)}
+      placeholder="Tìm theo MST hoặc tên..."
+      className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+    />
+  </div>
 
-```ts
-// Hiện tại
-res.status(401).json({ error: 'Xác thực tài khoản với Tổng cục Thuế thất bại.', details: error.message });
+  {/* Login mode filter */}
+  <select
+    value={filterLoginMode}
+    onChange={(e) => setFilterLoginMode(e.target.value as any)}
+    className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+  >
+    <option value="ALL">Tất cả chế độ</option>
+    <option value="AUTO">Tự động</option>
+    <option value="MANUAL">Thủ công</option>
+  </select>
 
-// Sửa thành
-res.status(400).json({ error: 'Xác thực tài khoản với Tổng cục Thuế thất bại.', details: error.message });
+  {/* Token status filter */}
+  <select
+    value={filterTokenStatus}
+    onChange={(e) => setFilterTokenStatus(e.target.value as any)}
+    className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+  >
+    <option value="ALL">Tất cả token</option>
+    <option value="VALID">Còn hiệu lực</option>
+    <option value="EXPIRED">Hết hiệu lực</option>
+  </select>
+</div>
 ```
 
-Kiểm tra toàn bộ file — tất cả `res.status(401)` mà liên quan đến lỗi GDT (không phải lỗi token JWT) đều đổi thành 400.
+### Bước 4: Thay `companies.map(...)` → `filteredCompanies.map(...)`
 
-### Bước 2: Sửa frontend axios interceptor — chỉ logout khi thực sự hết hạn
+Trong phần render bảng, đổi `companies.map(...)` thành `filteredCompanies.map(...)` và thêm thông báo nếu filter trả về 0 kết quả:
 
-Trong `App.tsx`, thêm phân biệt:
-
-```ts
-if (error.response) {
-  const status = error.response.status;
-  // Chỉ logout nếu là lỗi token JWT (401/403 từ backend auth middleware)
-  // Các 401 do bên thứ 3 không nên trigger logout
-  const errorMsg = error.response.data?.error || '';
-  const isAuthError = 
-    (status === 401 || status === 403) &&
-    (errorMsg.includes('Yêu cầu xác thực') || 
-     errorMsg.includes('không có quyền') ||
-     errorMsg.includes('hết hạn') ||
-     errorMsg.includes('Phiên'));
-  
-  if (isAuthError) {
-    handleLogout(errorMsg);
-  }
-}
+```tsx
+) : filteredCompanies.length === 0 ? (
+  <tr>
+    <td colSpan={7} className="p-8 text-center text-slate-500">
+      {companies.length > 0 ? 'Không tìm thấy doanh nghiệp phù hợp.' : 'Chưa có doanh nghiệp nào được lưu cấu hình.'}
+    </td>
+  </tr>
+) : (
+  filteredCompanies.map((c) => { ...
 ```
 
 ---
@@ -63,5 +124,10 @@ if (error.response) {
 
 | File | Hành động |
 |---|---|
-| `backend/src/controllers/company.controller.ts` | Đổi mã lỗi GDT từ 401 → 400 (dòng 111, 173, 285) |
-| `frontend/src/App.tsx` | Thêm logic phân biệt lỗi auth thật và lỗi third-party |
+| `frontend/src/components/CompanyManager.tsx` | Thêm `useMemo`, state filter, UI search + dropdown, đổi render sang `filteredCompanies` |
+
+## Chi tiết kỹ thuật
+
+- Dùng `useMemo` để filter chỉ chạy lại khi `companies`, `searchText`, hoặc filter thay đổi
+- Import thêm `Search` icon từ `lucide-react`
+- Giữ nguyên toàn bộ logic modal Add/Edit/Relogin

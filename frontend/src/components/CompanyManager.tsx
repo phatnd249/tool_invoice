@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { 
   Building2, 
@@ -11,7 +11,8 @@ import {
   EyeOff, 
   AlertCircle, 
   CheckCircle2, 
-  X
+  X,
+  Search
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
@@ -66,6 +67,11 @@ export default function CompanyManager() {
   const [reloginCaptchaLoading, setReloginCaptchaLoading] = useState(false);
   const [reloginLoading, setReloginLoading] = useState(false);
   const [reloginError, setReloginError] = useState('');
+
+  // Search & Filter State
+  const [searchText, setSearchText] = useState('');
+  const [filterLoginMode, setFilterLoginMode] = useState<'ALL' | 'AUTO' | 'MANUAL'>('ALL');
+  const [filterTokenStatus, setFilterTokenStatus] = useState<'ALL' | 'VALID' | 'EXPIRED'>('ALL');
 
   // Fetch Companies
   const fetchCompanies = async () => {
@@ -123,6 +129,32 @@ export default function CompanyManager() {
       fetchNewCaptcha();
     }
   }, [newLoginMode]);
+
+  // Filtered companies (client-side search & filter)
+  const filteredCompanies = useMemo(() => {
+    return companies.filter(c => {
+      // Search by tax code or name (case-insensitive)
+      const keyword = searchText.toLowerCase().trim();
+      if (keyword) {
+        const matchesTaxCode = c.taxCode.toLowerCase().includes(keyword);
+        const matchesName = c.name.toLowerCase().includes(keyword);
+        if (!matchesTaxCode && !matchesName) return false;
+      }
+
+      // Filter by login mode
+      if (filterLoginMode !== 'ALL' && c.loginMode !== filterLoginMode) return false;
+
+      // Filter by token status
+      if (filterTokenStatus === 'VALID') {
+        if (!c.tokenExpiredAt || new Date(c.tokenExpiredAt) < new Date()) return false;
+      } else if (filterTokenStatus === 'EXPIRED') {
+        if (!c.tokenExpiredAt) return false;
+        if (new Date(c.tokenExpiredAt) >= new Date()) return false;
+      }
+
+      return true;
+    });
+  }, [companies, searchText, filterLoginMode, filterTokenStatus]);
 
   // Add Company
   const handleAddCompany = async (e: React.FormEvent) => {
@@ -267,9 +299,10 @@ export default function CompanyManager() {
     <div className="space-y-8">
       {/* Companies Table List (Full Width) */}
       <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <h2 className="text-lg font-semibold text-indigo-400 flex items-center">
-            <Building2 className="w-5 h-5 mr-2" /> Danh Sách Doanh Nghiệp Đăng Ký ({companies.length})
+            <Building2 className="w-5 h-5 mr-2" />
+            Danh Sách ({filteredCompanies.length}/{companies.length})
           </h2>
           <button
             onClick={() => {
@@ -286,7 +319,39 @@ export default function CompanyManager() {
             <span>Thêm Doanh Nghiệp</span>
           </button>
         </div>
-        
+
+        {/* Search & Filter Bar */}
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Tìm theo MST hoặc tên..."
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+          <select
+            value={filterLoginMode}
+            onChange={(e) => setFilterLoginMode(e.target.value as any)}
+            className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+          >
+            <option value="ALL">Tất cả chế độ</option>
+            <option value="AUTO">Tự động</option>
+            <option value="MANUAL">Thủ công</option>
+          </select>
+          <select
+            value={filterTokenStatus}
+            onChange={(e) => setFilterTokenStatus(e.target.value as any)}
+            className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+          >
+            <option value="ALL">Tất cả token</option>
+            <option value="VALID">Còn hiệu lực</option>
+            <option value="EXPIRED">Hết hiệu lực</option>
+          </select>
+        </div>
+
         <div className="flex-1 overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-slate-900/60 border-b border-slate-800 text-slate-400 font-semibold uppercase text-xxs tracking-wider">
@@ -313,8 +378,14 @@ export default function CompanyManager() {
                       Chưa có doanh nghiệp nào được lưu cấu hình.
                     </td>
                   </tr>
+                ) : filteredCompanies.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-500">
+                      Không tìm thấy doanh nghiệp phù hợp với bộ lọc.
+                    </td>
+                  </tr>
                 ) : (
-                  companies.map((c) => {
+                  filteredCompanies.map((c) => {
                     const tokenStatus = getTokenStatus(c.tokenExpiredAt);
                     const cDate = new Date(c.createdAt).toLocaleDateString('vi-VN', {
                       day: '2-digit',
