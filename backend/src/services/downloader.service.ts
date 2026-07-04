@@ -84,8 +84,22 @@ export class DownloaderService {
     
     try {
       console.log(`[DownloaderService] Querying count from ${startStr} to ${endStr}...`);
-      const response = await axios.get(urlCount, { headers, timeout: 20000 });
-      
+      const response = await axios.get(urlCount, {
+        headers,
+        timeout: 20000,
+        validateStatus: () => true,
+      });
+
+      if (response.status !== 200) {
+        const responseBody = typeof response.data === 'string'
+          ? response.data.slice(0, 2000)
+          : JSON.stringify(response.data).slice(0, 2000);
+        console.error(`[DownloaderService] GDT query count responded with status ${response.status}`);
+        console.error(`  URL: ${urlCount}`);
+        console.error(`  Response body: ${responseBody}`);
+        throw new Error(`GDT query failed with status ${response.status}`);
+      }
+
       if (response.status === 401) {
         throw new Error('Unauthorized GDT Token (401)');
       }
@@ -96,11 +110,35 @@ export class DownloaderService {
 
       // Step 2: Query again to retrieve all details
       const urlAll = `${baseUrl}?sort=tdlap:desc&size=${total}&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
-      const responseAll = await axios.get(urlAll, { headers, timeout: 30000 });
-      
+      const responseAll = await axios.get(urlAll, {
+        headers,
+        timeout: 30000,
+        validateStatus: () => true,
+      });
+
+      if (responseAll.status !== 200) {
+        const responseBody = typeof responseAll.data === 'string'
+          ? responseAll.data.slice(0, 2000)
+          : JSON.stringify(responseAll.data).slice(0, 2000);
+        console.error(`[DownloaderService] GDT query all responded with status ${responseAll.status}`);
+        console.error(`  URL: ${urlAll}`);
+        console.error(`  Response body: ${responseBody}`);
+        throw new Error(`GDT query all failed with status ${responseAll.status}`);
+      }
+
       return responseAll.data?.datas || [];
     } catch (error: any) {
-      console.error('[DownloaderService] Error querying GDT invoices:', error.message);
+      if (error.response) {
+        const responseBody = error.response.data
+          ? (typeof error.response.data === 'string'
+              ? error.response.data.slice(0, 2000)
+              : JSON.stringify(error.response.data).slice(0, 2000))
+          : '(empty)';
+        console.error(`[DownloaderService] GDT query error: status ${error.response.status}`);
+        console.error(`  Response body: ${responseBody}`);
+      } else {
+        console.error('[DownloaderService] Error querying GDT invoices:', error.message);
+      }
       throw error;
     }
   }
@@ -146,15 +184,35 @@ export class DownloaderService {
         headers,
         responseType: 'arraybuffer',
         timeout: 20000,
+        // Do not throw on non-200 so we can inspect the response body
+        validateStatus: () => true,
       });
 
       if (response.status === 200) {
         fs.writeFileSync(zipPath, response.data);
         return zipPath;
       }
+
+      // Log non-200 response from GDT
+      const responseBody = response.data ? Buffer.from(response.data).toString('utf-8').slice(0, 2000) : '(empty)';
+      console.error(`[DownloaderService] GDT responded with status ${response.status} for invoice ${shdon}`);
+      console.error(`  URL: ${exportUrl}`);
+      console.error(`  Response body: ${responseBody}`);
       return null;
     } catch (error: any) {
-      console.error(`[DownloaderService] Failed to download ZIP for invoice ${shdon}: ${error.message}`);
+      if (error.response) {
+        // Axios error with response from GDT
+        const responseBody = error.response.data
+          ? (typeof error.response.data === 'string'
+              ? error.response.data.slice(0, 2000)
+              : JSON.stringify(error.response.data).slice(0, 2000))
+          : '(empty)';
+        console.error(`[DownloaderService] GDT error for invoice ${shdon}: status ${error.response.status}`);
+        console.error(`  URL: ${exportUrl}`);
+        console.error(`  Response body: ${responseBody}`);
+      } else {
+        console.error(`[DownloaderService] Failed to download ZIP for invoice ${shdon}: ${error.message}`);
+      }
       return null;
     }
   }
@@ -208,6 +266,8 @@ export class DownloaderService {
         headers,
         responseType: 'arraybuffer',
         timeout: 30000,
+        // Do not throw on non-200 so we can inspect the response body
+        validateStatus: () => true,
       });
 
       if (response.status === 200) {
@@ -215,9 +275,27 @@ export class DownloaderService {
         console.log(`[DownloaderService] Downloaded Excel report: ${filePath}`);
         return filePath;
       }
+
+      // Log non-200 response from GDT
+      const responseBody = response.data ? Buffer.from(response.data).toString('utf-8').slice(0, 2000) : '(empty)';
+      console.error(`[DownloaderService] GDT responded with status ${response.status} for Excel report`);
+      console.error(`  URL: ${url}`);
+      console.error(`  Response body: ${responseBody}`);
       return null;
     } catch (error: any) {
-      console.error(`[DownloaderService] Failed to download Excel report: ${error.message}`);
+      if (error.response) {
+        // Axios error with response from GDT
+        const responseBody = error.response.data
+          ? (typeof error.response.data === 'string'
+              ? error.response.data.slice(0, 2000)
+              : JSON.stringify(error.response.data).slice(0, 2000))
+          : '(empty)';
+        console.error(`[DownloaderService] GDT error for Excel report: status ${error.response.status}`);
+        console.error(`  URL: ${url}`);
+        console.error(`  Response body: ${responseBody}`);
+      } else {
+        console.error(`[DownloaderService] Failed to download Excel report: ${error.message}`);
+      }
       return null;
     }
   }
