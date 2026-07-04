@@ -37,3 +37,6 @@ Thumbs.db
 # Invoices download directory (local temporary files)
 backend/invoices/
 invoices/
+
+# Frontend build copied to backend/public/ during production build
+backend/public/

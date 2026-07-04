@@ -10,23 +10,9 @@
     "start": "node dist/server.cjs",
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:studio": "prisma studio",
-    "pkg": "pkg ."
+    "production": "NODE_ENV=production node dist/server.cjs"
   },
   "bin": "dist/server.cjs",
-  "pkg": {
-    "assets": [
-      "prisma/schema.prisma",
-      "prisma/dev.db",
-      "prisma/migrations/**/*",
-      "../frontend/dist/**/*",
-      "../node_modules/.prisma/client/**/*"
-    ],
-    "targets": [
-      "node18-linux-x64",
-      "node18-win-x64"
-    ],
-    "outputPath": "../dist-executable"
-  },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^5.15.0",
@@ -51,7 +37,6 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.14.2",
     "esbuild": "^0.28.1",
-    "pkg": "^5.8.1",
     "prisma": "^5.15.0",
     "tsx": "^4.15.1",
     "typescript": "^5.4.5"

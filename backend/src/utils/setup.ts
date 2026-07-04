@@ -11,6 +11,12 @@ try {
   _dirname = path.dirname(fileURLToPath(import.meta.url));
 }
 
+/** Resolve path to prisma/schema.prisma relative to backend root */
+function getPrismaSchemaPath(): string {
+  const backendRoot = path.resolve(_dirname, '..');
+  return path.join(backendRoot, 'prisma', 'schema.prisma');
+}
+
 // Helper to check if port is in use
 function checkPort(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -49,9 +55,10 @@ export function ensureDatabaseSchema(): void {
   // db push was already called in initializeEnvironment, but calling again
   // is idempotent and harmless. This handles the case where the database
   // already existed but schema was outdated.
+  const schemaPath = getPrismaSchemaPath();
   console.log('[Setup] Verifying database schema...');
   try {
-    execSync('npx prisma db push --skip-generate', {
+    execSync(`npx prisma db push --skip-generate --schema="${schemaPath}"`, {
       env: { ...process.env, DATABASE_URL: dbUrl },
       stdio: 'pipe',
       timeout: 30000,
@@ -70,11 +77,13 @@ export function ensureDatabaseSchema(): void {
  */
 export function initializeEnvironment(): { dbPath: string; invoicesDir: string } {
   // Read DATABASE_URL from .env (already loaded by dotenv.config in server.ts)
-  // If path is relative, resolve it relative to the project root (where .env lives)
+  // If path is relative, resolve it relative to the backend root (where .env lives),
+  // NOT process.cwd() which could be the monorepo root when using npm workspaces.
+  const backendRoot = path.resolve(_dirname, '..');
   let rawPath = (process.env.DATABASE_URL || 'file:./dev.db').replace(/^file:/, '');
   const dbPath = path.isAbsolute(rawPath)
     ? rawPath
-    : path.resolve(process.cwd(), rawPath);
+    : path.resolve(backendRoot, rawPath);
 
   // Directory containing the database file
   const dbDir = path.dirname(dbPath);
@@ -132,8 +141,9 @@ export function initializeEnvironment(): { dbPath: string; invoicesDir: string }
   // If database was just copied from template, it may have an outdated schema.
   // Force db push to ensure all tables exist.
   if (fs.existsSync(dbPath)) {
+    const schemaPath = getPrismaSchemaPath();
     try {
-      execSync('npx prisma db push --skip-generate --accept-data-loss', {
+      execSync(`npx prisma db push --skip-generate --accept-data-loss --schema="${schemaPath}"`, {
         env: { ...process.env, DATABASE_URL: `file:${dbPath.replace(/\\/g, '/')}` },
         stdio: 'pipe',
         timeout: 30000,

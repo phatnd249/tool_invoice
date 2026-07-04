@@ -34,6 +34,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production' || typeof (process as any).pkg !== 'undefined';
 
+// Resolve __dirname for both dev and production
+const serverDir = _dirname;
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
@@ -67,26 +70,37 @@ app.get('/health', async (req: Request, res: Response) => {
 });
 
 // Serve React SPA Frontend static files
-// Note: We traverse relatively based on pkg (/snapshot) or standard build outputs
-const frontendDistPath = typeof (process as any).pkg !== 'undefined'
-  ? path.join(_dirname, '../../frontend/dist')
-  : path.join(_dirname, '../../../frontend/dist');
+// Priority:
+//   1. backend/public/ (production build, copied by npm run build)
+//   2. frontend/dist/ (dev mode, build output)
+//   3. backend/public/ fallback (empty or legacy)
+const publicPath = path.join(serverDir, '../public');
+const frontendDistPath = path.join(serverDir, '../../../frontend/dist');
 
-if (fs.existsSync(frontendDistPath)) {
-  console.log(`[Server] Serving frontend static assets from: ${frontendDistPath}`);
-  app.use(express.static(frontendDistPath));
+let staticPath = null;
 
+if (isProduction && fs.existsSync(publicPath)) {
+  // Production: frontend was copied to backend/public/ during build
+  staticPath = publicPath;
+  console.log(`[Server] Serving frontend from: ${staticPath}`);
+} else if (fs.existsSync(frontendDistPath)) {
+  // Dev mode: frontend built to frontend/dist/
+  staticPath = frontendDistPath;
+  console.log(`[Server] Serving frontend from: ${staticPath}`);
+} else if (fs.existsSync(publicPath)) {
+  // Fallback: backend/public/ (may contain legacy index.html)
+  staticPath = publicPath;
+  console.warn(`[Server] Frontend build not found at ${frontendDistPath}, falling back to public/.`);
+} else {
+  console.warn(`[Server] WARNING: No frontend build found. Running API-only server.`);
+}
+
+if (staticPath) {
+  app.use(express.static(staticPath));
   // Wildcard fallback to serve index.html for SPA routing
   app.get(/^(?!\/api).*$/, (req, res) => {
-    res.sendFile(path.join(frontendDistPath, 'index.html'));
+    res.sendFile(path.join(staticPath, 'index.html'));
   });
-} else {
-  console.warn(`[Server] WARNING: Frontend build path not found at: ${frontendDistPath}. Running API-only server.`);
-  // Fallback to serving public/ directory if it exists
-  const publicPath = path.join(_dirname, '../public');
-  if (fs.existsSync(publicPath)) {
-    app.use(express.static(publicPath));
-  }
 }
 
 // Find a free port and start server

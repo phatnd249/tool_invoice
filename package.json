@@ -10,6 +10,12 @@
     "dev": "concurrently -n be,fe -c cyan,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
+    "build": "npm run build:backend && npm run build:frontend && npm run build:copy-frontend && npm run build:prisma",
+    "build:backend": "npm run build -w backend",
+    "build:frontend": "npm run build -w frontend",
+    "build:copy-frontend": "node scripts/copy-frontend.js",
+    "build:prisma": "cd backend && npx prisma generate",
+    "start": "NODE_ENV=production node backend/dist/server.cjs",
     "build:executable": "node build-executable.js"
   },
   "devDependencies": {
