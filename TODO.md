@@ -1,147 +1,199 @@
-# Kế hoạch triển khai: Xử lý giới hạn 50 hoá đơn/lần request từ GDT
+# Kế hoạch triển khai: Datatable paginate, search, filter cho trang lịch sử
 
 ## 1. Vấn đề
 
-API GDT giới hạn **tối đa 50 hoá đơn** trong một request query (`size <= 50`). Hiện tại code gọi:
+Khi số hoá đơn tải về tăng lên, trang lịch sử (cả tab "Hóa Đơn Đã Lưu" và "Nhật Ký Tải Hệ Thống") hiển thị **tất cả records cùng lúc**. Điều này gây khó khăn cho người dùng khi:
+- Phải scroll quá nhiều
+- Không có phân trang để điều hướng
+- Search/filter hiện tại chỉ làm phía client (filter mảng đã tải), không scale được
 
+## 2. Mục tiêu
+
+Thêm datatable với các chức năng:
+- **Server-side pagination** — mỗi lần chỉ tải 1 trang (vd 20 records)
+- **Search** theo từ khoá (gửi lên server)
+- **Filter** theo loại, trạng thái, thời gian
+- **Sort** theo cột
+- Áp dụng cho cả 2 tab: Hóa Đơn Đã Lưu (`/api/invoices`) và Nhật Ký (`/api/invoices/download-history`)
+
+## 3. Phân tích
+
+### 3.1. Backend — Sửa endpoint hiện tại
+
+Hiện tại:
+- `GET /api/invoices` — trả về tất cả, không phân trang
+- `GET /api/invoices/download-history` — trả về tất cả, không phân trang
+
+Cần thêm query parameters:
 ```
-size=531  → GDT trả về HTTP 500: "findInvoiceSold.size: phải nhỏ hơn hoặc bằng 50"
+?page=0&size=20&search=keyword&type=SELL&status=SUCCESS&sortBy=downloadDate&sortDir=desc
 ```
 
-## 2. Nguyên nhân
-
-Trong `DownloaderService.queryInvoicesInRange()`:
-
-```typescript
-// Bước 1: Query với size=1 để đếm tổng số
-const urlCount = `...&size=1&search=...`;  // OK: count chỉ lấy 1 record
-
-// Bước 2: Query với size=total để lấy tất cả records
-const urlAll = `...&size=${total}&search=...`;  // LỖI: khi total > 50
-```
-
-## 3. Phân tích API GDT
-
-Các tham số trên endpoint query:
-- `size` — số lượng records trả về, tối đa **50**
-- `page` — trang hiện tại (mặc định là 0? hay 1?)
-- `sort` — thứ tự sắp xếp
-
-**Cần kiểm tra:**
-- [ ] GDT dùng page bắt đầu từ 0 hay 1?
-- [ ] `page` mặc định là bao nhiêu nếu không truyền?
-- [ ] Response có chứa tổng số trang (`totalPages`) không?
-
-Dựa theo API REST thông thường:
-- Request: `?size=50&page=0&search=...` → trang 0, 50 records
-- Request: `?size=50&page=1&search=...` → trang 1, 50 records
-- Response thường có: `{ "datas": [...], "total": 531, "page": 0, "size": 50 }`
-
-## 4. Giải pháp
-
-### 4.1. Sửa `queryInvoicesInRange()` — Phân trang (pagination)
-
-Thay vì query 1 lần với `size=${total}`, thực hiện nhiều request với `size=50` và `page` tăng dần.
-
-**Logic mới:**
-
-```typescript
-// Bước 1: Đếm tổng số (size=1) — giữ nguyên
-const response = await axios.get(urlCount, ...);
-const total = response.data?.total || 0;
-
-// Bước 2: Lấy tất cả records qua nhiều trang
-const PAGE_SIZE = 50;
-const allRecords: any[] = [];
-
-for (let page = 0; page < Math.ceil(total / PAGE_SIZE); page++) {
-  const url = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&page=${page}&search=...`;
-  const response = await axios.get(url, ...);
-  const records = response.data?.datas || [];
-  allRecords.push(...records);
-  
-  // Delay nhẹ giữa các trang để tránh rate limit
-  if (page < Math.ceil(total / PAGE_SIZE) - 1) {
-    await sleep(500); // 500ms giữa các trang
-  }
+Response format mới (PaginatedResponse):
+```json
+{
+  "data": [...],
+  "page": 0,
+  "size": 20,
+  "total": 531,
+  "totalPages": 27
 }
-
-return allRecords;
 ```
 
-### 4.2. Thêm utility `sleep()`
+### 3.2. Frontend — Sửa component InvoiceHistory
+
+Hiện tại:
+- `fetchInvoices()` / `fetchHistories()` — tải tất cả, không phân trang
+- `filteredInvoices` / `filteredHistories` — filter client-side
+- Không có pagination UI
+
+Cần thêm:
+- State: `currentPage`, `pageSize`, `totalPages`, `total`
+- Gửi `page`, `size`, `search`, `type`, `status` lên server
+- UI: Nút prev/next + "Trang X / Y", dropdown chọn số dòng/trang
+- Giữ nguyên search input hiện tại, nhưng search sẽ gọi lại API (debounce)
+
+## 4. Các file cần sửa
+
+### 4.1. Backend — `invoice.controller.ts`
+
+#### `getInvoices` — thêm pagination
+
+- [ ] Đọc query params: `page`, `size`, `search`, `type`, `sortBy`, `sortDir`
+- [ ] Xây dựng `where` clause cho Prisma:
+  - `search` → tìm theo `invoiceNumber`, `sellerName`, `sellerTaxCode`, `buyerName`, `buyerTaxCode`
+  - `type` → filter theo `SELL`/`BUY`
+  - `startDate`/`endDate` → filter theo ngày
+- [ ] Dùng `prisma.invoice.findMany({ skip, take, where, orderBy })`
+- [ ] Dùng `prisma.invoice.count({ where })` để lấy tổng số
+- [ ] Trả về `{ data, page, size, total, totalPages }`
+
+#### `getDownloadHistory` — thêm pagination
+
+- [ ] Đọc query params: `page`, `size`, `search`, `status`, `sortBy`, `sortDir`
+- [ ] Xây dựng `where` clause:
+  - `search` → tìm theo `taxCode`, `username`
+  - `status` → filter theo `SUCCESS`/`PARTIAL`/`FAILED`
+  - `startDate`/`endDate` → filter theo ngày
+- [ ] Dùng `prisma.downloadHistory.findMany({ skip, take, where, orderBy })`
+- [ ] Dùng `prisma.downloadHistory.count({ where })`
+- [ ] Trả về `{ data, page, size, total, totalPages }`
+
+#### Giữ nguyên backward compatibility
+
+- [ ] Nếu không có `page`/`size` → trả về tất cả (giữ hành vi cũ cho các client cũ)
+
+### 4.2. Frontend — `InvoiceHistory.tsx`
+
+#### State mới
 
 ```typescript
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Pagination state
+const [page, setPage] = useState(0);
+const [size, setSize] = useState(20);
+const [total, setTotal] = useState(0);
+const [totalPages, setTotalPages] = useState(0);
+
+// Search/filter state (thay vì search client-side)
+const [searchText, setSearchText] = useState('');
+const [filterStatus, setFilterStatus] = useState(''); // cho tab logs
+const [sortBy, setSortBy] = useState('downloadDate'); // mặc định
+const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 ```
 
-### 4.3. Xác nhận response structure (cần kiểm tra thực tế)
+#### Sửa `fetchInvoices()` / `fetchHistories()`
 
-Cần kiểm tra response từ GDT có chứa thông tin page không:
-- Nếu response có `page` và `size` → dùng luôn để loop
-- Nếu không có → dùng `total` / `PAGE_SIZE` để tính số trang
-
-**Ưu tiên:** Dùng `page` bắt đầu từ 0, tăng dần cho đến khi hết records hoặc gặp response rỗng.
-
-## 5. Rủi ro và xử lý
-
-| Rủi ro | Giải pháp |
-|--------|-----------|
-| `page` parameter không được GDT hỗ trợ | Thử với page=0, nếu response vẫn trả về tất cả records (ignoring page) thì cần giải pháp khác |
-| Rate limit khi gọi nhiều request | Thêm `sleep(500)` giữa các trang, dùng `withRetry` |
-| Total thay đổi giữa các request (có hoá đơn mới) | Lấy snapshot total từ đầu, ignore các thay đổi trong quá trình query |
-| Một trang bị lỗi → mất dữ liệu | Retry từng trang riêng lẻ, log lỗi và tiếp tục các trang khác |
-
-## 6. Các file cần sửa
-
-### 6.1. `backend/src/services/downloader.service.ts` — Sửa `queryInvoicesInRange()`
-
-- [ ] Thêm `sleep()` helper
-- [ ] Sửa vòng lặp query: dùng `PAGE_SIZE = 50`, loop qua các trang
-- [ ] Giữ nguyên logic log response và xử lý lỗi (đã có từ commit trước)
-- [ ] Thêm log số trang đã query: `"[DownloaderService] Fetching page X/Y..."`
-
-### 6.2. `backend/src/controllers/invoice.controller.ts` — Kiểm tra tác động
-
-- [ ] `queryInvoicesInRange` trả về `Promise<any[]>` — giữ nguyên kiểu trả về, controller không cần sửa
-
-## 7. Luồng dữ liệu mới
-
-```
-queryInvoicesInRange(start, end, token, type)
-       │
-       ▼
-  Bước 1: Query count (size=1)
-       │
-       ▼
-  total > 0 ?
-       │
-       ▼ YES
-  for page = 0 to Math.ceil(total / 50) - 1:
-       │
-       ▼
-    Query: size=50&page={page}
-       │
-       ▼
-    Push records vào allRecords[]
-       │
-       ▼
-    Sleep(500ms) nếu còn trang tiếp theo
-       │
-       ▼
-  return allRecords
+```typescript
+const fetchInvoices = async () => {
+  setLoading(true);
+  try {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+      search: searchText,
+      ...(filterType && { type: filterType }),
+      sortBy: 'invoiceDate',
+      sortDir: 'desc',
+    });
+    const response = await axios.get(`${API_BASE_URL}/api/invoices?${params}`);
+    const { data, total: t, totalPages: tp } = response.data;
+    setInvoices(data);
+    setTotal(t);
+    setTotalPages(tp);
+    setSelectedIds([]);
+  } catch (err) { ... }
+  finally { setLoading(false); }
+};
 ```
 
-## 8. Ưu tiên
+#### Pagination UI
 
-| Thứ tự | Mục | File |
-|--------|-----|------|
-| 1 | Thêm `sleep()` helper | `backend/src/services/downloader.service.ts` |
-| 2 | Sửa `queryInvoicesInRange()` với pagination | `backend/src/services/downloader.service.ts` |
-| 3 | Build và test với GDT thật | Terminal |
+- [ ] Thêm component phân trang dưới mỗi bảng:
+  - Nút « Trang trước
+  - Hiển thị: "Trang {page+1} / {totalPages}"
+  - Nút Trang sau »
+  - Dropdown chọn số dòng: 10, 20, 50, 100
+  - Hiển thị: "Tổng: {total} records"
 
-## 9. Ghi chú
+#### Filter cho tab logs
 
-- Giới hạn 50 là từ GDT, có thể thay đổi. Nên đặt `PAGE_SIZE = 50` và để comment để dễ điều chỉnh.
-- Hiện tại code query count đã dùng `size=1` → không bị ảnh hưởng.
-- `page` parameter mặc định GDT có thể là 0 hoặc 1. Cần kiểm tra thực tế. Nếu page=0 không hoạt động, thử page=1.
+- [ ] Thêm dropdown filter theo trạng thái (SUCCESS / PARTIAL / FAILED) bên cạnh search input
+
+#### Debounce search
+
+- [ ] Dùng `useEffect` với `setTimeout` 300ms để tránh gọi API liên tục khi gõ
+
+### 4.3. Frontend — kiểu dữ liệu mới
+
+```typescript
+interface PaginatedResponse<T> {
+  data: T[];
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
+}
+```
+
+## 5. Luồng dữ liệu mới
+
+```
+User gõ search / chọn filter / chuyển trang
+       │
+       ▼ (debounce 300ms)
+Gọi API với ?page=X&size=Y&search=...&type=...
+       │
+       ▼
+Backend: Prisma findMany + count
+       │
+       ▼
+Response: { data, page, size, total, totalPages }
+       │
+       ▼
+Frontend: cập nhật table + pagination UI
+```
+
+## 6. Không thay đổi
+
+- Các endpoint: giữ nguyên URL, chỉ thêm query params
+- Các hành vi khác (download XML/ZIP, export Excel, preview) không ảnh hưởng
+- Tab "Hóa Đơn Đã Lưu" cũng được hưởng lợi từ pagination
+
+## 7. Ưu tiên thực hiện
+
+| Thứ tự | Mục | Backend | Frontend |
+|--------|-----|---------|----------|
+| 1 | Sửa `getInvoices` — thêm pagination + search | `invoice.controller.ts` | — |
+| 2 | Sửa `getDownloadHistory` — thêm pagination + search + filter status | `invoice.controller.ts` | — |
+| 3 | Sửa `InvoiceHistory.tsx` — pagination state + fetch params | — | `InvoiceHistory.tsx` |
+| 4 | Thêm Pagination UI (nút, dropdown size) | — | `InvoiceHistory.tsx` |
+| 5 | Thêm filter status cho tab logs | — | `InvoiceHistory.tsx` |
+| 6 | Debounce search + xử lý chuyển trang về 0 khi filter thay đổi | — | `InvoiceHistory.tsx` |
+| 7 | Build & test | ✓ | ✓ |
+
+## 8. Ghi chú
+
+- **Backward compatibility:** Nếu request không có `page`/`size`, endpoint trả về tất cả (hành vi cũ)
+- **Sort mặc định:** Theo `invoiceDate`/`downloadDate` giảm dần (mới nhất trước)
+- **Giới hạn page size:** Tối đa 100 records/trang để tránh abuse
+- **Sync selectedIds:** Khi chuyển trang, bỏ chọn tất cả (vì không còn visible)
