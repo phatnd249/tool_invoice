@@ -303,6 +303,22 @@ export default function InvoiceHistory() {
                         <td className="p-4 text-right font-bold text-emerald-450">{formattedAmount}</td>
                         <td className="p-4 text-center">
                           <div className="flex items-center justify-center space-x-2">
+                            {inv.zipPath ? (
+                              <a
+                                href={`${API_BASE_URL}/api/invoices/${inv.id}/preview`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-emerald-400 hover:text-emerald-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
+                                title="Xem trước hóa đơn (HTML)"
+                              >
+                                <FileText className="w-5 h-5" />
+                              </a>
+                            ) : (
+                              <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc để preview">
+                                <FileText className="w-5 h-5 opacity-30" />
+                              </span>
+                            )}
+
                             {inv.xmlPath ? (
                               <a
                                 href={`${API_BASE_URL}/api/invoices/${inv.id}/xml`}
