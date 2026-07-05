@@ -266,6 +266,32 @@ export default function InvoiceHistory() {
     }
   };
 
+  const downloadFile = async (invoiceId: string, type: 'xml' | 'zip') => {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/api/invoices/${invoiceId}/${type}`,
+        { responseType: 'blob' }
+      );
+
+      const ext = type === 'xml' ? 'xml' : 'zip';
+      const contentType = type === 'xml' ? 'application/xml' : 'application/zip';
+
+      const blob = new Blob([response.data], { type: contentType });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `invoice_${invoiceId.slice(0, 8)}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err: any) {
+      console.error(`Error downloading ${type}:`, err);
+      const msg = err.response?.data?.error || `Không thể tải file ${type}.`;
+      alert(msg);
+    }
+  };
+
   const openPreview = async (invoiceId: string) => {
     setPreviewInvoiceId(invoiceId);
     setPreviewLoading(true);
@@ -481,28 +507,26 @@ export default function InvoiceHistory() {
                               </span>
                             )}
                             {inv.xmlPath ? (
-                              <a
-                                href={`${API_BASE_URL}/api/invoices/${inv.id}/xml`}
-                                download
+                              <button
+                                onClick={() => downloadFile(inv.id, 'xml')}
                                 className="text-indigo-400 hover:text-indigo-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
                                 title="Tải file XML gốc"
                               >
                                 <FileDown className="w-5 h-5" />
-                              </a>
+                              </button>
                             ) : (
                               <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Không có file XML gốc">
                                 <FileDown className="w-5 h-5 opacity-30" />
                               </span>
                             )}
                             {inv.zipPath ? (
-                              <a
-                                href={`${API_BASE_URL}/api/invoices/${inv.id}/zip`}
-                                download
+                              <button
+                                onClick={() => downloadFile(inv.id, 'zip')}
                                 className="text-amber-400 hover:text-amber-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
                                 title="Tải tệp nén ZIP gốc"
                               >
                                 <FileArchive className="w-5 h-5" />
-                              </a>
+                              </button>
                             ) : (
                               <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc">
                                 <FileArchive className="w-5 h-5 opacity-30" />
