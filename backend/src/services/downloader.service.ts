@@ -155,25 +155,45 @@ export class DownloaderService {
       console.log(`[DownloaderService] Found ${total} invoices in GDT.`);
       if (total === 0) return [];
 
-      // Step 2: Query again to retrieve all details
-      const urlAll = `${baseUrl}?sort=tdlap:desc&size=${total}&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
-      const responseAll = await axios.get(urlAll, {
-        headers,
-        timeout: 30000,
-        validateStatus: () => true,
-      });
+      // Step 2: Retrieve all details via pagination (GDT limit: 50 records/page)
+      const PAGE_SIZE = 50;
+      const totalPages = Math.ceil(total / PAGE_SIZE);
+      const allRecords: any[] = [];
 
-      if (responseAll.status !== 200) {
-        const responseBody = typeof responseAll.data === 'string'
-          ? responseAll.data.slice(0, 2000)
-          : JSON.stringify(responseAll.data).slice(0, 2000);
-        console.error(`[DownloaderService] GDT query all responded with status ${responseAll.status}`);
-        console.error(`  URL: ${urlAll}`);
-        console.error(`  Response body: ${responseBody}`);
-        throw new Error(`GDT query all failed with status ${responseAll.status}`);
+      for (let page = 0; page < totalPages; page++) {
+        const urlPage = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&page=${page}&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
+
+        console.log(`[DownloaderService] Fetching page ${page + 1}/${totalPages} (size=${PAGE_SIZE})...`);
+
+        const responsePage = await axios.get(urlPage, {
+          headers,
+          timeout: 30000,
+          validateStatus: () => true,
+        });
+
+        if (responsePage.status !== 200) {
+          const responseBody = typeof responsePage.data === 'string'
+            ? responsePage.data.slice(0, 2000)
+            : JSON.stringify(responsePage.data).slice(0, 2000);
+          console.error(`[DownloaderService] GDT query page ${page + 1}/${totalPages} responded with status ${responsePage.status}`);
+          console.error(`  URL: ${urlPage}`);
+          console.error(`  Response body: ${responseBody}`);
+          // Continue to next page instead of throwing — partial data is better than none
+          continue;
+        }
+
+        const records = responsePage.data?.datas || [];
+        allRecords.push(...records);
+        console.log(`[DownloaderService] Page ${page + 1}/${totalPages} returned ${records.length} records.`);
+
+        // Delay between pages to avoid rate limiting
+        if (page < totalPages - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
 
-      return responseAll.data?.datas || [];
+      console.log(`[DownloaderService] Total records collected across ${totalPages} page(s): ${allRecords.length}`);
+      return allRecords;
     } catch (error: any) {
       if (error.response) {
         const responseBody = error.response.data
