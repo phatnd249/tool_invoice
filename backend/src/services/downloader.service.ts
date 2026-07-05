@@ -2,6 +2,53 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// ────────────────────────────────────────────────────────────
+// Helper: parse GDT error response into a user-friendly message
+// ────────────────────────────────────────────────────────────
+
+const GDT_INVOICE_NOT_FOUND_PATTERNS = [
+  'Không tồn tại hồ sơ gốc của hóa đơn',
+  'không tồn tại hồ sơ gốc',
+  'Invoice not found',
+  'No original record',
+];
+
+/**
+ * Parse GDT response body và trả về message thân thiện với người dùng.
+ * Phân biệt:
+ *   - Hoá đơn không tồn tại (bị thu hồi/xoá) → message rõ ràng
+ *   - Lỗi khác → message kèm HTTP status
+ */
+function formatGdtError(responseBody: string, invoiceLabel: string, status: number): string {
+  const isNotFound = GDT_INVOICE_NOT_FOUND_PATTERNS.some(p =>
+    responseBody.toLowerCase().includes(p.toLowerCase())
+  );
+  if (isNotFound) {
+    return `Hoá đơn ${invoiceLabel} không còn tồn tại trên hệ thống GDT (đã bị thu hồi/xoá).`;
+  }
+  // Parse message từ JSON nếu có
+  try {
+    const parsed = JSON.parse(responseBody);
+    return `GDT trả về lỗi (HTTP ${status}): ${parsed.message || responseBody.slice(0, 200)}`;
+  } catch {
+    return `GDT trả về lỗi (HTTP ${status}): ${responseBody.slice(0, 200)}`;
+  }
+}
+
+/**
+ * Extract response body from an axios error or response as a string.
+ */
+function extractResponseBody(data: any): string {
+  if (!data) return '(empty)';
+  if (typeof data === 'string') return data.slice(0, 2000);
+  if (Buffer.isBuffer(data)) return Buffer.from(data).toString('utf-8').slice(0, 2000);
+  try {
+    return JSON.stringify(data).slice(0, 2000);
+  } catch {
+    return String(data).slice(0, 2000);
+  }
+}
+
 export class DownloaderService {
   /**
    * Decode JWT token to get MST (Tax Identification Number)
@@ -146,11 +193,17 @@ export class DownloaderService {
   /**
    * Download the XML/ZIP file for a specific invoice
    */
+  /**
+   * Download the XML/ZIP file for a specific invoice.
+   *
+   * @returns zipPath nếu tải thành công.
+   * @throws Error với message thân thiện nếu GDT trả về lỗi (vd: hoá đơn không tồn tại).
+   */
   public async downloadInvoiceZip(
     invoice: any,
     token: string,
     outputDir: string
-  ): Promise<string | null> {
+  ): Promise<string> {
     const nbmst = invoice.nbmst;         // Seller tax code
     const khmshdon = invoice.khmshdon;   // Invoice template symbol
     const khhdon = invoice.khhdon;       // Invoice symbol
@@ -158,8 +211,7 @@ export class DownloaderService {
     const mhdon = invoice.mhdon;         // Tax Authority Code (MCCQT/hash)
 
     if (!nbmst || shdon === undefined || !khmshdon || !khhdon) {
-      console.warn(`[DownloaderService] Missing fields to construct zip name for ID: ${invoice.id}`);
-      return null;
+      throw new Error(`Thiếu thông tin hoá đơn (nbmst/shd on/khmshdon/khhdon) để tải ZIP.`);
     }
     const zipFileName = `${nbmst}-${shdon}.zip`;
 
@@ -193,27 +245,37 @@ export class DownloaderService {
         return zipPath;
       }
 
-      // Log non-200 response from GDT
+      // Non-200 response from GDT — parse và throw message thân thiện
       const responseBody = response.data ? Buffer.from(response.data).toString('utf-8').slice(0, 2000) : '(empty)';
       console.error(`[DownloaderService] GDT responded with status ${response.status} for invoice ${shdon}`);
       console.error(`  URL: ${exportUrl}`);
       console.error(`  Response body: ${responseBody}`);
-      return null;
+
+      const friendlyMessage = formatGdtError(responseBody, String(shdon), response.status);
+      throw new Error(friendlyMessage);
     } catch (error: any) {
+      // Nếu đã là Error với message thân thiện (do throw ở trên), throw tiếp
+      if (error.message && (
+        error.message.includes('không còn tồn tại') ||
+        error.message.includes('GDT trả về lỗi')
+      )) {
+        throw error;
+      }
+
+      // Axios error với response từ GDT
       if (error.response) {
-        // Axios error with response from GDT
-        const responseBody = error.response.data
-          ? (typeof error.response.data === 'string'
-              ? error.response.data.slice(0, 2000)
-              : JSON.stringify(error.response.data).slice(0, 2000))
-          : '(empty)';
+        const responseBody = extractResponseBody(error.response.data);
         console.error(`[DownloaderService] GDT error for invoice ${shdon}: status ${error.response.status}`);
         console.error(`  URL: ${exportUrl}`);
         console.error(`  Response body: ${responseBody}`);
-      } else {
-        console.error(`[DownloaderService] Failed to download ZIP for invoice ${shdon}: ${error.message}`);
+
+        const friendlyMessage = formatGdtError(responseBody, String(shdon), error.response.status);
+        throw new Error(friendlyMessage);
       }
-      return null;
+
+      // Network error / timeout
+      console.error(`[DownloaderService] Failed to download ZIP for invoice ${shdon}: ${error.message}`);
+      throw new Error(`Lỗi mạng khi tải hoá đơn ${shdon}: ${error.message}`);
     }
   }
 

@@ -360,21 +360,29 @@ export class InvoiceController {
           const invoiceTargetDir = resolveTargetDir(baseDir, invCompanyName, type, invoiceDate);
 
           // Download ZIP into the resolved directory
-          const zipPath = await withRetry(
-            () => downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir),
-            { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 12000 }
-          );
-          if (!zipPath) {
-            typeErrors.push(`[${type}] Invoice ${inv.shdon}: Failed to download ZIP.`);
-          if (saveToDb) {
-            try {
-              await saveBasicInvoiceFromGdt(inv, type);
-            } catch (dbError: any) {
-              console.error(`[InvoiceController] Failed to save basic invoice ${inv.shdon} metadata:`, dbError.message);
-            }
+          let zipPath: string | null = null;
+          try {
+            zipPath = await withRetry(
+              () => downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir),
+              { maxRetries: 2, baseDelayMs: 2000, maxDelayMs: 8000 }
+            );
+          } catch (downloadError: any) {
+            // downloadInvoiceZip now throws Error with a user-friendly message
+            typeErrors.push(`[${type}] Invoice ${inv.shdon}: ${downloadError.message}`);
+            zipPath = null;
           }
-          return;
-        }
+
+          if (!zipPath) {
+            // Still save basic metadata so the invoice appears in the list
+            if (saveToDb) {
+              try {
+                await saveBasicInvoiceFromGdt(inv, type);
+              } catch (dbError: any) {
+                console.error(`[InvoiceController] Failed to save basic invoice ${inv.shdon} metadata:`, dbError.message);
+              }
+            }
+            return;
+          }
 
         let parsed = parserService.extractAndParseZip(zipPath, invoiceTargetDir);
         if (!parsed) {
