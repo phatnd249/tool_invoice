@@ -1,128 +1,147 @@
-# Kế hoạch triển khai: Preview hoá đơn (HTML) từ file ZIP
+# Kế hoạch triển khai: Xử lý giới hạn 50 hoá đơn/lần request từ GDT
 
 ## 1. Vấn đề
 
-Khi xem lịch sử hoá đơn đã tải về, người dùng chỉ thấy thông tin dạng text (số hoá đơn, ngày, số tiền...). Muốn xem giao diện trực quan của hoá đơn, người dùng phải tải file ZIP về, giải nén thủ công và mở file HTML.
-
-## 2. Mục tiêu
-
-Thêm chức năng **preview hoá đơn** ngay trong giao diện web:
-- Backend: Endpoint API trả về nội dung file HTML được giải nén từ file ZIP của hoá đơn
-- File HTML được giải nén một lần và cache vào thư mục `backend/public/preview/` để lần sau load nhanh
-- Frontend: Hiển thị HTML trong iframe hoặc modal
-
-## 3. Phân tích kỹ thuật
-
-### Cấu trúc file ZIP hoá đơn
-
-File ZIP từ GDT chứa:
-- `{mst}-{shdon}.xml` — dữ liệu XML
-- `{mst}-{shdon}-pdf.html` — file HTML thể hiện hoá đơn (dùng để in/gửi email)
-- Có thể có thêm file PDF, CSS hoặc ảnh
-
-File HTML là bản trình bày trực quan của hoá đơn (giống như giao diện in). Đây là file cần dùng để preview.
-
-### Dữ liệu hiện có
-
-- `Invoice.zipPath` — đường dẫn file ZIP gốc trong DB
-- `Invoice.xmlPath` — đường dẫn file XML đã giải nén
-- `ParserService.extractAndParseZip()` — đã có sẵn logic giải nén ZIP
-
-## 4. Các file cần tạo/sửa
-
-### 4.1. `backend/src/services/preview.service.ts` — Service mới
-
-- [ ] Tạo class `PreviewService`
-- [ ] Phương thức `getPreviewHtml(invoiceId: string): Promise<string | null>`
-  - Query invoice từ DB bằng ID
-  - Kiểm tra zipPath có tồn tại không
-  - Nếu đã có file HTML cache trong `backend/public/preview/{invoiceId}.html` → return luôn
-  - Nếu chưa: giải nén ZIP, tìm file `.html`, copy vào thư mục cache
-  - Return nội dung HTML
-- [ ] Phương thức `extractHtmlFromZip(zipPath: string): string | null`
-  - Dùng `adm-zip` để đọc entries
-  - Tìm entry kết thúc bằng `.html`
-  - Return nội dung text
-
-### 4.2. `backend/src/controllers/invoice.controller.ts` — Endpoint mới
-
-- [ ] Thêm method `previewInvoice(req, res)`:
-  ```
-  GET /api/invoices/:id/preview
-  ```
-  - Lấy `id` từ params
-  - Gọi `PreviewService.getPreviewHtml(id)`
-  - Nếu không tìm thấy → 404
-  - Trả về HTML với Content-Type: text/html; charset=utf-8
-- [ ] Thêm method `previewInvoiceByZipPath(req, res)` (tuỳ chọn):
-  ```
-  GET /api/invoices/preview-by-path?zipPath=...
-  ```
-  - Preview trực tiếp từ đường dẫn ZIP (cho trường hợp chưa lưu DB)
-
-### 4.3. `backend/src/routes/invoice.routes.ts` — Route mới
-
-- [ ] Thêm route:
-  ```typescript
-  router.get('/:id/preview', InvoiceController.previewInvoice);
-  ```
-
-### 4.4. Cache file HTML
-
-- [ ] Tạo thư mục cache: `backend/public/preview/` (đã có trong `.gitignore` vì nằm trong `backend/public/`)
-- [ ] File cache được đặt tên: `preview/{invoiceId}.html`
-- [ ] Khi ZIP bị xoá hoặc invoice không còn → xoá cache tương ứng
-
-### 4.5. Xử lý đường dẫn tương đối trong HTML
-
-File HTML của GDT thường chứa:
-- Link tới CSS (inline hoặc external)
-- Link tới ảnh (logo công ty...)
-
-Các phương án:
-1. **Phương án A (khuyên dùng):** Inject CSS inline và base64 hoá ảnh → file HTML độc lập. Phức tạp, tuỳ vào cấu trúc file.
-2. **Phương án B (đơn giản):** Trả về nguyên bản file HTML. Nếu có link CSS external thì trình duyệt sẽ tự tải. Hạn chế: ảnh local hoặc CSS trong ZIP không hiển thị được.
-3. **Phương án C:** Giải nén toàn bộ ZIP vào thư mục cache (giữ nguyên cấu trúc thư mục con), sau đó serve static. Ưu: giữ được ảnh và CSS. Nhược: tốn dung lượng.
-
-**Khuyến nghị:** Chọn phương án B trước (đơn giản), nâng cấp lên C sau này nếu cần thiết. File HTML của GDT thường có CSS inline sẵn nên hiển thị tốt.
-
-## 5. Luồng xử lý
+API GDT giới hạn **tối đa 50 hoá đơn** trong một request query (`size <= 50`). Hiện tại code gọi:
 
 ```
-User click "Preview" trên invoice
-       │
-       ▼
-Frontend gọi GET /api/invoices/:id/preview
-       │
-       ▼
-InvoiceController.previewInvoice()
-  └─ PreviewService.getPreviewHtml(invoiceId)
-       ├─ Query invoice từ DB
-       ├─ zipPath có tồn tại? → Không → 404
-       ├─ Cache file tồn tại? → Có → return cache
-       ├─ Không: giải nén ZIP, tìm .html
-       │    ├─ Tìm thấy? → Lưu cache → return HTML
-       │    └─ Không tìm thấy? → 404
-       └─ Return HTML với Content-Type: text/html
-       │
-       ▼
-Frontend render HTML trong iframe sandbox hoặc modal
+size=531  → GDT trả về HTTP 500: "findInvoiceSold.size: phải nhỏ hơn hoặc bằng 50"
 ```
 
-## 6. Ưu tiên thực hiện
+## 2. Nguyên nhân
+
+Trong `DownloaderService.queryInvoicesInRange()`:
+
+```typescript
+// Bước 1: Query với size=1 để đếm tổng số
+const urlCount = `...&size=1&search=...`;  // OK: count chỉ lấy 1 record
+
+// Bước 2: Query với size=total để lấy tất cả records
+const urlAll = `...&size=${total}&search=...`;  // LỖI: khi total > 50
+```
+
+## 3. Phân tích API GDT
+
+Các tham số trên endpoint query:
+- `size` — số lượng records trả về, tối đa **50**
+- `page` — trang hiện tại (mặc định là 0? hay 1?)
+- `sort` — thứ tự sắp xếp
+
+**Cần kiểm tra:**
+- [ ] GDT dùng page bắt đầu từ 0 hay 1?
+- [ ] `page` mặc định là bao nhiêu nếu không truyền?
+- [ ] Response có chứa tổng số trang (`totalPages`) không?
+
+Dựa theo API REST thông thường:
+- Request: `?size=50&page=0&search=...` → trang 0, 50 records
+- Request: `?size=50&page=1&search=...` → trang 1, 50 records
+- Response thường có: `{ "datas": [...], "total": 531, "page": 0, "size": 50 }`
+
+## 4. Giải pháp
+
+### 4.1. Sửa `queryInvoicesInRange()` — Phân trang (pagination)
+
+Thay vì query 1 lần với `size=${total}`, thực hiện nhiều request với `size=50` và `page` tăng dần.
+
+**Logic mới:**
+
+```typescript
+// Bước 1: Đếm tổng số (size=1) — giữ nguyên
+const response = await axios.get(urlCount, ...);
+const total = response.data?.total || 0;
+
+// Bước 2: Lấy tất cả records qua nhiều trang
+const PAGE_SIZE = 50;
+const allRecords: any[] = [];
+
+for (let page = 0; page < Math.ceil(total / PAGE_SIZE); page++) {
+  const url = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&page=${page}&search=...`;
+  const response = await axios.get(url, ...);
+  const records = response.data?.datas || [];
+  allRecords.push(...records);
+  
+  // Delay nhẹ giữa các trang để tránh rate limit
+  if (page < Math.ceil(total / PAGE_SIZE) - 1) {
+    await sleep(500); // 500ms giữa các trang
+  }
+}
+
+return allRecords;
+```
+
+### 4.2. Thêm utility `sleep()`
+
+```typescript
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+```
+
+### 4.3. Xác nhận response structure (cần kiểm tra thực tế)
+
+Cần kiểm tra response từ GDT có chứa thông tin page không:
+- Nếu response có `page` và `size` → dùng luôn để loop
+- Nếu không có → dùng `total` / `PAGE_SIZE` để tính số trang
+
+**Ưu tiên:** Dùng `page` bắt đầu từ 0, tăng dần cho đến khi hết records hoặc gặp response rỗng.
+
+## 5. Rủi ro và xử lý
+
+| Rủi ro | Giải pháp |
+|--------|-----------|
+| `page` parameter không được GDT hỗ trợ | Thử với page=0, nếu response vẫn trả về tất cả records (ignoring page) thì cần giải pháp khác |
+| Rate limit khi gọi nhiều request | Thêm `sleep(500)` giữa các trang, dùng `withRetry` |
+| Total thay đổi giữa các request (có hoá đơn mới) | Lấy snapshot total từ đầu, ignore các thay đổi trong quá trình query |
+| Một trang bị lỗi → mất dữ liệu | Retry từng trang riêng lẻ, log lỗi và tiếp tục các trang khác |
+
+## 6. Các file cần sửa
+
+### 6.1. `backend/src/services/downloader.service.ts` — Sửa `queryInvoicesInRange()`
+
+- [ ] Thêm `sleep()` helper
+- [ ] Sửa vòng lặp query: dùng `PAGE_SIZE = 50`, loop qua các trang
+- [ ] Giữ nguyên logic log response và xử lý lỗi (đã có từ commit trước)
+- [ ] Thêm log số trang đã query: `"[DownloaderService] Fetching page X/Y..."`
+
+### 6.2. `backend/src/controllers/invoice.controller.ts` — Kiểm tra tác động
+
+- [ ] `queryInvoicesInRange` trả về `Promise<any[]>` — giữ nguyên kiểu trả về, controller không cần sửa
+
+## 7. Luồng dữ liệu mới
+
+```
+queryInvoicesInRange(start, end, token, type)
+       │
+       ▼
+  Bước 1: Query count (size=1)
+       │
+       ▼
+  total > 0 ?
+       │
+       ▼ YES
+  for page = 0 to Math.ceil(total / 50) - 1:
+       │
+       ▼
+    Query: size=50&page={page}
+       │
+       ▼
+    Push records vào allRecords[]
+       │
+       ▼
+    Sleep(500ms) nếu còn trang tiếp theo
+       │
+       ▼
+  return allRecords
+```
+
+## 8. Ưu tiên
 
 | Thứ tự | Mục | File |
 |--------|-----|------|
-| 1 | Tạo `PreviewService` | `backend/src/services/preview.service.ts` |
-| 2 | Thêm endpoint preview trong controller | `backend/src/controllers/invoice.controller.ts` |
-| 3 | Thêm route | `backend/src/routes/invoice.routes.ts` |
-| 4 | Gom cache (tự động qua thư mục) | Tích hợp sẵn trong service |
-| 5 | Frontend: hiển thị HTML trong modal/iframe | Frontend (chưa xác định file) |
+| 1 | Thêm `sleep()` helper | `backend/src/services/downloader.service.ts` |
+| 2 | Sửa `queryInvoicesInRange()` với pagination | `backend/src/services/downloader.service.ts` |
+| 3 | Build và test với GDT thật | Terminal |
 
-## 7. Ghi chú
+## 9. Ghi chú
 
-- File ZIP có thể nặng → cần timeout phù hợp cho API
-- Preview chỉ hoạt động với invoice đã tải ZIP thành công (`zipPath` không null)
-- File HTML từ GDT thường có kích thước 10-50KB, không quá lớn
-- Cache theo `invoiceId` → khi ZIP thay đổi (tải lại) cần invalidate cache
-- Bảo mật: HTML từ GDT có thể chứa script? Cần dùng iframe sandbox hoặc sanitize HTML nếu cần. Hiện tại file từ GDT là HTML tĩnh, không chứa JS nguy hiểm.
+- Giới hạn 50 là từ GDT, có thể thay đổi. Nên đặt `PAGE_SIZE = 50` và để comment để dễ điều chỉnh.
+- Hiện tại code query count đã dùng `size=1` → không bị ảnh hưởng.
+- `page` parameter mặc định GDT có thể là 0 hoặc 1. Cần kiểm tra thực tế. Nếu page=0 không hoạt động, thử page=1.
