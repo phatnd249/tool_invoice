@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { FileDown, FileArchive, FileSpreadsheet, Search, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
+import { FileDown, FileArchive, FileSpreadsheet, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw, Filter } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 interface Invoice {
@@ -319,7 +319,7 @@ export default function InvoiceHistory() {
           )}
 
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+            <Filter className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
               value={searchText}
