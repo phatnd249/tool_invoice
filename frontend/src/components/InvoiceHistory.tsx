@@ -1,7 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { FileDown, FileArchive, FileSpreadsheet, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw, Filter } from 'lucide-react';
+import { FileDown, FileArchive, FileSpreadsheet, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw, Filter, List } from 'lucide-react';
 import { API_BASE_URL } from '../config';
+
+interface InvoiceItem {
+  id: number;
+  invoiceId: string;
+  lineNumber?: string;
+  name: string;
+  unit?: string;
+  quantity?: number;
+  price?: number;
+  amount: number;
+  taxRate?: string;
+}
 
 interface Invoice {
   id: string;
@@ -15,6 +27,7 @@ interface Invoice {
   totalAmount: number;
   xmlPath?: string | null;
   zipPath?: string | null;
+  items?: InvoiceItem[];
 }
 
 interface DownloadHistory {
@@ -128,6 +141,9 @@ export default function InvoiceHistory() {
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Invoice Detail (items) Modal state
+  const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
 
   // ── Fetch functions ──
 
@@ -377,13 +393,14 @@ export default function InvoiceHistory() {
                   <th className="p-4">Bên Bán</th>
                   <th className="p-4">Bên Mua</th>
                   <th className="p-4 text-right">Tổng Thanh Toán</th>
+                  <th className="p-4 text-center">Chi Tiết</th>
                   <th className="p-4 text-center">Tải Tệp</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50 text-slate-350">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center text-slate-500">
+                    <td colSpan={9} className="p-12 text-center text-slate-500">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
                         <span>Đang tải danh sách hóa đơn từ Database...</span>
@@ -392,7 +409,7 @@ export default function InvoiceHistory() {
                   </tr>
                 ) : invoices.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-500">
+                    <td colSpan={9} className="p-8 text-center text-slate-500">
                       Không có hóa đơn nào trong cơ sở dữ liệu.
                     </td>
                   </tr>
@@ -439,6 +456,15 @@ export default function InvoiceHistory() {
                           <div className="text-xs text-slate-500">{inv.buyerTaxCode}</div>
                         </td>
                         <td className="p-4 text-right font-bold text-emerald-450">{formattedAmount}</td>
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => setDetailInvoice(inv)}
+                            className="text-indigo-400 hover:text-indigo-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
+                            title="Xem chi tiết sản phẩm"
+                          >
+                            <List className="w-5 h-5" />
+                          </button>
+                        </td>
                         <td className="p-4 text-center">
                           <div className="flex items-center justify-center space-x-2">
                             {inv.zipPath ? (
@@ -619,6 +645,97 @@ export default function InvoiceHistory() {
               ) : (
                 <div className="flex items-center justify-center h-64 text-slate-500">
                   Không thể tải nội dung preview.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Detail (Items) Modal */}
+      {detailInvoice && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex justify-between items-center px-6 py-5 bg-slate-950/80 border-b border-slate-800">
+              <h2 className="text-md font-bold text-slate-200 flex items-center space-x-2">
+                <List className="w-5 h-5 text-indigo-400" />
+                <span>Chi Tiết Hàng Hóa — HĐ {String(detailInvoice.invoiceNumber).padStart(8, '0')}</span>
+              </h2>
+              <button
+                onClick={() => setDetailInvoice(null)}
+                className="text-slate-400 hover:text-slate-100 p-1 bg-slate-850 hover:bg-slate-800 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Invoice summary */}
+            <div className="px-6 py-4 bg-slate-950/50 border-b border-slate-800 grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+              <div>
+                <span className="text-slate-500">Ngày lập:</span>{' '}
+                <span className="text-slate-300 font-semibold">{new Date(detailInvoice.invoiceDate).toLocaleDateString('vi-VN')}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Loại:</span>{' '}
+                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${detailInvoice.type === 'SELL' ? 'bg-indigo-900/50 text-indigo-300' : 'bg-amber-900/50 text-amber-300'}`}>
+                  {detailInvoice.type === 'SELL' ? 'Bán ra' : 'Mua vào'}
+                </span>
+              </div>
+              <div className="truncate">
+                <span className="text-slate-500">Bên bán:</span>{' '}
+                <span className="text-slate-300 font-semibold" title={detailInvoice.sellerName}>{detailInvoice.sellerName}</span>
+              </div>
+              <div className="truncate">
+                <span className="text-slate-500">Bên mua:</span>{' '}
+                <span className="text-slate-300 font-semibold" title={detailInvoice.buyerName}>{detailInvoice.buyerName}</span>
+              </div>
+            </div>
+
+            {/* Items table */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {detailInvoice.items && detailInvoice.items.length > 0 ? (
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400 font-semibold uppercase text-xs sticky top-0">
+                    <tr>
+                      <th className="p-3 w-12 text-center">STT</th>
+                      <th className="p-3">Tên hàng hóa, dịch vụ</th>
+                      <th className="p-3 w-16 text-center">ĐVT</th>
+                      <th className="p-3 w-20 text-right">Số lượng</th>
+                      <th className="p-3 w-28 text-right">Đơn giá</th>
+                      <th className="p-3 w-28 text-right">Thành tiền</th>
+                      <th className="p-3 w-18 text-center">Thuế suất</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50 text-slate-350">
+                    {detailInvoice.items.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-900/30 transition">
+                        <td className="p-3 text-center text-slate-500">{item.lineNumber || '-'}</td>
+                        <td className="p-3 font-medium text-slate-200 max-w-[300px]">
+                          <span title={item.name}>{item.name}</span>
+                        </td>
+                        <td className="p-3 text-center text-slate-400">{item.unit || '-'}</td>
+                        <td className="p-3 text-right text-slate-300">
+                          {item.quantity != null ? Number(item.quantity).toLocaleString('vi-VN') : '-'}
+                        </td>
+                        <td className="p-3 text-right text-slate-300">
+                          {item.price != null ? Number(item.price).toLocaleString('vi-VN') : '-'}
+                        </td>
+                        <td className="p-3 text-right font-semibold text-emerald-450">
+                          {Number(item.amount).toLocaleString('vi-VN')}
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className="px-2 py-0.5 rounded text-xs font-mono bg-slate-900 text-slate-400 border border-slate-800">
+                            {item.taxRate || '0%'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p>Không có dữ liệu hàng hóa cho hóa đơn này.</p>
                 </div>
               )}
             </div>
