@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { FileDown, FileArchive, FileSpreadsheet, RefreshCw, Search, ShieldAlert, X, FileText } from 'lucide-react';
+import { FileDown, FileArchive, FileSpreadsheet, RefreshCw, Search, ShieldAlert, X, FileText, Eye, Loader2 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 interface Invoice {
@@ -40,6 +40,11 @@ export default function InvoiceHistory() {
 
   // Log Detail Modal state
   const [selectedHistory, setSelectedHistory] = useState<DownloadHistory | null>(null);
+
+  // Preview Modal state
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const fetchInvoices = async () => {
     setLoading(true);
@@ -143,6 +148,24 @@ export default function InvoiceHistory() {
       (h.username && h.username.toLowerCase().includes(q))
     );
   });
+
+  const openPreview = async (invoiceId: string) => {
+    setPreviewInvoiceId(invoiceId);
+    setPreviewLoading(true);
+    setPreviewHtml(null);
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview`, {
+        responseType: 'text',
+      });
+      setPreviewHtml(response.data);
+    } catch (err: any) {
+      console.error('Error loading preview:', err);
+      const msg = err.response?.data?.error || 'Không thể tải preview hóa đơn.';
+      setPreviewHtml(`<div style="padding:40px;text-align:center;color:#999;">${msg}</div>`);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -304,18 +327,16 @@ export default function InvoiceHistory() {
                         <td className="p-4 text-center">
                           <div className="flex items-center justify-center space-x-2">
                             {inv.zipPath ? (
-                              <a
-                                href={`${API_BASE_URL}/api/invoices/${inv.id}/preview`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button
+                                onClick={() => openPreview(inv.id)}
                                 className="text-emerald-400 hover:text-emerald-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
                                 title="Xem trước hóa đơn (HTML)"
                               >
-                                <FileText className="w-5 h-5" />
-                              </a>
+                                <Eye className="w-5 h-5" />
+                              </button>
                             ) : (
                               <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc để preview">
-                                <FileText className="w-5 h-5 opacity-30" />
+                                <Eye className="w-5 h-5 opacity-30" />
                               </span>
                             )}
 
@@ -436,6 +457,45 @@ export default function InvoiceHistory() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Invoice Modal */}
+      {previewInvoiceId && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center px-6 py-5 bg-slate-950/80 border-b border-slate-800">
+              <h2 className="text-md font-bold text-slate-200 flex items-center space-x-2">
+                <Eye className="w-5 h-5 text-emerald-400" />
+                <span>Xem Trước Hóa Đơn</span>
+              </h2>
+              <button
+                onClick={() => { setPreviewInvoiceId(null); setPreviewHtml(null); }}
+                className="text-slate-400 hover:text-slate-100 p-1 bg-slate-850 hover:bg-slate-800 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-0 flex-1 overflow-hidden bg-white">
+              {previewLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+                  <span className="ml-3 text-slate-500">Đang tải nội dung hóa đơn...</span>
+                </div>
+              ) : previewHtml ? (
+                <iframe
+                  srcDoc={previewHtml}
+                  className="w-full h-full min-h-[70vh] border-0"
+                  title="Preview Invoice"
+                  sandbox="allow-same-origin"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-64 text-slate-500">
+                  Không thể tải nội dung preview.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
