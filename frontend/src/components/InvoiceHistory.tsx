@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { FileDown, FileArchive, FileSpreadsheet, RefreshCw, Search, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { FileDown, FileArchive, FileSpreadsheet, Search, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 interface Invoice {
@@ -340,7 +340,7 @@ export default function InvoiceHistory() {
             className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-750 transition cursor-pointer"
             title="Làm mới danh sách"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RotateCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
