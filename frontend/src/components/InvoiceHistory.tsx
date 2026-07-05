@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { FileDown, FileArchive, FileSpreadsheet, RefreshCw, Search, ShieldAlert, X, FileText, Eye, Loader2 } from 'lucide-react';
+import { FileDown, FileArchive, FileSpreadsheet, RefreshCw, Search, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 interface Invoice {
@@ -28,64 +28,186 @@ interface DownloadHistory {
   username?: string | null;
 }
 
+interface PaginatedResponse<T> {
+  data: T[];
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
+}
+
+const PAGE_SIZES = [10, 20, 50, 100];
+
+function Pagination({
+  page,
+  totalPages,
+  size,
+  total,
+  onPageChange,
+  onSizeChange,
+}: {
+  page: number;
+  totalPages: number;
+  size: number;
+  total: number;
+  onPageChange: (p: number) => void;
+  onSizeChange: (s: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 bg-slate-950 border-t border-slate-800 text-sm">
+      <div className="flex items-center gap-2 text-slate-400">
+        <span className="hidden sm:inline">Tổng:</span>
+        <span className="font-semibold text-slate-200">{total}</span>
+        <span className="hidden sm:inline">records</span>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <span className="text-slate-500 text-xs">Số dòng:</span>
+        <select
+          value={size}
+          onChange={(e) => onSizeChange(Number(e.target.value))}
+          className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+        >
+          {PAGE_SIZES.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 0}
+          className="p-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-950 disabled:text-slate-700 text-slate-300 rounded-lg border border-slate-800 transition cursor-pointer disabled:cursor-not-allowed"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="text-slate-400 text-xs whitespace-nowrap px-1">
+          Trang <span className="font-semibold text-slate-200">{totalPages > 0 ? page + 1 : 0}</span> / <span className="font-semibold text-slate-200">{totalPages}</span>
+        </span>
+        <button
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages - 1}
+          className="p-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-950 disabled:text-slate-700 text-slate-300 rounded-lg border border-slate-800 transition cursor-pointer disabled:cursor-not-allowed"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function InvoiceHistory() {
   const [subTab, setSubTab] = useState<'invoices' | 'logs'>('invoices');
+
+  // Data
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [histories, setHistories] = useState<DownloadHistory[]>([]);
+
+  // Pagination state (server-side)
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
+  // Filters
   const [filterType, setFilterType] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [searchText, setSearchText] = useState('');
+
+  // UI state
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Log Detail Modal state
+  // Debounce ref
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Modals
   const [selectedHistory, setSelectedHistory] = useState<DownloadHistory | null>(null);
-
-  // Preview Modal state
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  const fetchInvoices = async () => {
+  // ── Fetch functions ──
+
+  const fetchInvoices = useCallback(async (p: number, s: number, q: string, type: string) => {
     setLoading(true);
     try {
-      let url = `${API_BASE_URL}/api/invoices`;
-      if (filterType) {
-        url += `?type=${filterType}`;
-      }
-      const response = await axios.get(url);
-      setInvoices(response.data);
+      const params = new URLSearchParams({
+        page: String(p),
+        size: String(s),
+        ...(q && { search: q }),
+        ...(type && { type }),
+      });
+      const response = await axios.get<PaginatedResponse<Invoice>>(
+        `${API_BASE_URL}/api/invoices?${params}`
+      );
+      setInvoices(response.data.data);
+      setTotal(response.data.total);
+      setTotalPages(response.data.totalPages);
       setSelectedIds([]);
     } catch (err) {
       console.error('Error fetching invoices:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchHistories = async () => {
+  const fetchHistories = useCallback(async (p: number, s: number, q: string, status: string) => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/invoices/download-history`);
-      setHistories(response.data);
+      const params = new URLSearchParams({
+        page: String(p),
+        size: String(s),
+        ...(q && { search: q }),
+        ...(status && { status }),
+      });
+      const response = await axios.get<PaginatedResponse<DownloadHistory>>(
+        `${API_BASE_URL}/api/invoices/download-history?${params}`
+      );
+      setHistories(response.data.data);
+      setTotal(response.data.total);
+      setTotalPages(response.data.totalPages);
     } catch (err) {
       console.error('Error fetching download history:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // ── Effects ──
 
   useEffect(() => {
     if (subTab === 'invoices') {
-      fetchInvoices();
+      fetchInvoices(page, size, searchText, filterType);
     } else {
-      fetchHistories();
+      fetchHistories(page, size, searchText, filterStatus);
     }
-  }, [filterType, subTab]);
+  }, [page, size, subTab, filterType, filterStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounced search: reset to page 0 when search text changes
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setPage(0);
+      // The effect above will re-fetch due to page change
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchText]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When filter changes, reset to page 0
+  useEffect(() => {
+    setPage(0);
+  }, [filterType, filterStatus]);
+
+  // ── Handlers ──
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedIds(filteredInvoices.map((i) => i.id));
+      setSelectedIds(invoices.map((i) => i.id));
     } else {
       setSelectedIds([]);
     }
@@ -127,27 +249,6 @@ export default function InvoiceHistory() {
       setExporting(false);
     }
   };
-
-  const filteredInvoices = invoices.filter((inv) => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      String(inv.invoiceNumber).includes(q) ||
-      inv.sellerName.toLowerCase().includes(q) ||
-      inv.sellerTaxCode.includes(q) ||
-      inv.buyerName.toLowerCase().includes(q) ||
-      inv.buyerTaxCode.includes(q)
-    );
-  });
-
-  const filteredHistories = histories.filter((h) => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      h.taxCode.includes(q) ||
-      (h.username && h.username.toLowerCase().includes(q))
-    );
-  });
 
   const openPreview = async (invoiceId: string) => {
     setPreviewInvoiceId(invoiceId);
@@ -194,7 +295,7 @@ export default function InvoiceHistory() {
       {/* Filters & Actions Card */}
       <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-4">
-          {subTab === 'invoices' && (
+          {subTab === 'invoices' ? (
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
@@ -204,21 +305,38 @@ export default function InvoiceHistory() {
               <option value="SELL">Bán ra (SELL)</option>
               <option value="BUY">Mua vào (BUY)</option>
             </select>
+          ) : (
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="">Tất cả trạng thái</option>
+              <option value="SUCCESS">Thành công</option>
+              <option value="PARTIAL">Một phần</option>
+              <option value="FAILED">Thất bại</option>
+            </select>
           )}
 
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
               className="bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 w-64"
               placeholder={subTab === 'invoices' ? "Tìm theo số HĐ, tên..." : "Tìm theo MST, người tải..."}
             />
           </div>
 
           <button
-            onClick={subTab === 'invoices' ? fetchInvoices : fetchHistories}
+            onClick={() => {
+              if (subTab === 'invoices') {
+                fetchInvoices(page, size, searchText, filterType);
+              } else {
+                fetchHistories(page, size, searchText, filterStatus);
+              }
+            }}
             className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-750 transition cursor-pointer"
             title="Làm mới danh sách"
           >
@@ -239,7 +357,7 @@ export default function InvoiceHistory() {
       </div>
 
       {subTab === 'invoices' ? (
-        /* Render Invoices List */
+        /* ── Invoices Table ── */
         <div className="bg-slate-950 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
@@ -248,7 +366,7 @@ export default function InvoiceHistory() {
                   <th className="p-4 w-12 text-center">
                     <input
                       type="checkbox"
-                      checked={filteredInvoices.length > 0 && selectedIds.length === filteredInvoices.length}
+                      checked={invoices.length > 0 && selectedIds.length === invoices.length}
                       onChange={handleSelectAll}
                       className="w-4 h-4 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-900"
                     />
@@ -267,22 +385,19 @@ export default function InvoiceHistory() {
                   <tr>
                     <td colSpan={8} className="p-12 text-center text-slate-500">
                       <div className="flex flex-col items-center justify-center space-y-2">
-                        <svg className="animate-spin h-8 w-8 text-indigo-500" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
+                        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
                         <span>Đang tải danh sách hóa đơn từ Database...</span>
                       </div>
                     </td>
                   </tr>
-                ) : filteredInvoices.length === 0 ? (
+                ) : invoices.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="p-8 text-center text-slate-500">
                       Không có hóa đơn nào trong cơ sở dữ liệu.
                     </td>
                   </tr>
                 ) : (
-                  filteredInvoices.map((inv) => {
+                  invoices.map((inv) => {
                     const dateStr = new Date(inv.invoiceDate).toLocaleDateString('vi-VN');
                     const formattedAmount = new Intl.NumberFormat('vi-VN', {
                       style: 'currency',
@@ -339,7 +454,6 @@ export default function InvoiceHistory() {
                                 <Eye className="w-5 h-5 opacity-30" />
                               </span>
                             )}
-
                             {inv.xmlPath ? (
                               <a
                                 href={`${API_BASE_URL}/api/invoices/${inv.id}/xml`}
@@ -354,7 +468,6 @@ export default function InvoiceHistory() {
                                 <FileDown className="w-5 h-5 opacity-30" />
                               </span>
                             )}
-
                             {inv.zipPath ? (
                               <a
                                 href={`${API_BASE_URL}/api/invoices/${inv.id}/zip`}
@@ -378,9 +491,17 @@ export default function InvoiceHistory() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            size={size}
+            total={total}
+            onPageChange={setPage}
+            onSizeChange={(s) => { setSize(s); setPage(0); }}
+          />
         </div>
       ) : (
-        /* Render Audit Logs / Download History list */
+        /* ── Download History Table ── */
         <div className="bg-slate-950 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
@@ -400,22 +521,19 @@ export default function InvoiceHistory() {
                   <tr>
                     <td colSpan={7} className="p-12 text-center text-slate-500">
                       <div className="flex flex-col items-center justify-center space-y-2">
-                        <svg className="animate-spin h-8 w-8 text-indigo-500" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
+                        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
                         <span>Đang tải nhật ký từ Database...</span>
                       </div>
                     </td>
                   </tr>
-                ) : filteredHistories.length === 0 ? (
+                ) : histories.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-slate-500">
                       Không tìm thấy lịch sử tải nào.
                     </td>
                   </tr>
                 ) : (
-                  filteredHistories.map((h) => {
+                  histories.map((h) => {
                     const timeStr = new Date(h.downloadDate).toLocaleString('vi-VN');
                     return (
                       <tr key={h.id} className="hover:bg-slate-900/30 transition border-b border-slate-800/30">
@@ -458,6 +576,14 @@ export default function InvoiceHistory() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            size={size}
+            total={total}
+            onPageChange={setPage}
+            onSizeChange={(s) => { setSize(s); setPage(0); }}
+          />
         </div>
       )}
 
@@ -535,7 +661,6 @@ export default function InvoiceHistory() {
                   <span className="font-semibold text-emerald-450">{selectedHistory.countDownloaded} hóa đơn thành công</span>
                 </div>
               </div>
-
               <div className="space-y-1">
                 <span className="text-xs font-bold text-slate-450 uppercase tracking-wide">Lịch sử chi tiết & Lỗi hệ thống:</span>
                 <pre className="bg-slate-950 text-slate-400 border border-slate-850 p-4 rounded-2xl text-xs font-mono whitespace-pre-wrap max-h-[300px] overflow-y-auto leading-relaxed">

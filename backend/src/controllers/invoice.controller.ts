@@ -551,12 +551,26 @@ export class InvoiceController {
    * Retrieve list of saved invoices from SQLite database with filters
    */
   public static async getInvoices(req: AuthRequest, res: Response): Promise<void> {
-    const { type, sellerTaxCode, buyerTaxCode, startDate, endDate } = req.query;
+    const {
+      type,
+      sellerTaxCode,
+      buyerTaxCode,
+      startDate,
+      endDate,
+      page: pageParam,
+      size: sizeParam,
+      search,
+    } = req.query;
 
     if (!req.user) {
       res.status(401).json({ error: 'Yêu cầu xác thực.' });
       return;
     }
+
+    // Parse pagination params (default: no pagination if not provided)
+    const hasPagination = pageParam !== undefined && sizeParam !== undefined;
+    const page = hasPagination ? Math.max(0, parseInt(String(pageParam), 10) || 0) : 0;
+    const size = hasPagination ? Math.min(100, Math.max(1, parseInt(String(sizeParam), 10) || 20)) : 0;
 
     const whereClause: any = {};
     if (type) {
@@ -578,6 +592,21 @@ export class InvoiceController {
       }
     }
 
+    // Server-side search across multiple fields
+    if (search) {
+      const q = String(search).trim();
+      if (q) {
+        whereClause.OR = [
+          { invoiceNumber: { contains: q } },
+          { sellerName: { contains: q } },
+          { sellerTaxCode: { contains: q } },
+          { buyerName: { contains: q } },
+          { buyerTaxCode: { contains: q } },
+          { invoiceSymbol: { contains: q } },
+        ];
+      }
+    }
+
     if (req.user.role !== 'ADMIN') {
       try {
         const assignedCompanies = await prisma.userCompany.findMany({
@@ -590,15 +619,23 @@ export class InvoiceController {
         });
         const allowedMsts = assignedCompanies.map(uc => uc.company.taxCode);
 
-        whereClause.AND = [
-          ...(whereClause.AND || []),
-          {
-            OR: [
-              { sellerTaxCode: { in: allowedMsts } },
-              { buyerTaxCode: { in: allowedMsts } }
-            ]
-          }
-        ];
+        const accessFilter = {
+          OR: [
+            { sellerTaxCode: { in: allowedMsts } },
+            { buyerTaxCode: { in: allowedMsts } }
+          ]
+        };
+
+        if (whereClause.OR) {
+          // Kết hợp search OR với access OR
+          whereClause.AND = [
+            { OR: whereClause.OR },
+            accessFilter,
+          ];
+          delete whereClause.OR;
+        } else {
+          whereClause.AND = [accessFilter];
+        }
       } catch (err) {
         console.error('[InvoiceController] Failed to check staff permissions:', err);
         res.status(500).json({ error: 'Không thể xác thực quyền hạn.' });
@@ -607,6 +644,9 @@ export class InvoiceController {
     }
 
     try {
+      // Count total matching records
+      const total = hasPagination ? await prisma.invoice.count({ where: whereClause }) : 0;
+
       const invoices = await prisma.invoice.findMany({
         where: whereClause,
         include: {
@@ -615,8 +655,20 @@ export class InvoiceController {
         orderBy: {
           invoiceDate: 'desc',
         },
+        ...(hasPagination ? { skip: page * size, take: size } : {}),
       });
-      res.json(invoices);
+
+      if (hasPagination) {
+        res.json({
+          data: invoices,
+          page,
+          size,
+          total,
+          totalPages: Math.ceil(total / size),
+        });
+      } else {
+        res.json(invoices);
+      }
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to retrieve invoices', details: error.message });
     }
@@ -834,30 +886,80 @@ export class InvoiceController {
    * Retrieve audit logs and download stats history
    */
   public static async getDownloadHistory(req: AuthRequest, res: Response): Promise<void> {
+    const {
+      page: pageParam,
+      size: sizeParam,
+      search,
+      status,
+    } = req.query;
+
     if (!req.user) {
       res.status(401).json({ error: 'Yêu cầu xác thực.' });
       return;
     }
 
+    // Parse pagination params
+    const hasPagination = pageParam !== undefined && sizeParam !== undefined;
+    const page = hasPagination ? Math.max(0, parseInt(String(pageParam), 10) || 0) : 0;
+    const size = hasPagination ? Math.min(100, Math.max(1, parseInt(String(sizeParam), 10) || 20)) : 0;
+
     try {
-      let histories;
-      if (req.user.role === 'ADMIN') {
-        histories = await prisma.downloadHistory.findMany({
-          orderBy: { downloadDate: 'desc' }
-        });
-      } else {
-        // Staff: only get logs for companies they have access to
+      // Build where clause
+      const whereClause: any = {};
+
+      if (status) {
+        whereClause.status = String(status);
+      }
+
+      if (search) {
+        const q = String(search).trim();
+        if (q) {
+          whereClause.OR = [
+            { taxCode: { contains: q } },
+            { username: { contains: q } },
+          ];
+        }
+      }
+
+      // Staff permission filter
+      if (req.user.role !== 'ADMIN') {
         const assignedCompanies = await prisma.userCompany.findMany({
           where: { userId: req.user.id },
           include: { company: { select: { taxCode: true } } }
         });
         const allowedMsts = assignedCompanies.map(uc => uc.company.taxCode);
-        histories = await prisma.downloadHistory.findMany({
-          where: { taxCode: { in: allowedMsts } },
-          orderBy: { downloadDate: 'desc' }
-        });
+
+        if (whereClause.OR) {
+          whereClause.AND = [
+            { OR: whereClause.OR },
+            { taxCode: { in: allowedMsts } },
+          ];
+          delete whereClause.OR;
+        } else {
+          whereClause.taxCode = { in: allowedMsts };
+        }
       }
-      res.json(histories);
+
+      // Count total
+      const total = hasPagination ? await prisma.downloadHistory.count({ where: whereClause }) : 0;
+
+      const histories = await prisma.downloadHistory.findMany({
+        where: whereClause,
+        orderBy: { downloadDate: 'desc' },
+        ...(hasPagination ? { skip: page * size, take: size } : {}),
+      });
+
+      if (hasPagination) {
+        res.json({
+          data: histories,
+          page,
+          size,
+          total,
+          totalPages: Math.ceil(total / size),
+        });
+      } else {
+        res.json(histories);
+      }
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to retrieve download history', details: error.message });
     }
