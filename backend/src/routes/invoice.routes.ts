@@ -24,4 +24,7 @@ router.get('/:id/xml', InvoiceController.downloadXml);
 // Route to download ZIP of a specific invoice
 router.get('/:id/zip', InvoiceController.downloadZip);
 
+// Route to preview invoice HTML from its ZIP file
+router.get('/:id/preview', InvoiceController.previewInvoice as any);
+
 export default router;

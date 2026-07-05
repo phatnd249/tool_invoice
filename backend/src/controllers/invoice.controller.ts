@@ -3,6 +3,7 @@ import { DownloaderService } from '../services/downloader.service.js';
 import { ParserService, ParsedInvoice } from '../services/parser.service.js';
 import { ExcelService } from '../services/excel.service.js';
 import { AuthService } from '../services/auth.service.js';
+import { PreviewService } from '../services/preview.service.js';
 import prisma from '../utils/db.js';
 import { withRetry, processWithRateLimit } from '../utils/rate-limiter.js';
 import * as path from 'path';
@@ -13,6 +14,7 @@ const downloaderService = new DownloaderService();
 const parserService = new ParserService();
 const excelService = new ExcelService();
 const authService = new AuthService();
+const previewService = new PreviewService();
 
 /**
  * Helper to parse dd/MM/yyyy date string to JS Date
@@ -858,6 +860,60 @@ export class InvoiceController {
       res.json(histories);
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to retrieve download history', details: error.message });
+    }
+  }
+
+  /**
+   * GET /api/invoices/:id/preview
+   * Preview invoice HTML extracted from its ZIP file.
+   */
+  public static async previewInvoice(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
+    try {
+      // Check staff permissions
+      if (req.user.role !== 'ADMIN') {
+        const invoice = await prisma.invoice.findUnique({
+          where: { id },
+          select: { sellerTaxCode: true, buyerTaxCode: true },
+        });
+
+        if (!invoice) {
+          res.status(404).json({ error: 'Không tìm thấy hóa đơn.' });
+          return;
+        }
+
+        const assignedCompanies = await prisma.userCompany.findMany({
+          where: { userId: req.user.id },
+          include: { company: { select: { taxCode: true } } },
+        });
+        const allowedMsts = assignedCompanies.map(uc => uc.company.taxCode);
+        const hasAccess =
+          allowedMsts.includes(invoice.sellerTaxCode) ||
+          allowedMsts.includes(invoice.buyerTaxCode);
+
+        if (!hasAccess) {
+          res.status(403).json({ error: 'Bạn không có quyền truy cập hóa đơn này.' });
+          return;
+        }
+      }
+
+      const html = await previewService.getPreviewHtml(id);
+
+      if (!html) {
+        res.status(404).json({ error: 'Không tìm thấy file HTML preview cho hóa đơn này.' });
+        return;
+      }
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to preview invoice', details: error.message });
     }
   }
 }
