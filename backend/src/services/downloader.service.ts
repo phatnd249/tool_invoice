@@ -124,18 +124,53 @@ export class DownloaderService {
 
     // Determine correct endpoint based on BUY (purchase) or SELL (sold)
     const apiPath = type === 'BUY' ? 'purchase' : 'sold';
-    const baseUrl = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${apiPath}`;
-    
+    const baseUrlQuery = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${apiPath}`;
+    const baseUrlScoQuery = `https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/${apiPath}`;
+
+    let allInvoices: any[] = [];
+
+    // 1. Query standard invoices
+    try {
+      const queryInvoices = await this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers);
+      allInvoices = allInvoices.concat(queryInvoices);
+    } catch (error) {
+      throw error;
+    }
+
+    // 2. Query cash register invoices (máy tính tiền)
+    try {
+      const scoQueryInvoices = await this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers);
+      allInvoices = allInvoices.concat(scoQueryInvoices);
+    } catch (error: any) {
+      if (error.message && error.message.includes('401')) {
+        throw error;
+      }
+      console.error('[DownloaderService] Error fetching sco-query invoices, ignoring to return standard invoices:', error.message);
+    }
+
+    return allInvoices;
+  }
+
+  private async fetchInvoicesFromUrl(
+    baseUrl: string,
+    startStr: string,
+    endStr: string,
+    headers: any
+  ): Promise<any[]> {
     // Step 1: Send query with size=1 to find total matching records
     const urlCount = `${baseUrl}?sort=tdlap:desc&size=1&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
     
     try {
-      console.log(`[DownloaderService] Querying count from ${startStr} to ${endStr}...`);
+      console.log(`[DownloaderService] Querying count from ${startStr} to ${endStr} at ${baseUrl}...`);
       const response = await axios.get(urlCount, {
         headers,
         timeout: 20000,
         validateStatus: () => true,
       });
+
+      if (response.status === 401) {
+        throw new Error('Unauthorized GDT Token (401)');
+      }
 
       if (response.status !== 200) {
         const responseBody = typeof response.data === 'string'
@@ -146,13 +181,9 @@ export class DownloaderService {
         console.error(`  Response body: ${responseBody}`);
         throw new Error(`GDT query failed with status ${response.status}`);
       }
-
-      if (response.status === 401) {
-        throw new Error('Unauthorized GDT Token (401)');
-      }
       
       const total = response.data?.total || 0;
-      console.log(`[DownloaderService] Found ${total} invoices in GDT.`);
+      console.log(`[DownloaderService] Found ${total} invoices in GDT at ${baseUrl}.`);
       if (total === 0) return [];
 
       // Step 2: Retrieve all details via pagination (GDT limit: 50 records/page)
@@ -163,7 +194,7 @@ export class DownloaderService {
       for (let page = 0; page < totalPages; page++) {
         const urlPage = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&page=${page}&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
 
-        console.log(`[DownloaderService] Fetching page ${page + 1}/${totalPages} (size=${PAGE_SIZE})...`);
+        console.log(`[DownloaderService] Fetching page ${page + 1}/${totalPages} (size=${PAGE_SIZE}) from ${baseUrl}...`);
 
         const responsePage = await axios.get(urlPage, {
           headers,
@@ -184,7 +215,7 @@ export class DownloaderService {
 
         const records = responsePage.data?.datas || [];
         allRecords.push(...records);
-        console.log(`[DownloaderService] Page ${page + 1}/${totalPages} returned ${records.length} records.`);
+        console.log(`[DownloaderService] Page ${page + 1}/${totalPages} from ${baseUrl} returned ${records.length} records.`);
 
         // Delay between pages to avoid rate limiting
         if (page < totalPages - 1) {
@@ -192,7 +223,7 @@ export class DownloaderService {
         }
       }
 
-      console.log(`[DownloaderService] Total records collected across ${totalPages} page(s): ${allRecords.length}`);
+      console.log(`[DownloaderService] Total records collected across ${totalPages} page(s) from ${baseUrl}: ${allRecords.length}`);
       return allRecords;
     } catch (error: any) {
       if (error.response) {
@@ -201,10 +232,10 @@ export class DownloaderService {
               ? error.response.data.slice(0, 2000)
               : JSON.stringify(error.response.data).slice(0, 2000))
           : '(empty)';
-        console.error(`[DownloaderService] GDT query error: status ${error.response.status}`);
+        console.error(`[DownloaderService] GDT query error at ${baseUrl}: status ${error.response.status}`);
         console.error(`  Response body: ${responseBody}`);
       } else {
-        console.error('[DownloaderService] Error querying GDT invoices:', error.message);
+        console.error(`[DownloaderService] Error querying GDT invoices at ${baseUrl}:`, error.message);
       }
       throw error;
     }
