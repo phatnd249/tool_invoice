@@ -214,7 +214,9 @@ export class DownloaderService {
         }
 
         const records = responsePage.data?.datas || [];
-        allRecords.push(...records);
+        const sourceApi = baseUrl.includes('sco-query') ? 'sco-query' : 'query';
+        const enhancedRecords = records.map((r: any) => ({ ...r, _sourceApi: sourceApi }));
+        allRecords.push(...enhancedRecords);
         console.log(`[DownloaderService] Page ${page + 1}/${totalPages} from ${baseUrl} returned ${records.length} records.`);
 
         // Delay between pages to avoid rate limiting
@@ -273,7 +275,9 @@ export class DownloaderService {
       return zipPath;
     }
 
-    const exportUrl = `https://hoadondientu.gdt.gov.vn/api/query/invoices/export-xml?nbmst=${nbmst}&khhdon=${khhdon}&shdon=${shdon}&khmshdon=${khmshdon}`;
+    const isSco = invoice._sourceApi === 'sco-query' || String(khhdon).toUpperCase().startsWith('M');
+    const apiPath = isSco ? 'sco-query' : 'query';
+    const exportUrl = `https://hoadondientu.gdt.gov.vn/api/${apiPath}/invoices/export-xml?nbmst=${nbmst}&khhdon=${khhdon}&shdon=${shdon}&khmshdon=${khmshdon}`;
     const headers = {
       Authorization: `Bearer ${token}`,
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -332,7 +336,7 @@ export class DownloaderService {
 
   /**
    * Download Excel report for a date range from GDT portal.
-   * Returns path to saved .xlsx file, or null on failure.
+   * Returns an array of paths to saved .xlsx files.
    */
   public async downloadExcelReport(
     startDate: Date,
@@ -340,7 +344,7 @@ export class DownloaderService {
     token: string,
     type: 'BUY' | 'SELL',
     outputDir: string
-  ): Promise<string | null> {
+  ): Promise<string[]> {
     const formatGdtDate = (d: Date, endOfDay: boolean) => {
       const dd = String(d.getDate()).padStart(2, '0');
       const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -352,9 +356,6 @@ export class DownloaderService {
     const startStr = formatGdtDate(startDate, false);
     const endStr = formatGdtDate(endDate, true);
 
-    // GDT export-excel uses a single endpoint (no sold/purchase distinction unlike query)
-    const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/export-excel?sort=tdlap:desc&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
-
     const headers = {
       Authorization: `Bearer ${token}`,
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -363,53 +364,68 @@ export class DownloaderService {
     };
 
     const dateLabel = `${startStr.replace(/[/:]/g, '-')}_to_${endStr.replace(/[/:]/g, '-')}`;
-    const fileName = `invoices_${type}_${dateLabel}.xlsx`;
-    const filePath = path.join(outputDir, fileName);
 
-    // Skip if already downloaded
-    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
-      console.log(`[DownloaderService] Excel report already exists: ${filePath}`);
-      return filePath;
-    }
+    const exportTasks = [
+      {
+        url: `https://hoadondientu.gdt.gov.vn/api/query/invoices/export-excel?sort=tdlap:desc&search=tdlap=ge=${startStr};tdlap=le=${endStr}`,
+        fileName: `invoices_${type}_${dateLabel}_standard.xlsx`
+      },
+      {
+        url: `https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/export-excel?sort=tdlap:desc&search=tdlap=ge=${startStr};tdlap=le=${endStr}`,
+        fileName: `invoices_${type}_${dateLabel}_sco.xlsx`
+      }
+    ];
 
-    try {
-      fs.mkdirSync(outputDir, { recursive: true });
+    const savedPaths: string[] = [];
+    fs.mkdirSync(outputDir, { recursive: true });
 
-      const response = await axios.get(url, {
-        headers,
-        responseType: 'arraybuffer',
-        timeout: 30000,
-        // Do not throw on non-200 so we can inspect the response body
-        validateStatus: () => true,
-      });
+    for (const task of exportTasks) {
+      const filePath = path.join(outputDir, task.fileName);
 
-      if (response.status === 200) {
-        fs.writeFileSync(filePath, response.data);
-        console.log(`[DownloaderService] Downloaded Excel report: ${filePath}`);
-        return filePath;
+      // Skip if already downloaded
+      if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+        console.log(`[DownloaderService] Excel report already exists: ${filePath}`);
+        savedPaths.push(filePath);
+        continue;
       }
 
-      // Log non-200 response from GDT
-      const responseBody = response.data ? Buffer.from(response.data).toString('utf-8').slice(0, 2000) : '(empty)';
-      console.error(`[DownloaderService] GDT responded with status ${response.status} for Excel report`);
-      console.error(`  URL: ${url}`);
-      console.error(`  Response body: ${responseBody}`);
-      return null;
-    } catch (error: any) {
-      if (error.response) {
-        // Axios error with response from GDT
-        const responseBody = error.response.data
-          ? (typeof error.response.data === 'string'
-              ? error.response.data.slice(0, 2000)
-              : JSON.stringify(error.response.data).slice(0, 2000))
-          : '(empty)';
-        console.error(`[DownloaderService] GDT error for Excel report: status ${error.response.status}`);
-        console.error(`  URL: ${url}`);
-        console.error(`  Response body: ${responseBody}`);
-      } else {
-        console.error(`[DownloaderService] Failed to download Excel report: ${error.message}`);
+      try {
+        const response = await axios.get(task.url, {
+          headers,
+          responseType: 'arraybuffer',
+          timeout: 30000,
+          // Do not throw on non-200 so we can inspect the response body
+          validateStatus: () => true,
+        });
+
+        if (response.status === 200) {
+          fs.writeFileSync(filePath, response.data);
+          console.log(`[DownloaderService] Downloaded Excel report: ${filePath}`);
+          savedPaths.push(filePath);
+        } else {
+          // Log non-200 response from GDT
+          const responseBody = response.data ? Buffer.from(response.data).toString('utf-8').slice(0, 2000) : '(empty)';
+          console.error(`[DownloaderService] GDT responded with status ${response.status} for Excel report`);
+          console.error(`  URL: ${task.url}`);
+          console.error(`  Response body: ${responseBody}`);
+        }
+      } catch (error: any) {
+        if (error.response) {
+          // Axios error with response from GDT
+          const responseBody = error.response.data
+            ? (typeof error.response.data === 'string'
+                ? error.response.data.slice(0, 2000)
+                : JSON.stringify(error.response.data).slice(0, 2000))
+            : '(empty)';
+          console.error(`[DownloaderService] GDT error for Excel report: status ${error.response.status}`);
+          console.error(`  URL: ${task.url}`);
+          console.error(`  Response body: ${responseBody}`);
+        } else {
+          console.error(`[DownloaderService] Failed to download Excel report from ${task.url}: ${error.message}`);
+        }
       }
-      return null;
     }
+
+    return savedPaths;
   }
 }

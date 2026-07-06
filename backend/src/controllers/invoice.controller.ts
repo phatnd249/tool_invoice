@@ -324,11 +324,13 @@ export class InvoiceController {
         console.log(`[InvoiceController] Downloading Excel reports for ${dateChunks.length} date chunk(s)...`);
         for (const chunk of dateChunks) {
           try {
-            const excelPath = await downloaderService.downloadExcelReport(
+            const excelPaths = await downloaderService.downloadExcelReport(
               chunk.start, chunk.end, activeToken, type, baseDir
             );
-            if (excelPath) {
-              console.log(`[InvoiceController] Excel report saved: ${path.basename(excelPath)}`);
+            if (excelPaths && excelPaths.length > 0) {
+              for (const p of excelPaths) {
+                console.log(`[InvoiceController] Excel report saved: ${path.basename(p)}`);
+              }
             }
           } catch (err: any) {
             console.warn(`[InvoiceController] Failed to download Excel report for chunk: ${err.message}`);
