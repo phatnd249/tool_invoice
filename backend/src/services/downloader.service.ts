@@ -428,4 +428,48 @@ export class DownloaderService {
 
     return savedPaths;
   }
+
+  /**
+   * Tải chi tiết hoá đơn (JSON) từ API detail để fallback build HTML
+   * khi không tải được file ZIP gốc.
+   */
+  public async downloadInvoiceDetail(
+    invoice: any,
+    token: string
+  ): Promise<any> {
+    const nbmst = invoice.nbmst;         // Seller tax code
+    const khmshdon = invoice.khmshdon;   // Invoice template symbol
+    const khhdon = invoice.khhdon;       // Invoice symbol
+    const shdon = invoice.shdon;         // Invoice number
+
+    if (!nbmst || shdon === undefined || !khmshdon || !khhdon) {
+      throw new Error(`Thiếu thông tin hoá đơn (nbmst/shdon/khmshdon/khhdon) để tải chi tiết.`);
+    }
+
+    const isSco = invoice._sourceApi === 'sco-query' || String(khhdon).toUpperCase().startsWith('M');
+    const apiPath = isSco ? 'sco-query' : 'query';
+    
+    const detailUrl = `https://hoadondientu.gdt.gov.vn/api/${apiPath}/invoices/detail?nbmst=${nbmst}&khhdon=${khhdon}&shdon=${shdon}&khmshdon=${khmshdon}`;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      Accept: 'application/json, text/plain, */*',
+    };
+
+    try {
+      const response = await axios.get(detailUrl, {
+        headers,
+        timeout: 15000,
+        validateStatus: () => true,
+      });
+
+      if (response.status === 200 && response.data) {
+        return response.data;
+      }
+      
+      throw new Error(`GDT trả về lỗi ${response.status} khi lấy detail.`);
+    } catch (error: any) {
+      throw new Error(`Lỗi gọi API detail: ${error.message}`);
+    }
+  }
 }

@@ -266,6 +266,64 @@ export default function InvoiceHistory() {
     }
   };
 
+  const downloadPdf = async (invoiceId: string) => {
+    try {
+      // 1. Fetch HTML
+      const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview?t=${Date.now()}`, {
+        responseType: 'text',
+      });
+      const htmlStr = response.data;
+
+      // 2. Tạo một iframe ẩn để browser render toàn bộ CSS và font của hoá đơn gốc
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'absolute';
+      iframe.style.width = '800px';
+      iframe.style.height = '1200px';
+      iframe.style.left = '-9999px';
+      iframe.style.top = '0';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(htmlStr);
+        doc.close();
+      }
+
+      // Đợi 500ms để CSS và Font (nếu có) được browser áp dụng hoàn tất
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 3. Import html2pdf
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+
+      const opt = {
+        margin:       10,
+        filename:     `invoice_${invoiceId.slice(0, 8)}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      // 4. Generate and save PDF from the iframe's body
+      if (doc && doc.body) {
+        // html2canvas only clones the target element (body). 
+        // We must move all styles from <head> to <body> so they are applied in the PDF.
+        const styles = doc.querySelectorAll('style, link[rel="stylesheet"]');
+        styles.forEach(style => doc.body.appendChild(style.cloneNode(true)));
+
+        await html2pdf().set(opt).from(doc.body).save();
+      }
+
+      // 5. Cleanup
+      document.body.removeChild(iframe);
+    } catch (err: any) {
+      console.error('Error downloading PDF:', err);
+      const msg = err.response?.data?.error || 'Không thể tải file PDF.';
+      alert(msg);
+    }
+  };
+
   const downloadFile = async (invoiceId: string, type: 'xml' | 'zip') => {
     try {
       const response = await axios.get(
@@ -297,7 +355,7 @@ export default function InvoiceHistory() {
     setPreviewLoading(true);
     setPreviewHtml(null);
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview`, {
+      const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview?t=${Date.now()}`, {
         responseType: 'text',
       });
       setPreviewHtml(response.data);
@@ -520,6 +578,23 @@ export default function InvoiceHistory() {
                               </span>
                             )}
                             {inv.zipPath ? (
+                              <button
+                                onClick={() => downloadPdf(inv.id)}
+                                className="text-rose-400 hover:text-rose-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
+                                title="Tải bản thể hiện (PDF)"
+                              >
+                                <FileText className="w-5 h-5" />
+                              </button>
+                            ) : (
+                              <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Không có bản thể hiện PDF">
+                                <FileText className="w-5 h-5 opacity-30" />
+                              </span>
+                            )}
+                            {inv.zipPath === 'VIRTUAL_HTML' ? (
+                              <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Chỉ có bản thể hiện HTML, không có file ZIP gốc">
+                                <FileArchive className="w-5 h-5 opacity-30" />
+                              </span>
+                            ) : inv.zipPath ? (
                               <button
                                 onClick={() => downloadFile(inv.id, 'zip')}
                                 className="text-amber-400 hover:text-amber-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"

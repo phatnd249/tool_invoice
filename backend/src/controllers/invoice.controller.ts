@@ -377,13 +377,17 @@ export class InvoiceController {
           }
 
           if (!zipPath) {
-            // Still save basic metadata so the invoice appears in the list
-            if (saveToDb) {
-              try {
-                await saveBasicInvoiceFromGdt(inv, type);
-              } catch (dbError: any) {
-                console.error(`[InvoiceController] Failed to save basic invoice ${inv.shdon} metadata:`, dbError.message);
+            try {
+              if (saveToDb) {
+                const savedInvoice = await saveBasicInvoiceFromGdt(inv, type);
+                await prisma.invoice.update({
+                  where: { id: savedInvoice.id },
+                  data: { zipPath: 'VIRTUAL_HTML' }
+                });
+                typeSuccessCount++;
               }
+            } catch (dbError: any) {
+              console.error(`[InvoiceController] Failed to save basic invoice ${inv.shdon} metadata:`, dbError.message);
             }
             return;
           }
@@ -870,6 +874,11 @@ export class InvoiceController {
         }
       }
 
+      if (invoice.zipPath === 'VIRTUAL_HTML') {
+        res.status(400).json({ error: 'Chỉ có bản thể hiện HTML, không có file ZIP gốc.' });
+        return;
+      }
+
       if (!fs.existsSync(invoice.zipPath)) {
         res.status(404).json({ error: 'ZIP file does not exist on disk' });
         return;
@@ -1007,7 +1016,56 @@ export class InvoiceController {
         }
       }
 
-      const html = await previewService.getPreviewHtml(id);
+      let html = await previewService.getPreviewHtml(id);
+
+      if (!html) {
+        const invoice = await prisma.invoice.findUnique({ where: { id } });
+        if (invoice && invoice.zipPath === 'VIRTUAL_HTML') {
+          // Find the company to get the token
+          let company = await prisma.company.findUnique({ where: { taxCode: invoice.sellerTaxCode } });
+          if (!company) company = await prisma.company.findUnique({ where: { taxCode: invoice.buyerTaxCode } });
+          
+          if (!company) {
+            res.status(404).json({ error: 'Không tìm thấy doanh nghiệp liên kết với hóa đơn này.' });
+            return;
+          }
+
+          let activeToken = company.token;
+          if (!activeToken || authService.isTokenExpired(activeToken)) {
+            if (company.loginMode === 'AUTO') {
+              const geminiSetting = await prisma.setting.findUnique({ where: { key: 'geminiApiKey' } });
+              const apiKey = geminiSetting?.value || process.env.GEMINI_API_KEY;
+              if (!apiKey) {
+                res.status(400).json({ error: 'Token đã hết hạn và chưa cấu hình Gemini API Key để gia hạn tự động.' });
+                return;
+              }
+              activeToken = await authService.loginAndGetToken(company.taxCode, company.lookupPassword, apiKey);
+              const tokenExpiredAt = authService.getTokenExpiration(activeToken);
+              await prisma.company.update({
+                where: { id: company.id },
+                data: { token: activeToken, tokenExpiredAt }
+              });
+            } else {
+              res.status(401).json({ error: `Phiên làm việc của doanh nghiệp ${company.name} đã hết hạn. Vui lòng đăng nhập lại thủ công.` });
+              return;
+            }
+          }
+
+          const invData = {
+            nbmst: invoice.sellerTaxCode,
+            khmshdon: invoice.templateSymbol,
+            khhdon: invoice.invoiceSymbol,
+            shdon: invoice.invoiceNumber
+          };
+          try {
+            const detailJson = await downloaderService.downloadInvoiceDetail(invData, activeToken);
+            html = previewService.buildHtmlFromJson(invoice.id, detailJson);
+          } catch (err: any) {
+            res.status(500).json({ error: 'Không thể lấy thông tin hóa đơn từ TCT.', details: err.message });
+            return;
+          }
+        }
+      }
 
       if (!html) {
         res.status(404).json({ error: 'Không tìm thấy file HTML preview cho hóa đơn này.' });
@@ -1015,6 +1073,9 @@ export class InvoiceController {
       }
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.send(html);
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to preview invoice', details: error.message });
@@ -1025,7 +1086,7 @@ export class InvoiceController {
 /**
  * Helper to save basic metadata retrieved from GDT query response when ZIP fails to download
  */
-async function saveBasicInvoiceFromGdt(inv: any, type: 'BUY' | 'SELL'): Promise<void> {
+async function saveBasicInvoiceFromGdt(inv: any, type: 'BUY' | 'SELL'): Promise<any> {
   const invoiceNumber = String(inv.shdon || '').trim();
   const sellerTaxCode = String(inv.nbmst || '').trim();
   const buyerTaxCode = String(inv.nmmst || inv.nmuamst || '').trim();
@@ -1077,17 +1138,18 @@ async function saveBasicInvoiceFromGdt(inv: any, type: 'BUY' | 'SELL'): Promise<
     },
   };
 
-  await prisma.$transaction(async (tx) => {
-    const existing = await tx.invoice.findUnique({ where: compositeKey });
-    if (existing) {
-      await tx.invoice.update({
-        where: { id: existing.id },
+  return await prisma.$transaction(async (tx) => {
+    let invoice = await tx.invoice.findUnique({ where: compositeKey });
+    if (invoice) {
+      invoice = await tx.invoice.update({
+        where: compositeKey,
         data: dataObj,
       });
     } else {
-      await tx.invoice.create({
+      invoice = await tx.invoice.create({
         data: dataObj,
       });
     }
+    return invoice;
   });
 }

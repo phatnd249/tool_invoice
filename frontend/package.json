@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "electron-is-dev": "^3.0.1",
+    "html2pdf.js": "^0.14.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
@@ -78,7 +79,9 @@
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -86,7 +89,9 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -94,7 +99,9 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
       ]
     }

@@ -2,6 +2,7 @@ import AdmZip from 'adm-zip';
 import * as fs from 'fs';
 import * as path from 'path';
 import prisma from '../utils/db.js';
+import { renderInvoiceTemplate } from '../templates/invoice-template.js';
 
 /**
  * Service xử lý preview hoá đơn (file HTML từ ZIP).
@@ -35,7 +36,13 @@ export class PreviewService {
    * @returns Nội dung HTML hoặc null nếu không tìm thấy
    */
   public async getPreviewHtml(invoiceId: string): Promise<string | null> {
-    // 1. Query invoice từ DB
+    // 1. Kiểm tra cache trước (vì nếu có HTML build từ JSON thì zipPath có thể bằng 'VIRTUAL_HTML')
+    const cachePath = path.join(this.cacheDir, `${invoiceId}.html`);
+    if (fs.existsSync(cachePath)) {
+      return fs.readFileSync(cachePath, 'utf-8');
+    }
+
+    // 2. Query invoice từ DB
     const invoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
     });
@@ -44,15 +51,14 @@ export class PreviewService {
       return null;
     }
 
-    // 2. Kiểm tra file ZIP có tồn tại trên disk không
-    if (!fs.existsSync(invoice.zipPath)) {
+    // Nếu zipPath là VIRTUAL_HTML mà không có file cache thì lỗi
+    if (invoice.zipPath === 'VIRTUAL_HTML') {
       return null;
     }
 
-    // 3. Kiểm tra cache
-    const cachePath = path.join(this.cacheDir, `${invoiceId}.html`);
-    if (fs.existsSync(cachePath)) {
-      return fs.readFileSync(cachePath, 'utf-8');
+    // 3. Kiểm tra file ZIP có tồn tại trên disk không
+    if (!fs.existsSync(invoice.zipPath)) {
+      return null;
     }
 
     // 4. Giải nén ZIP, tìm file HTML
@@ -70,6 +76,24 @@ export class PreviewService {
 
     return htmlContent;
   }
+
+  /**
+   * Sinh HTML từ dữ liệu JSON chi tiết của hoá đơn.
+   */
+  public buildHtmlFromJson(invoiceId: string, detail: any): string {
+    const htmlContent = renderInvoiceTemplate(detail);
+
+    // Lưu cache
+    const cachePath = path.join(this.cacheDir, `${invoiceId}.html`);
+    try {
+      fs.writeFileSync(cachePath, htmlContent, 'utf-8');
+    } catch (err: any) {
+      console.warn(`[PreviewService] Failed to write generated HTML to cache: ${err.message}`);
+    }
+
+    return htmlContent;
+  }
+
 
   /**
    * Giải nén file ZIP và tìm nội dung file HTML đầu tiên.
@@ -97,7 +121,42 @@ export class PreviewService {
         return null;
       }
 
-      return zip.readAsText(htmlEntry, 'utf8');
+      let htmlContent = zip.readAsText(htmlEntry, 'utf8');
+
+      // Inline assets (JS, CSS, Images) into HTML so the frontend can render it perfectly
+      entries.forEach(entry => {
+        if (entry === htmlEntry || entry.isDirectory) return;
+
+        const name = entry.entryName;
+        const ext = name.split('.').pop()?.toLowerCase();
+
+        // Prevent regex errors by escaping special characters in file names
+        const escapedName = name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+
+        if (ext === 'js' || ext === 'css' || ['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext || '')) {
+          const buffer = zip.readFile(entry);
+          if (buffer) {
+            const base64 = buffer.toString('base64');
+            let mimeType = 'application/octet-stream';
+            
+            if (ext === 'js') mimeType = 'text/javascript';
+            else if (ext === 'css') mimeType = 'text/css';
+            else if (ext === 'svg') mimeType = 'image/svg+xml';
+            else if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
+            else if (ext === 'png') mimeType = 'image/png';
+            else if (ext === 'gif') mimeType = 'image/gif';
+
+            const dataUri = `data:${mimeType};base64,${base64}`;
+
+            // Replace src="name", href="name", or url("name")
+            htmlContent = htmlContent.replace(new RegExp(`src=["']?\\/?${escapedName}["']?`, 'g'), `src="${dataUri}"`);
+            htmlContent = htmlContent.replace(new RegExp(`href=["']?\\/?${escapedName}["']?`, 'g'), `href="${dataUri}"`);
+            htmlContent = htmlContent.replace(new RegExp(`url\\(["']?\\/?${escapedName}["']?\\)`, 'g'), `url("${dataUri}")`);
+          }
+        }
+      });
+
+      return htmlContent;
     } catch (error: any) {
       console.error(`[PreviewService] Error extracting HTML from ZIP: ${error.message}`);
       return null;
