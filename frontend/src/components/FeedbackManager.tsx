@@ -56,20 +56,20 @@ export default function FeedbackManager() {
   return (
     <div className="space-y-6">
       {/* Header Info */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card p-6 rounded-2xl border border-border shadow-xl">
         <div className="flex items-center space-x-3">
-          <div className="p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 text-indigo-400">
+          <div className="p-3 bg-accent-hover-default/10 rounded-2xl border border-accent-default/20 text-accent-default">
             <MessageSquare className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-100">Ý Kiến Đóng Góp</h1>
-            <p className="text-slate-400 text-xs mt-0.5">Xem đóng góp và phản hồi từ các thành viên trong hệ thống</p>
+            <h1 className="text-xl font-bold text-text-primary">Ý Kiến Đóng Góp</h1>
+            <p className="text-text-secondary text-xs mt-0.5">Xem đóng góp và phản hồi từ các thành viên trong hệ thống</p>
           </div>
         </div>
         <button
           onClick={fetchFeedbacks}
           disabled={loading}
-          className="bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-750 px-4 py-2 rounded-xl transition duration-150 flex items-center space-x-2 text-xs cursor-pointer disabled:opacity-50"
+          className="bg-bg-primary hover:bg-bg-tertiary text-text-secondary hover:text-text-primary border border-slate-750 px-4 py-2 rounded-xl transition duration-150 flex items-center space-x-2 text-xs cursor-pointer disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Làm Mới</span>
@@ -77,13 +77,13 @@ export default function FeedbackManager() {
       </div>
 
       {/* Tabs list */}
-      <div className="flex space-x-2 border-b border-slate-800 pb-px">
+      <div className="flex space-x-2 border-b border-border pb-px">
         <button
           onClick={() => setActiveSubTab('PENDING')}
           className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all duration-200 cursor-pointer flex items-center space-x-1.5 ${
             activeSubTab === 'PENDING'
-              ? 'border-indigo-500 text-slate-100 font-bold'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-accent-default text-text-primary font-bold'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
           }`}
         >
           <Clock className="w-4 h-4" />
@@ -93,8 +93,8 @@ export default function FeedbackManager() {
           onClick={() => setActiveSubTab('RESOLVED')}
           className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all duration-200 cursor-pointer flex items-center space-x-1.5 ${
             activeSubTab === 'RESOLVED'
-              ? 'border-indigo-500 text-slate-100 font-bold'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-accent-default text-text-primary font-bold'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
           }`}
         >
           <CheckCircle2 className="w-4 h-4" />
@@ -104,8 +104,8 @@ export default function FeedbackManager() {
           onClick={() => setActiveSubTab('REJECTED')}
           className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all duration-200 cursor-pointer flex items-center space-x-1.5 ${
             activeSubTab === 'REJECTED'
-              ? 'border-indigo-500 text-slate-100 font-bold'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-accent-default text-text-primary font-bold'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
           }`}
         >
           <XCircle className="w-4 h-4" />
@@ -114,42 +114,42 @@ export default function FeedbackManager() {
       </div>
 
       {/* Feedbacks Grid */}
-      <div className="bg-slate-950 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+      <div className="bg-card rounded-2xl border border-border shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/50 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <tr className="border-b border-border bg-bg-primary/50 text-xs font-semibold text-text-secondary uppercase tracking-wider">
                 <th className="px-6 py-4">Người góp ý</th>
                 <th className="px-6 py-4">Thời gian</th>
                 <th className="px-6 py-4">Nội dung góp ý</th>
                 {activeSubTab === 'PENDING' && <th className="px-6 py-4 text-center">Xác nhận</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-850 text-slate-300">
+            <tbody className="divide-y divide-border text-text-secondary">
               {loading && feedbacks.length === 0 ? (
                 <tr>
-                  <td colSpan={activeSubTab === 'PENDING' ? 4 : 3} className="text-center py-12 text-slate-500">
+                  <td colSpan={activeSubTab === 'PENDING' ? 4 : 3} className="text-center py-12 text-text-muted">
                     Đang tải danh sách góp ý...
                   </td>
                 </tr>
               ) : filteredFeedbacks.length === 0 ? (
                 <tr>
-                  <td colSpan={activeSubTab === 'PENDING' ? 4 : 3} className="text-center py-12 text-slate-500">
+                  <td colSpan={activeSubTab === 'PENDING' ? 4 : 3} className="text-center py-12 text-text-muted">
                     Không có góp ý nào trong mục này.
                   </td>
                 </tr>
               ) : (
                 filteredFeedbacks.map((fb) => (
-                  <tr key={fb.id} className="hover:bg-slate-900/20 transition-all">
-                    <td className="px-6 py-4 font-semibold text-slate-200">
-                      <span className="bg-slate-900 border border-slate-850 px-2.5 py-1 rounded-lg text-xs">
+                  <tr key={fb.id} className="hover:bg-bg-primary/20 transition-all">
+                    <td className="px-6 py-4 font-semibold text-text-primary">
+                      <span className="bg-bg-primary border border-border px-2.5 py-1 rounded-lg text-xs">
                         {fb.user.username}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-xs text-slate-450">
+                    <td className="px-6 py-4 text-xs text-text-secondary">
                       {new Date(fb.createdAt).toLocaleString('vi-VN')}
                     </td>
-                    <td className="px-6 py-4 text-slate-300 leading-relaxed break-words max-w-lg">
+                    <td className="px-6 py-4 text-text-secondary leading-relaxed break-words max-w-lg">
                       {fb.content}
                     </td>
                     {activeSubTab === 'PENDING' && (
@@ -158,7 +158,7 @@ export default function FeedbackManager() {
                           <button
                             onClick={() => handleUpdateStatus(fb.id, 'RESOLVED')}
                             disabled={updatingId === fb.id}
-                            className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 rounded-xl transition duration-150 cursor-pointer disabled:opacity-50"
+                            className="p-1.5 bg-success-light hover:bg-success-default text-success-default hover:text-text-primary border border-success-default/20 rounded-xl transition duration-150 cursor-pointer disabled:opacity-50"
                             title="Xác nhận Đã giải quyết"
                           >
                             <Check className="w-4 h-4" />
@@ -166,7 +166,7 @@ export default function FeedbackManager() {
                           <button
                             onClick={() => handleUpdateStatus(fb.id, 'REJECTED')}
                             disabled={updatingId === fb.id}
-                            className="p-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-450 hover:text-white border border-rose-500/20 rounded-xl transition duration-150 cursor-pointer disabled:opacity-50"
+                            className="p-1.5 bg-danger-light hover:bg-danger-default text-danger-default hover:text-text-primary border border-danger-default/20 rounded-xl transition duration-150 cursor-pointer disabled:opacity-50"
                             title="Bỏ qua góp ý"
                           >
                             <X className="w-4 h-4" />

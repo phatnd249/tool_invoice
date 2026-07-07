@@ -128,19 +128,19 @@ export default function InvoiceDownloader() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Configuration Form Card */}
-      <div className="lg:col-span-2 bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl space-y-6">
-        <h2 className="text-lg font-semibold text-indigo-400 flex items-center">
+      <div className="lg:col-span-2 bg-card p-6 rounded-2xl border border-border shadow-xl space-y-6">
+        <h2 className="text-lg font-semibold text-accent-default flex items-center">
           <Sliders className="w-5 h-5 mr-2" /> Tham Số Tải Hoá Đơn
         </h2>
         <form onSubmit={handleDownload} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Doanh Nghiệp (MST)</label>
+            <label className="block text-xs font-semibold text-text-secondary mb-1">Doanh Nghiệp (MST)</label>
             <div className="relative">
               <select
                 value={selectedCompanyId}
                 onChange={(e) => setSelectedCompanyId(e.target.value)}
                 disabled={companiesLoading || companies.length === 0}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer disabled:opacity-50"
+                className="w-full bg-input border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
               >
                 {companies.length === 0 ? (
                   <option value="">(Chưa cấu hình doanh nghiệp nào - Vui lòng vào Cấu Hình)</option>
@@ -157,31 +157,31 @@ export default function InvoiceDownloader() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">Từ ngày</label>
+              <label className="block text-xs font-semibold text-text-secondary mb-1">Từ ngày</label>
               <input
                 type="date"
                 required
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-input border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">Đến ngày</label>
+              <label className="block text-xs font-semibold text-text-secondary mb-1">Đến ngày</label>
               <input
                 type="date"
                 required
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-input border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">Loại hoá đơn</label>
+              <label className="block text-xs font-semibold text-text-secondary mb-1">Loại hoá đơn</label>
               <select
                 value={invoiceType}
                 onChange={(e) => setInvoiceType(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-input border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
               >
                 <option value="SELL">Hóa đơn Bán ra</option>
                 <option value="BUY">Hóa đơn Mua vào</option>
@@ -193,7 +193,7 @@ export default function InvoiceDownloader() {
           <button
             type="submit"
             disabled={loading || companies.length === 0}
-            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-indigo-500/20 flex items-center justify-center space-x-2 cursor-pointer"
+            className="w-full bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-accent-default/20 flex items-center justify-center space-x-2 cursor-pointer"
           >
             {loading ? (
               <span className="flex items-center space-x-2">
@@ -214,22 +214,22 @@ export default function InvoiceDownloader() {
       </div>
 
       {/* Log Console Card */}
-      <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col h-[420px] lg:h-auto">
+      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl flex flex-col h-[420px] lg:h-auto">
         <div className="flex items-center justify-between mb-3 shrink-0">
-          <h2 className="text-lg font-semibold text-cyan-400 flex items-center">
+          <h2 className="text-lg font-semibold text-log-cyan flex items-center">
             <Terminal className="w-5 h-5 mr-2" /> Tiến Trình Tải
           </h2>
-          <button onClick={clearLogs} className="text-xs text-slate-500 hover:text-slate-350 flex items-center space-x-1 cursor-pointer">
+          <button onClick={clearLogs} className="text-xs text-text-muted hover:text-text-secondary flex items-center space-x-1 cursor-pointer">
             <Trash2 className="w-3.5 h-3.5" />
             <span>Xóa log</span>
           </button>
         </div>
-        <div className="flex-1 bg-black border border-slate-900 rounded-xl p-4 font-mono text-xs overflow-y-auto space-y-2 select-text">
+        <div className="flex-1 bg-black border border-border rounded-xl p-4 font-mono text-xs overflow-y-auto space-y-2 select-text">
           {logs.map((log, idx) => {
-            let color = 'text-emerald-400';
+            let color = 'text-success-default';
             if (log.type === 'error') color = 'text-red-400';
             if (log.type === 'warning') color = 'text-yellow-400';
-            if (log.type === 'system') color = 'text-slate-500';
+            if (log.type === 'system') color = 'text-text-muted';
             return (
               <div key={idx} className={`leading-relaxed ${color}`}>
                 [{log.time}] {log.message}

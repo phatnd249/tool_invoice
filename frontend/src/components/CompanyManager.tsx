@@ -274,13 +274,13 @@ export default function CompanyManager() {
 
   // Check token status expiration
   const getTokenStatus = (expiredAtStr?: string | null) => {
-    if (!expiredAtStr) return { label: 'Chưa xác thực', color: 'bg-rose-500/10 border-rose-500/30 text-rose-400' };
+    if (!expiredAtStr) return { label: 'Chưa xác thực', color: 'bg-danger-light border-danger-default/30 text-danger-default' };
     
     const expiredAt = new Date(expiredAtStr);
     const now = new Date();
     
     if (expiredAt < now) {
-      return { label: 'Hết hiệu lực', color: 'bg-rose-500/10 border-rose-500/30 text-rose-400' };
+      return { label: 'Hết hiệu lực', color: 'bg-danger-light border-danger-default/30 text-danger-default' };
     }
 
     // Format local time string
@@ -292,15 +292,15 @@ export default function CompanyManager() {
       minute: '2-digit',
     });
     
-    return { label: `Hiệu lực đến: ${timeStr}`, color: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' };
+    return { label: `Hiệu lực đến: ${timeStr}`, color: 'bg-success-light border-success-default/30 text-success-default' };
   };
 
   return (
     <div className="space-y-8">
       {/* Companies Table List (Full Width) */}
-      <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col">
+      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl flex flex-col">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <h2 className="text-lg font-semibold text-indigo-400 flex items-center">
+          <h2 className="text-lg font-semibold text-accent-default flex items-center">
             <Building2 className="w-5 h-5 mr-2" />
             Danh Sách ({filteredCompanies.length}/{companies.length})
           </h2>
@@ -313,7 +313,7 @@ export default function CompanyManager() {
                 fetchNewCaptcha();
               }
             }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-xl transition duration-150 flex items-center justify-center space-x-2 text-xs shrink-0 cursor-pointer shadow-lg shadow-indigo-600/20"
+            className="bg-accent-default hover:bg-accent-hover-default text-white font-semibold py-2 px-4 rounded-xl transition duration-150 flex items-center justify-center space-x-2 text-xs shrink-0 cursor-pointer shadow-lg shadow-accent-default/20"
           >
             <Plus className="w-4 h-4" />
             <span>Thêm Doanh Nghiệp</span>
@@ -323,19 +323,19 @@ export default function CompanyManager() {
         {/* Search & Filter Bar */}
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <input
               type="text"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               placeholder="Tìm theo MST hoặc tên..."
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-bg-primary border border-border rounded-xl pl-10 pr-4 py-2 text-xs text-text-primary placeholder-text-muted focus:outline-none focus:border-accent"
             />
           </div>
           <select
             value={filterLoginMode}
             onChange={(e) => setFilterLoginMode(e.target.value as any)}
-            className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            className="bg-bg-primary border border-border rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent cursor-pointer"
           >
             <option value="ALL">Tất cả chế độ</option>
             <option value="AUTO">Tự động</option>
@@ -344,7 +344,7 @@ export default function CompanyManager() {
           <select
             value={filterTokenStatus}
             onChange={(e) => setFilterTokenStatus(e.target.value as any)}
-            className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            className="bg-bg-primary border border-border rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent cursor-pointer"
           >
             <option value="ALL">Tất cả token</option>
             <option value="VALID">Còn hiệu lực</option>
@@ -354,7 +354,7 @@ export default function CompanyManager() {
 
         <div className="flex-1 overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-slate-900/60 border-b border-slate-800 text-slate-400 font-semibold uppercase text-xxs tracking-wider">
+              <thead className="bg-bg-primary/60 border-b border-border text-text-secondary font-semibold uppercase text-xxs tracking-wider">
                 <tr>
                   <th className="p-3">Mã Số Thuế</th>
                   <th className="p-3">Tên Doanh Nghiệp</th>
@@ -365,22 +365,22 @@ export default function CompanyManager() {
                   <th className="p-3 text-center">Thao Tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-850 text-slate-300">
+              <tbody className="divide-y divide-border text-text-secondary">
                 {companiesLoading && companies.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-500">
+                    <td colSpan={7} className="p-8 text-center text-text-muted">
                       Đang tải danh sách...
                     </td>
                   </tr>
                 ) : companies.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-500">
+                    <td colSpan={7} className="p-8 text-center text-text-muted">
                       Chưa có doanh nghiệp nào được lưu cấu hình.
                     </td>
                   </tr>
                 ) : filteredCompanies.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-500">
+                    <td colSpan={7} className="p-8 text-center text-text-muted">
                       Không tìm thấy doanh nghiệp phù hợp với bộ lọc.
                     </td>
                   </tr>
@@ -394,23 +394,23 @@ export default function CompanyManager() {
                     });
 
                     return (
-                      <tr key={c.id} className="hover:bg-slate-900/30 transition">
-                        <td className="p-3 font-semibold text-slate-100 font-mono select-all">
+                      <tr key={c.id} className="hover:bg-bg-primary/30 transition">
+                        <td className="p-3 font-semibold text-text-primary font-mono select-all">
                           {c.taxCode}
                         </td>
-                        <td className="p-3 font-medium text-slate-300 max-w-[200px] truncate" title={c.name}>
+                        <td className="p-3 font-medium text-text-secondary max-w-[200px] truncate" title={c.name}>
                           {c.name}
                         </td>
                         <td className="p-3">
                           <span className={`px-2 py-0.5 rounded text-xxs font-medium ${
                             c.loginMode === 'AUTO' 
-                              ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' 
+                              ? 'bg-accent-hover-default/10 text-accent-default border border-accent-default/20' 
                               : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                           }`}>
                             {c.loginMode === 'AUTO' ? 'Tự động' : 'Thủ công'}
                           </span>
                         </td>
-                        <td className="p-3 font-semibold text-indigo-400 font-mono">
+                        <td className="p-3 font-semibold text-accent-default font-mono">
                           {c.downloadCount || 0}
                         </td>
                         <td className="p-3">
@@ -418,7 +418,7 @@ export default function CompanyManager() {
                             {tokenStatus.label}
                           </span>
                         </td>
-                        <td className="p-3 text-slate-400">{cDate}</td>
+                        <td className="p-3 text-text-secondary">{cDate}</td>
                         <td className="p-3">
                           <div className="flex items-center justify-center space-x-2">
                             
@@ -428,9 +428,9 @@ export default function CompanyManager() {
                                 onClick={() => handleAutoRefreshToken(c.id)}
                                 disabled={refreshingMap[c.id]}
                                 title="Tự động gia hạn token"
-                                className="p-1.5 bg-slate-900 hover:bg-indigo-600/20 border border-slate-700 hover:border-indigo-500/40 text-slate-400 hover:text-indigo-300 rounded-lg cursor-pointer transition disabled:opacity-50"
+                                className="p-1.5 bg-bg-primary hover:bg-accent-default/20 border border-border hover:border-accent-default/40 text-text-secondary hover:text-accent-default rounded-lg cursor-pointer transition disabled:opacity-50"
                               >
-                                <RefreshCw className={`w-3.5 h-3.5 ${refreshingMap[c.id] ? 'animate-spin text-indigo-400' : ''}`} />
+                                <RefreshCw className={`w-3.5 h-3.5 ${refreshingMap[c.id] ? 'animate-spin text-accent-default' : ''}`} />
                               </button>
                             ) : (
                               <button
@@ -440,7 +440,7 @@ export default function CompanyManager() {
                                   fetchReloginCaptcha();
                                 }}
                                 title="Đăng nhập thủ công lại"
-                                className="p-1.5 bg-slate-900 hover:bg-amber-600/20 border border-slate-700 hover:border-amber-500/40 text-slate-400 hover:text-amber-300 rounded-lg cursor-pointer transition"
+                                className="p-1.5 bg-bg-primary hover:bg-amber-600/20 border border-border hover:border-amber-500/40 text-text-secondary hover:text-amber-300 rounded-lg cursor-pointer transition"
                               >
                                 <Lock className="w-3.5 h-3.5" />
                               </button>
@@ -456,7 +456,7 @@ export default function CompanyManager() {
                                 setEditError('');
                               }}
                               title="Chỉnh sửa thông tin"
-                              className="p-1.5 bg-slate-900 hover:bg-emerald-600/20 border border-slate-700 hover:border-emerald-500/40 text-slate-400 hover:text-emerald-300 rounded-lg cursor-pointer transition"
+                              className="p-1.5 bg-bg-primary hover:bg-success-default/20 border border-border hover:border-success-default/40 text-text-secondary hover:text-success-default rounded-lg cursor-pointer transition"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -465,7 +465,7 @@ export default function CompanyManager() {
                             <button
                               onClick={() => handleDeleteCompany(c.id, c.name)}
                               title="Xóa cấu hình doanh nghiệp"
-                              className="p-1.5 bg-slate-900 hover:bg-rose-600/20 border border-slate-700 hover:border-rose-500/40 text-slate-400 hover:text-rose-300 rounded-lg cursor-pointer transition"
+                              className="p-1.5 bg-bg-primary hover:bg-danger-default/20 border border-border hover:border-danger-default/40 text-text-secondary hover:text-danger-default rounded-lg cursor-pointer transition"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -484,22 +484,22 @@ export default function CompanyManager() {
       {/* MODAL: EDIT COMPANY */}
       {editingCompany && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 relative space-y-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 relative space-y-4">
             <button 
               onClick={() => setEditingCompany(null)}
-              className="absolute right-4 top-4 text-slate-500 hover:text-white"
+              className="absolute right-4 top-4 text-text-muted hover:text-text-primary"
             >
               <X className="w-5 h-5" />
             </button>
-            <h3 className="text-md font-bold text-slate-100 flex items-center">
-              <Edit2 className="w-4 h-4 mr-2 text-indigo-400" /> Chỉnh Sửa Thông Tin Doanh Nghiệp
+            <h3 className="text-md font-bold text-text-primary flex items-center">
+              <Edit2 className="w-4 h-4 mr-2 text-accent-default" /> Chỉnh Sửa Thông Tin Doanh Nghiệp
             </h3>
-            <p className="text-xxs text-slate-400">
-              MST: <span className="font-mono text-indigo-300 select-all">{editingCompany.taxCode}</span>
+            <p className="text-xxs text-text-secondary">
+              MST: <span className="font-mono text-accent-default select-all">{editingCompany.taxCode}</span>
             </p>
 
             {editError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl text-xs flex items-center space-x-2">
+              <div className="p-3 bg-danger-light border border-danger-default/20 text-danger-default rounded-xl text-xs flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{editError}</span>
               </div>
@@ -507,37 +507,37 @@ export default function CompanyManager() {
 
             <form onSubmit={handleUpdateCompany} className="space-y-4 pt-2">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Tên Gọi Nhớ</label>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Tên Gọi Nhớ</label>
                 <input
                   type="text"
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Mật Khẩu Tra Cứu</label>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Mật Khẩu Tra Cứu</label>
                 <input
                   type="password"
                   required
                   value={editPassword}
                   onChange={(e) => setEditPassword(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Chế Độ Đăng Nhập</label>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Chế Độ Đăng Nhập</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setEditLoginMode('AUTO')}
                     className={`py-2 px-3 rounded-xl border text-xs font-medium transition cursor-pointer ${
                       editLoginMode === 'AUTO'
-                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                        ? 'bg-accent-default/20 border-accent-default text-accent-default'
+                        : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
                     }`}
                   >
                     Tự động
@@ -547,8 +547,8 @@ export default function CompanyManager() {
                     onClick={() => setEditLoginMode('MANUAL')}
                     className={`py-2 px-3 rounded-xl border text-xs font-medium transition cursor-pointer ${
                       editLoginMode === 'MANUAL'
-                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                        ? 'bg-accent-default/20 border-accent-default text-accent-default'
+                        : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
                     }`}
                   >
                     Thủ công
@@ -560,14 +560,14 @@ export default function CompanyManager() {
                 <button
                   type="button"
                   onClick={() => setEditingCompany(null)}
-                  className="flex-1 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-400 hover:text-white py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
+                  className="flex-1 bg-bg-primary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={editLoading}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-750 disabled:opacity-50 text-white py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
+                  className="flex-1 bg-accent-default hover:bg-accent-hover-default disabled:opacity-50 text-white py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   {editLoading ? 'Đang cập nhật...' : 'Cập Nhật'}
                 </button>
@@ -580,22 +580,22 @@ export default function CompanyManager() {
       {/* MODAL: RELOGIN MANUAL CAPTCHA */}
       {reloginCompany && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 relative space-y-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 relative space-y-4">
             <button 
               onClick={() => setReloginCompany(null)}
-              className="absolute right-4 top-4 text-slate-500 hover:text-white"
+              className="absolute right-4 top-4 text-text-muted hover:text-text-primary"
             >
               <X className="w-5 h-5" />
             </button>
-            <h3 className="text-md font-bold text-slate-100 flex items-center">
+            <h3 className="text-md font-bold text-text-primary flex items-center">
               <Lock className="w-4 h-4 mr-2 text-amber-400" /> Đăng Nhập Lại Doanh Nghiệp
             </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
+            <p className="text-xs text-text-secondary leading-relaxed">
               Bạn đang thực hiện đăng nhập thủ công để cập nhật lại phiên (token) cho doanh nghiệp **{reloginCompany.name} ({reloginCompany.taxCode})**.
             </p>
 
             {reloginError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl text-xs flex items-center space-x-2">
+              <div className="p-3 bg-danger-light border border-danger-default/20 text-danger-default rounded-xl text-xs flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span className="break-all">{reloginError}</span>
               </div>
@@ -603,11 +603,11 @@ export default function CompanyManager() {
 
             <form onSubmit={handleReloginManualSubmit} className="space-y-4 pt-2">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Giải Captcha Tổng cục Thuế</label>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Giải Captcha Tổng cục Thuế</label>
                 <div className="flex items-center space-x-2">
                   <div className="h-10 bg-white rounded-lg flex items-center justify-center p-1 flex-1 relative overflow-hidden">
                     {reloginCaptchaLoading ? (
-                      <RefreshCw className="w-4 h-4 text-indigo-600 animate-spin" />
+                      <RefreshCw className="w-4 h-4 text-accent-default animate-spin" />
                     ) : (
                       <div 
                         className="w-full h-full flex items-center justify-center svg-captcha-wrapper"
@@ -619,7 +619,7 @@ export default function CompanyManager() {
                     type="button"
                     onClick={fetchReloginCaptcha}
                     disabled={reloginCaptchaLoading}
-                    className="h-10 w-10 bg-slate-900 hover:bg-slate-850 border border-slate-700 rounded-lg flex items-center justify-center text-slate-400 hover:text-white transition disabled:opacity-50 cursor-pointer"
+                    className="h-10 w-10 bg-bg-primary hover:bg-bg-tertiary border border-border rounded-lg flex items-center justify-center text-text-secondary hover:text-text-primary transition disabled:opacity-50 cursor-pointer"
                   >
                     <RefreshCw className={`w-4 h-4 ${reloginCaptchaLoading ? 'animate-spin' : ''}`} />
                   </button>
@@ -627,7 +627,7 @@ export default function CompanyManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Mã xác thực Captcha</label>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Mã xác thực Captcha</label>
                 <input
                   type="text"
                   required
@@ -635,7 +635,7 @@ export default function CompanyManager() {
                   value={reloginCaptchaValue}
                   onChange={(e) => setReloginCaptchaValue(e.target.value)}
                   placeholder="Nhập 6 ký tự captcha..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-center text-sm font-semibold tracking-widest uppercase focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2 text-center text-sm font-semibold tracking-widest uppercase focus:outline-none focus:border-accent"
                 />
               </div>
 
@@ -643,14 +643,14 @@ export default function CompanyManager() {
                 <button
                   type="button"
                   onClick={() => setReloginCompany(null)}
-                  className="flex-1 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-400 hover:text-white py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
+                  className="flex-1 bg-bg-primary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   Đóng
                 </button>
                 <button
                   type="submit"
                   disabled={reloginLoading}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-750 disabled:opacity-50 text-white py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
+                  className="flex-1 bg-accent-default hover:bg-accent-hover-default disabled:opacity-50 text-white py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   {reloginLoading ? 'Đang kết nối...' : 'Xác thực'}
                 </button>
@@ -663,29 +663,29 @@ export default function CompanyManager() {
       {/* MODAL: ADD COMPANY */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 relative space-y-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 relative space-y-4">
             <button 
               onClick={() => setIsAddModalOpen(false)}
-              className="absolute right-4 top-4 text-slate-500 hover:text-white"
+              className="absolute right-4 top-4 text-text-muted hover:text-text-primary"
             >
               <X className="w-5 h-5" />
             </button>
-            <h3 className="text-md font-bold text-slate-100 flex items-center">
-              <Building2 className="w-5 h-5 mr-2 text-indigo-400" /> Thêm Doanh Nghiệp Mới
+            <h3 className="text-md font-bold text-text-primary flex items-center">
+              <Building2 className="w-5 h-5 mr-2 text-accent-default" /> Thêm Doanh Nghiệp Mới
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-text-muted">
               Kết nối và lấy token kiểm thử lần đầu từ hoadondientu.gdt.gov.vn
             </p>
 
             {addError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl text-xs flex items-center space-x-2">
+              <div className="p-3.5 bg-danger-light border border-danger-default/20 text-danger-default rounded-xl text-xs flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span className="break-all">{addError}</span>
               </div>
             )}
 
             {addSuccess && (
-              <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-xl text-xs flex items-center space-x-2">
+              <div className="p-3.5 bg-success-light border border-success-default/20 text-success-default rounded-xl text-xs flex items-center space-x-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>{addSuccess}</span>
               </div>
@@ -693,19 +693,19 @@ export default function CompanyManager() {
 
             <form onSubmit={handleAddCompany} className="space-y-4 pt-2">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Mã Số Thuế (MST)</label>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Mã Số Thuế (MST)</label>
                 <input
                   type="text"
                   required
                   value={newTaxCode}
                   onChange={(e) => setNewTaxCode(e.target.value)}
                   placeholder="Nhập mã số thuế..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Mật khẩu tra cứu</label>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Mật khẩu tra cứu</label>
                 <div className="relative">
                   <input
                     type={showAddPassword ? 'text' : 'password'}
@@ -713,12 +713,12 @@ export default function CompanyManager() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Mật khẩu trang hoadondientu..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-4 pr-10 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-bg-primary border border-border rounded-xl pl-4 pr-10 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
                   />
                   <button
                     type="button"
                     onClick={() => setShowAddPassword(!showAddPassword)}
-                    className="absolute right-3 top-3 text-slate-500 hover:text-white"
+                    className="absolute right-3 top-3 text-text-muted hover:text-text-primary"
                   >
                     {showAddPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -726,15 +726,15 @@ export default function CompanyManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Chế độ đăng nhập</label>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Chế độ đăng nhập</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setNewLoginMode('AUTO')}
                     className={`py-2 px-3 rounded-xl border text-xs font-medium transition cursor-pointer ${
                       newLoginMode === 'AUTO'
-                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                        ? 'bg-accent-default/20 border-accent-default text-accent-default'
+                        : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
                     }`}
                   >
                     Tự động (Gemini)
@@ -744,8 +744,8 @@ export default function CompanyManager() {
                     onClick={() => setNewLoginMode('MANUAL')}
                     className={`py-2 px-3 rounded-xl border text-xs font-medium transition cursor-pointer ${
                       newLoginMode === 'MANUAL'
-                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                        ? 'bg-accent-default/20 border-accent-default text-accent-default'
+                        : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
                     }`}
                   >
                     Thủ công
@@ -754,12 +754,12 @@ export default function CompanyManager() {
               </div>
 
               {newLoginMode === 'MANUAL' && (
-                <div className="p-4 bg-slate-900/60 rounded-2xl border border-slate-800 space-y-3">
-                  <label className="block text-xs font-semibold text-slate-400">Xác thực mã Captcha GDT</label>
+                <div className="p-4 bg-bg-primary/60 rounded-2xl border border-border space-y-3">
+                  <label className="block text-xs font-semibold text-text-secondary">Xác thực mã Captcha GDT</label>
                   <div className="flex items-center space-x-2">
                     <div className="h-10 bg-white rounded-lg flex items-center justify-center p-1 flex-1 relative overflow-hidden">
                       {newCaptchaLoading ? (
-                        <RefreshCw className="w-4 h-4 text-indigo-600 animate-spin" />
+                        <RefreshCw className="w-4 h-4 text-accent-default animate-spin" />
                       ) : (
                         <div 
                           className="w-full h-full flex items-center justify-center svg-captcha-wrapper"
@@ -771,7 +771,7 @@ export default function CompanyManager() {
                       type="button"
                       onClick={fetchNewCaptcha}
                       disabled={newCaptchaLoading}
-                      className="h-10 w-10 bg-slate-900 hover:bg-slate-850 border border-slate-700 rounded-lg flex items-center justify-center text-slate-400 hover:text-white transition disabled:opacity-50 cursor-pointer"
+                      className="h-10 w-10 bg-bg-primary hover:bg-bg-tertiary border border-border rounded-lg flex items-center justify-center text-text-secondary hover:text-text-primary transition disabled:opacity-50 cursor-pointer"
                     >
                       <RefreshCw className={`w-4 h-4 ${newCaptchaLoading ? 'animate-spin' : ''}`} />
                     </button>
@@ -783,7 +783,7 @@ export default function CompanyManager() {
                     value={newCaptchaValue}
                     onChange={(e) => setNewCaptchaValue(e.target.value)}
                     placeholder="Nhập mã captcha..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-center text-xs font-semibold tracking-widest uppercase focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2 text-center text-xs font-semibold tracking-widest uppercase focus:outline-none focus:border-accent"
                   />
                 </div>
               )}
@@ -792,14 +792,14 @@ export default function CompanyManager() {
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="flex-1 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-400 hover:text-white py-2.5 px-4 rounded-xl text-xs font-semibold cursor-pointer"
+                  className="flex-1 bg-bg-primary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary py-2.5 px-4 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={addLoading}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-750 disabled:opacity-50 text-white py-2.5 px-4 rounded-xl text-xs font-semibold cursor-pointer"
+                  className="flex-1 bg-accent-default hover:bg-accent-hover-default disabled:opacity-50 text-white py-2.5 px-4 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   {addLoading ? 'Đang kết nối...' : 'Lưu & Kết Nối'}
                 </button>

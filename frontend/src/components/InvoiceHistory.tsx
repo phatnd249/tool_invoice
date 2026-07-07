@@ -67,19 +67,19 @@ function Pagination({
   onSizeChange: (s: number) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 bg-slate-950 border-t border-slate-800 text-sm">
-      <div className="flex items-center gap-2 text-slate-400">
+    <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 bg-card border-t border-border text-sm">
+      <div className="flex items-center gap-2 text-text-secondary">
         <span className="hidden sm:inline">Tổng:</span>
-        <span className="font-semibold text-slate-200">{total}</span>
+        <span className="font-semibold text-text-primary">{total}</span>
         <span className="hidden sm:inline">records</span>
       </div>
 
       <div className="flex items-center gap-3">
-        <span className="text-slate-500 text-xs">Số dòng:</span>
+        <span className="text-text-muted text-xs">Số dòng:</span>
         <select
           value={size}
           onChange={(e) => onSizeChange(Number(e.target.value))}
-          className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+          className="bg-bg-primary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent cursor-pointer"
         >
           {PAGE_SIZES.map((s) => (
             <option key={s} value={s}>{s}</option>
@@ -91,17 +91,17 @@ function Pagination({
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 0}
-          className="p-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-950 disabled:text-slate-700 text-slate-300 rounded-lg border border-slate-800 transition cursor-pointer disabled:cursor-not-allowed"
+          className="p-1.5 bg-bg-primary hover:bg-bg-tertiary disabled:bg-card disabled:text-text-primary text-text-secondary rounded-lg border border-border transition cursor-pointer disabled:cursor-not-allowed"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="text-slate-400 text-xs whitespace-nowrap px-1">
-          Trang <span className="font-semibold text-slate-200">{totalPages > 0 ? page + 1 : 0}</span> / <span className="font-semibold text-slate-200">{totalPages}</span>
+        <span className="text-text-secondary text-xs whitespace-nowrap px-1">
+          Trang <span className="font-semibold text-text-primary">{totalPages > 0 ? page + 1 : 0}</span> / <span className="font-semibold text-text-primary">{totalPages}</span>
         </span>
         <button
           onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages - 1}
-          className="p-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-950 disabled:text-slate-700 text-slate-300 rounded-lg border border-slate-800 transition cursor-pointer disabled:cursor-not-allowed"
+          className="p-1.5 bg-bg-primary hover:bg-bg-tertiary disabled:bg-card disabled:text-text-primary text-text-secondary rounded-lg border border-border transition cursor-pointer disabled:cursor-not-allowed"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
@@ -371,12 +371,12 @@ export default function InvoiceHistory() {
   return (
     <div className="space-y-6">
       {/* Sub-tab navigation */}
-      <div className="flex space-x-2 border-b border-slate-800 pb-px">
+      <div className="flex space-x-2 border-b border-border pb-px">
         <button
           onClick={() => setSubTab('invoices')}
           className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all duration-200 cursor-pointer ${subTab === 'invoices'
-              ? 'border-indigo-500 text-slate-100 font-bold'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-accent-default text-text-primary font-bold'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
         >
           Hóa Đơn Đã Lưu
@@ -384,8 +384,8 @@ export default function InvoiceHistory() {
         <button
           onClick={() => setSubTab('logs')}
           className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all duration-200 cursor-pointer ${subTab === 'logs'
-              ? 'border-indigo-500 text-slate-100 font-bold'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-accent-default text-text-primary font-bold'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
         >
           Nhật Ký Tải Hệ Thống (Audit Logs)
@@ -393,13 +393,13 @@ export default function InvoiceHistory() {
       </div>
 
       {/* Filters & Actions Card */}
-      <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-4">
           {subTab === 'invoices' ? (
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+              className="bg-bg-primary border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent cursor-pointer"
             >
               <option value="">Tất cả hóa đơn</option>
               <option value="SELL">Bán ra (SELL)</option>
@@ -409,7 +409,7 @@ export default function InvoiceHistory() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+              className="bg-bg-primary border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent cursor-pointer"
             >
               <option value="">Tất cả trạng thái</option>
               <option value="SUCCESS">Thành công</option>
@@ -419,12 +419,12 @@ export default function InvoiceHistory() {
           )}
 
           <div className="relative">
-            <Filter className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+            <Filter className="w-4 h-4 text-text-secondary absolute left-3.5 top-3" />
             <input
               type="text"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 w-64"
+              className="bg-bg-primary border border-border rounded-xl pl-10 pr-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent w-64"
               placeholder={subTab === 'invoices' ? "Tìm theo số HĐ, tên..." : "Tìm theo MST, người tải..."}
             />
           </div>
@@ -437,7 +437,7 @@ export default function InvoiceHistory() {
                 fetchHistories(page, size, searchText, filterStatus);
               }
             }}
-            className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-750 transition cursor-pointer"
+            className="p-2 bg-bg-primary hover:bg-bg-tertiary text-text-secondary hover:text-text-primary rounded-xl border border-slate-750 transition cursor-pointer"
             title="Làm mới danh sách"
           >
             <RotateCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -448,7 +448,7 @@ export default function InvoiceHistory() {
           <button
             onClick={exportSelected}
             disabled={selectedIds.length === 0 || exporting}
-            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-800 disabled:text-slate-650 text-white font-semibold py-2 px-5 rounded-xl transition-all duration-200 flex items-center space-x-2 shrink-0 cursor-pointer shadow-lg shadow-emerald-650/20"
+            className="bg-success-default hover:bg-success-default disabled:bg-bg-tertiary disabled:text-text-muted text-white font-semibold py-2 px-5 rounded-xl transition-all duration-200 flex items-center space-x-2 shrink-0 cursor-pointer shadow-lg shadow-success-default/20"
           >
             <FileSpreadsheet className="w-5 h-5" />
             <span>{exporting ? 'Đang xuất...' : `Xuất Báo Cáo Excel (${selectedIds.length})`}</span>
@@ -458,17 +458,17 @@ export default function InvoiceHistory() {
 
       {subTab === 'invoices' ? (
         /* ── Invoices Table ── */
-        <div className="bg-slate-950 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+        <div className="bg-card rounded-2xl border border-border shadow-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
-              <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400 font-semibold uppercase text-xs">
+              <thead className="bg-bg-primary/50 border-b border-border text-text-secondary font-semibold uppercase text-xs">
                 <tr>
                   <th className="p-4 w-12 text-center">
                     <input
                       type="checkbox"
                       checked={invoices.length > 0 && selectedIds.length === invoices.length}
                       onChange={handleSelectAll}
-                      className="w-4 h-4 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-900"
+                      className="w-4 h-4 rounded border-border text-accent-default focus:ring-accent-default bg-bg-primary"
                     />
                   </th>
                   <th className="p-4">Số Hóa Đơn</th>
@@ -481,19 +481,19 @@ export default function InvoiceHistory() {
                   <th className="p-4 text-center">Tải Tệp</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/50 text-slate-350">
+              <tbody className="divide-y divide-border/50 text-text-muted">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="p-12 text-center text-slate-500">
+                    <td colSpan={9} className="p-12 text-center text-text-muted">
                       <div className="flex flex-col items-center justify-center space-y-2">
-                        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+                        <Loader2 className="w-8 h-8 text-accent-default animate-spin" />
                         <span>Đang tải danh sách hóa đơn từ Database...</span>
                       </div>
                     </td>
                   </tr>
                 ) : invoices.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-slate-500">
+                    <td colSpan={9} className="p-8 text-center text-text-muted">
                       Không có hóa đơn nào trong cơ sở dữ liệu.
                     </td>
                   </tr>
@@ -506,44 +506,44 @@ export default function InvoiceHistory() {
                     }).format(inv.totalAmount);
 
                     return (
-                      <tr key={inv.id} className="hover:bg-slate-900/30 transition-all border-b border-slate-800/30">
+                      <tr key={inv.id} className="hover:bg-bg-primary/30 transition-all border-b border-border/30">
                         <td className="p-4 text-center">
                           <input
                             type="checkbox"
                             checked={selectedIds.includes(inv.id)}
                             onChange={(e) => handleSelectOne(inv.id, e.target.checked)}
-                            className="w-4 h-4 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-900"
+                            className="w-4 h-4 rounded border-border text-accent-default focus:ring-accent-default bg-bg-primary"
                           />
                         </td>
-                        <td className="p-4 font-semibold text-slate-100">
+                        <td className="p-4 font-semibold text-text-primary">
                           {String(inv.invoiceNumber).padStart(8, '0')}
                         </td>
-                        <td className="p-4 text-slate-400">{dateStr}</td>
+                        <td className="p-4 text-text-secondary">{dateStr}</td>
                         <td className="p-4">
                           <span
-                            className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${inv.type === 'SELL' ? 'bg-indigo-900/50 text-indigo-300' : 'bg-amber-900/50 text-amber-300'
+                            className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${inv.type === 'SELL' ? 'bg-accent-light-default text-accent-default' : 'bg-amber-900/50 text-amber-300'
                               }`}
                           >
                             {inv.type === 'SELL' ? 'Bán ra' : 'Mua vào'}
                           </span>
                         </td>
                         <td className="p-4 max-w-[200px] truncate">
-                          <div className="font-medium text-slate-200 truncate" title={inv.sellerName}>
+                          <div className="font-medium text-text-primary truncate" title={inv.sellerName}>
                             {inv.sellerName}
                           </div>
-                          <div className="text-xs text-slate-500">{inv.sellerTaxCode}</div>
+                          <div className="text-xs text-text-muted">{inv.sellerTaxCode}</div>
                         </td>
                         <td className="p-4 max-w-[200px] truncate">
-                          <div className="font-medium text-slate-200 truncate" title={inv.buyerName}>
+                          <div className="font-medium text-text-primary truncate" title={inv.buyerName}>
                             {inv.buyerName}
                           </div>
-                          <div className="text-xs text-slate-500">{inv.buyerTaxCode}</div>
+                          <div className="text-xs text-text-muted">{inv.buyerTaxCode}</div>
                         </td>
-                        <td className="p-4 text-right font-bold text-emerald-450">{formattedAmount}</td>
+                        <td className="p-4 text-right font-bold text-success-default">{formattedAmount}</td>
                         <td className="p-4 text-center">
                           <button
                             onClick={() => setDetailInvoice(inv)}
-                            className="text-indigo-400 hover:text-indigo-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
+                            className="text-accent-default hover:text-accent-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
                             title="Xem chi tiết sản phẩm"
                           >
                             <List className="w-5 h-5" />
@@ -554,56 +554,56 @@ export default function InvoiceHistory() {
                             {inv.zipPath ? (
                               <button
                                 onClick={() => openPreview(inv.id)}
-                                className="text-emerald-400 hover:text-emerald-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
+                                className="text-success-default hover:text-success-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
                                 title="Xem trước hóa đơn (HTML)"
                               >
                                 <Eye className="w-5 h-5" />
                               </button>
                             ) : (
-                              <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc để preview">
+                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc để preview">
                                 <Eye className="w-5 h-5 opacity-30" />
                               </span>
                             )}
                             {inv.xmlPath ? (
                               <button
                                 onClick={() => downloadFile(inv.id, 'xml')}
-                                className="text-indigo-400 hover:text-indigo-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
+                                className="text-accent-default hover:text-accent-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
                                 title="Tải file XML gốc"
                               >
                                 <FileDown className="w-5 h-5" />
                               </button>
                             ) : (
-                              <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Không có file XML gốc">
+                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có file XML gốc">
                                 <FileDown className="w-5 h-5 opacity-30" />
                               </span>
                             )}
                             {inv.zipPath ? (
                               <button
                                 onClick={() => downloadPdf(inv.id)}
-                                className="text-rose-400 hover:text-rose-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
+                                className="text-danger-default hover:text-danger-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
                                 title="Tải bản thể hiện (PDF)"
                               >
                                 <FileText className="w-5 h-5" />
                               </button>
                             ) : (
-                              <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Không có bản thể hiện PDF">
+                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có bản thể hiện PDF">
                                 <FileText className="w-5 h-5 opacity-30" />
                               </span>
                             )}
                             {inv.zipPath === 'VIRTUAL_HTML' ? (
-                              <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Chỉ có bản thể hiện HTML, không có file ZIP gốc">
+                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Chỉ có bản thể hiện HTML, không có file ZIP gốc">
                                 <FileArchive className="w-5 h-5 opacity-30" />
                               </span>
                             ) : inv.zipPath ? (
                               <button
                                 onClick={() => downloadFile(inv.id, 'zip')}
-                                className="text-amber-400 hover:text-amber-300 transition duration-150 inline-flex p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
+                                className="text-amber-400 hover:text-amber-300 transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
                                 title="Tải tệp nén ZIP gốc"
                               >
                                 <FileArchive className="w-5 h-5" />
                               </button>
                             ) : (
-                              <span className="text-slate-700 inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc">
+                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc">
                                 <FileArchive className="w-5 h-5 opacity-30" />
                               </span>
                             )}
@@ -627,10 +627,10 @@ export default function InvoiceHistory() {
         </div>
       ) : (
         /* ── Download History Table ── */
-        <div className="bg-slate-950 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+        <div className="bg-card rounded-2xl border border-border shadow-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
-              <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400 font-semibold uppercase text-xs">
+              <thead className="bg-bg-primary/50 border-b border-border text-text-secondary font-semibold uppercase text-xs">
                 <tr>
                   <th className="p-4">Thời Gian</th>
                   <th className="p-4">Doanh Nghiệp (MST)</th>
@@ -641,19 +641,19 @@ export default function InvoiceHistory() {
                   <th className="p-4 text-center">Nhật Ký</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/50 text-slate-350">
+              <tbody className="divide-y divide-border/50 text-text-muted">
                 {loading && histories.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-12 text-center text-slate-500">
+                    <td colSpan={7} className="p-12 text-center text-text-muted">
                       <div className="flex flex-col items-center justify-center space-y-2">
-                        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+                        <Loader2 className="w-8 h-8 text-accent-default animate-spin" />
                         <span>Đang tải nhật ký từ Database...</span>
                       </div>
                     </td>
                   </tr>
                 ) : histories.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-500">
+                    <td colSpan={7} className="p-8 text-center text-text-muted">
                       Không tìm thấy lịch sử tải nào.
                     </td>
                   </tr>
@@ -661,34 +661,34 @@ export default function InvoiceHistory() {
                   histories.map((h) => {
                     const timeStr = new Date(h.downloadDate).toLocaleString('vi-VN');
                     return (
-                      <tr key={h.id} className="hover:bg-slate-900/30 transition border-b border-slate-800/30">
-                        <td className="p-4 text-slate-400">{timeStr}</td>
-                        <td className="p-4 font-mono font-semibold text-slate-200 select-all">{h.taxCode}</td>
-                        <td className="p-4 text-xs font-semibold text-slate-350">
+                      <tr key={h.id} className="hover:bg-bg-primary/30 transition border-b border-border/30">
+                        <td className="p-4 text-text-secondary">{timeStr}</td>
+                        <td className="p-4 font-mono font-semibold text-text-primary select-all">{h.taxCode}</td>
+                        <td className="p-4 text-xs font-semibold text-text-muted">
                           {h.invoiceType === 'SELL' ? 'Bán ra (SELL)' : (h.invoiceType === 'BUY' ? 'Mua vào (BUY)' : h.invoiceType)}
                         </td>
                         <td className="p-4">
                           {h.username ? (
-                            <span className="font-semibold text-slate-200 text-xs bg-slate-900 px-2.5 py-1 border border-slate-850 rounded-lg">
+                            <span className="font-semibold text-text-primary text-xs bg-bg-primary px-2.5 py-1 border border-border rounded-lg">
                               {h.username}
                             </span>
                           ) : (
-                            <span className="text-slate-500 italic text-xs">Hệ thống (Cron)</span>
+                            <span className="text-text-muted italic text-xs">Hệ thống (Cron)</span>
                           )}
                         </td>
                         <td className="p-4 text-center">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${h.status === 'SUCCESS'
-                              ? 'bg-emerald-500/10 text-emerald-450 border-emerald-500/20'
-                              : (h.status === 'PARTIAL' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-rose-500/10 text-rose-450 border-rose-500/20')
+                              ? 'bg-success-light text-success-default border-success-default/20'
+                              : (h.status === 'PARTIAL' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-danger-light text-danger-default border-danger-default/20')
                             }`}>
                             {h.status === 'SUCCESS' ? 'Thành công' : (h.status === 'PARTIAL' ? 'Một phần' : 'Thất bại')}
                           </span>
                         </td>
-                        <td className="p-4 text-center font-bold text-slate-100">{h.countDownloaded} HĐ</td>
+                        <td className="p-4 text-center font-bold text-text-primary">{h.countDownloaded} HĐ</td>
                         <td className="p-4 text-center">
                           <button
                             onClick={() => setSelectedHistory(h)}
-                            className="p-1.5 bg-slate-900 border border-slate-850 hover:bg-slate-800 text-indigo-400 hover:text-indigo-300 rounded-lg cursor-pointer transition flex items-center justify-center mx-auto"
+                            className="p-1.5 bg-bg-primary border border-border hover:bg-bg-tertiary text-accent-default hover:text-accent-default rounded-lg cursor-pointer transition flex items-center justify-center mx-auto"
                             title="Xem nhật ký chi tiết"
                           >
                             <FileText className="w-4 h-4" />
@@ -714,16 +714,16 @@ export default function InvoiceHistory() {
 
       {/* Preview Invoice Modal */}
       {previewInvoiceId && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center px-6 py-5 bg-slate-950/80 border-b border-slate-800">
-              <h2 className="text-md font-bold text-slate-200 flex items-center space-x-2">
-                <Eye className="w-5 h-5 text-emerald-400" />
+        <div className="fixed inset-0 bg-card/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-5xl bg-bg-primary border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center px-6 py-5 bg-card/80 border-b border-border">
+              <h2 className="text-md font-bold text-text-primary flex items-center space-x-2">
+                <Eye className="w-5 h-5 text-success-default" />
                 <span>Xem Trước Hóa Đơn</span>
               </h2>
               <button
                 onClick={() => { setPreviewInvoiceId(null); setPreviewHtml(null); }}
-                className="text-slate-400 hover:text-slate-100 p-1 bg-slate-850 hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                className="text-text-secondary hover:text-text-primary p-1 bg-bg-tertiary hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -731,8 +731,8 @@ export default function InvoiceHistory() {
             <div className="p-0 flex-1 overflow-hidden bg-white">
               {previewLoading ? (
                 <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-                  <span className="ml-3 text-slate-500">Đang tải nội dung hóa đơn...</span>
+                  <Loader2 className="w-8 h-8 text-accent-default animate-spin" />
+                  <span className="ml-3 text-text-muted">Đang tải nội dung hóa đơn...</span>
                 </div>
               ) : previewHtml ? (
                 <iframe
@@ -742,7 +742,7 @@ export default function InvoiceHistory() {
                   sandbox="allow-same-origin"
                 />
               ) : (
-                <div className="flex items-center justify-center h-64 text-slate-500">
+                <div className="flex items-center justify-center h-64 text-text-muted">
                   Không thể tải nội dung preview.
                 </div>
               )}
@@ -753,40 +753,40 @@ export default function InvoiceHistory() {
 
       {/* Invoice Detail (Items) Modal */}
       {detailInvoice && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="flex justify-between items-center px-6 py-5 bg-slate-950/80 border-b border-slate-800">
-              <h2 className="text-md font-bold text-slate-200 flex items-center space-x-2">
-                <List className="w-5 h-5 text-indigo-400" />
+        <div className="fixed inset-0 bg-card/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-4xl bg-bg-primary border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex justify-between items-center px-6 py-5 bg-card/80 border-b border-border">
+              <h2 className="text-md font-bold text-text-primary flex items-center space-x-2">
+                <List className="w-5 h-5 text-accent-default" />
                 <span>Chi Tiết Hàng Hóa — HĐ {String(detailInvoice.invoiceNumber).padStart(8, '0')}</span>
               </h2>
               <button
                 onClick={() => setDetailInvoice(null)}
-                className="text-slate-400 hover:text-slate-100 p-1 bg-slate-850 hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                className="text-text-secondary hover:text-text-primary p-1 bg-bg-tertiary hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Invoice summary */}
-            <div className="px-6 py-4 bg-slate-950/50 border-b border-slate-800 grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+            <div className="px-6 py-4 bg-card/50 border-b border-border grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
               <div>
-                <span className="text-slate-500">Ngày lập:</span>{' '}
-                <span className="text-slate-300 font-semibold">{new Date(detailInvoice.invoiceDate).toLocaleDateString('vi-VN')}</span>
+                <span className="text-text-muted">Ngày lập:</span>{' '}
+                <span className="text-text-secondary font-semibold">{new Date(detailInvoice.invoiceDate).toLocaleDateString('vi-VN')}</span>
               </div>
               <div>
-                <span className="text-slate-500">Loại:</span>{' '}
-                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${detailInvoice.type === 'SELL' ? 'bg-indigo-900/50 text-indigo-300' : 'bg-amber-900/50 text-amber-300'}`}>
+                <span className="text-text-muted">Loại:</span>{' '}
+                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${detailInvoice.type === 'SELL' ? 'bg-accent-light-default text-accent-default' : 'bg-amber-900/50 text-amber-300'}`}>
                   {detailInvoice.type === 'SELL' ? 'Bán ra' : 'Mua vào'}
                 </span>
               </div>
               <div className="truncate">
-                <span className="text-slate-500">Bên bán:</span>{' '}
-                <span className="text-slate-300 font-semibold" title={detailInvoice.sellerName}>{detailInvoice.sellerName}</span>
+                <span className="text-text-muted">Bên bán:</span>{' '}
+                <span className="text-text-secondary font-semibold" title={detailInvoice.sellerName}>{detailInvoice.sellerName}</span>
               </div>
               <div className="truncate">
-                <span className="text-slate-500">Bên mua:</span>{' '}
-                <span className="text-slate-300 font-semibold" title={detailInvoice.buyerName}>{detailInvoice.buyerName}</span>
+                <span className="text-text-muted">Bên mua:</span>{' '}
+                <span className="text-text-secondary font-semibold" title={detailInvoice.buyerName}>{detailInvoice.buyerName}</span>
               </div>
             </div>
 
@@ -794,7 +794,7 @@ export default function InvoiceHistory() {
             <div className="flex-1 overflow-y-auto p-6">
               {detailInvoice.items && detailInvoice.items.length > 0 ? (
                 <table className="w-full text-left border-collapse text-sm">
-                  <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400 font-semibold uppercase text-xs sticky top-0">
+                  <thead className="bg-bg-primary/50 border-b border-border text-text-secondary font-semibold uppercase text-xs sticky top-0">
                     <tr>
                       <th className="p-3 w-12 text-center">STT</th>
                       <th className="p-3">Tên hàng hóa, dịch vụ</th>
@@ -805,25 +805,25 @@ export default function InvoiceHistory() {
                       <th className="p-3 w-18 text-center">Thuế suất</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/50 text-slate-350">
+                  <tbody className="divide-y divide-border/50 text-text-muted">
                     {detailInvoice.items.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-900/30 transition">
-                        <td className="p-3 text-center text-slate-500">{item.lineNumber || '-'}</td>
-                        <td className="p-3 font-medium text-slate-200 max-w-[300px]">
+                      <tr key={item.id} className="hover:bg-bg-primary/30 transition">
+                        <td className="p-3 text-center text-text-muted">{item.lineNumber || '-'}</td>
+                        <td className="p-3 font-medium text-text-primary max-w-[300px]">
                           <span title={item.name}>{item.name}</span>
                         </td>
-                        <td className="p-3 text-center text-slate-400">{item.unit || '-'}</td>
-                        <td className="p-3 text-right text-slate-300">
+                        <td className="p-3 text-center text-text-secondary">{item.unit || '-'}</td>
+                        <td className="p-3 text-right text-text-secondary">
                           {item.quantity != null ? Number(item.quantity).toLocaleString('vi-VN') : '-'}
                         </td>
-                        <td className="p-3 text-right text-slate-300">
+                        <td className="p-3 text-right text-text-secondary">
                           {item.price != null ? Number(item.price).toLocaleString('vi-VN') : '-'}
                         </td>
-                        <td className="p-3 text-right font-semibold text-emerald-450">
+                        <td className="p-3 text-right font-semibold text-success-default">
                           {Number(item.amount).toLocaleString('vi-VN')}
                         </td>
                         <td className="p-3 text-center">
-                          <span className="px-2 py-0.5 rounded text-xs font-mono bg-slate-900 text-slate-400 border border-slate-800">
+                          <span className="px-2 py-0.5 rounded text-xs font-mono bg-bg-primary text-text-secondary border border-border">
                             {item.taxRate || '0%'}
                           </span>
                         </td>
@@ -832,7 +832,7 @@ export default function InvoiceHistory() {
                   </tbody>
                 </table>
               ) : (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-text-muted">
                   <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
                   <p>Không có dữ liệu hàng hóa cho hóa đơn này.</p>
                 </div>
@@ -844,42 +844,42 @@ export default function InvoiceHistory() {
 
       {/* Log Detail Modal */}
       {selectedHistory && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-            <div className="flex justify-between items-center px-6 py-5 bg-slate-950/80 border-b border-slate-800">
-              <h2 className="text-md font-bold text-slate-200 flex items-center space-x-2">
-                <ShieldAlert className="w-5 h-5 text-indigo-400" />
+        <div className="fixed inset-0 bg-card/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-2xl bg-bg-primary border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="flex justify-between items-center px-6 py-5 bg-card/80 border-b border-border">
+              <h2 className="text-md font-bold text-text-primary flex items-center space-x-2">
+                <ShieldAlert className="w-5 h-5 text-accent-default" />
                 <span>Chi Tiết Nhật Ký Quét Hóa Đơn</span>
               </h2>
               <button
                 onClick={() => setSelectedHistory(null)}
-                className="text-slate-400 hover:text-slate-100 p-1 bg-slate-850 hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                className="text-text-secondary hover:text-text-primary p-1 bg-bg-tertiary hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
-              <div className="grid grid-cols-2 gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-850 text-xs">
+              <div className="grid grid-cols-2 gap-4 bg-card p-4 rounded-2xl border border-border text-xs">
                 <div>
-                  <span className="text-slate-500 block mb-0.5">Thời gian quét:</span>
-                  <span className="font-semibold text-slate-300">{new Date(selectedHistory.downloadDate).toLocaleString('vi-VN')}</span>
+                  <span className="text-text-muted block mb-0.5">Thời gian quét:</span>
+                  <span className="font-semibold text-text-secondary">{new Date(selectedHistory.downloadDate).toLocaleString('vi-VN')}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block mb-0.5">Mã số thuế doanh nghiệp:</span>
-                  <span className="font-semibold text-slate-300 select-all">{selectedHistory.taxCode}</span>
+                  <span className="text-text-muted block mb-0.5">Mã số thuế doanh nghiệp:</span>
+                  <span className="font-semibold text-text-secondary select-all">{selectedHistory.taxCode}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block mb-0.5">Người thực hiện:</span>
-                  <span className="font-semibold text-slate-300">{selectedHistory.username || 'Hệ thống (Cron)'}</span>
+                  <span className="text-text-muted block mb-0.5">Người thực hiện:</span>
+                  <span className="font-semibold text-text-secondary">{selectedHistory.username || 'Hệ thống (Cron)'}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block mb-0.5">Số lượng tải về:</span>
-                  <span className="font-semibold text-emerald-450">{selectedHistory.countDownloaded} hóa đơn thành công</span>
+                  <span className="text-text-muted block mb-0.5">Số lượng tải về:</span>
+                  <span className="font-semibold text-success-default">{selectedHistory.countDownloaded} hóa đơn thành công</span>
                 </div>
               </div>
               <div className="space-y-1">
-                <span className="text-xs font-bold text-slate-450 uppercase tracking-wide">Lịch sử chi tiết & Lỗi hệ thống:</span>
-                <pre className="bg-slate-950 text-slate-400 border border-slate-850 p-4 rounded-2xl text-xs font-mono whitespace-pre-wrap max-h-[300px] overflow-y-auto leading-relaxed">
+                <span className="text-xs font-bold text-text-secondary uppercase tracking-wide">Lịch sử chi tiết & Lỗi hệ thống:</span>
+                <pre className="bg-card text-text-secondary border border-border p-4 rounded-2xl text-xs font-mono whitespace-pre-wrap max-h-[300px] overflow-y-auto leading-relaxed">
                   {selectedHistory.log || 'Không ghi nhận lỗi nào trong phiên tải này.'}
                 </pre>
               </div>

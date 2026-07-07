@@ -138,17 +138,17 @@ export default function SchedulePanel() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Create Schedule Form Card */}
-      <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl space-y-6">
-        <h2 className="text-lg font-semibold text-indigo-400 flex items-center">
+      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl space-y-6">
+        <h2 className="text-lg font-semibold text-accent-default flex items-center">
           <Calendar className="w-5 h-5 mr-2" /> Thiết Lập Lịch Tự Động
         </h2>
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Doanh Nghiệp</label>
+            <label className="block text-xs font-semibold text-text-secondary mb-1">Doanh Nghiệp</label>
             <select
               value={selectedCompanyId}
               onChange={(e) => setSelectedCompanyId(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
             >
               {companies.length === 0 ? (
                 <option value="">Chưa có MST doanh nghiệp nào</option>
@@ -163,7 +163,7 @@ export default function SchedulePanel() {
           </div>
 
           <div className="space-y-3">
-            <label className="block text-xs font-semibold text-slate-400">Chu Kỳ Tự Động Tải</label>
+            <label className="block text-xs font-semibold text-text-secondary">Chu Kỳ Tự Động Tải</label>
 
             {/* Repeat mode presets */}
             <div className="grid grid-cols-4 gap-2">
@@ -179,8 +179,8 @@ export default function SchedulePanel() {
                   onClick={() => setRepeatMode(opt.value)}
                   className={`py-2 px-1 rounded-xl border text-xs font-medium transition cursor-pointer ${
                     repeatMode === opt.value
-                      ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                      ? 'bg-accent-default/20 border-accent-default text-accent-default'
+                      : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
                   }`}
                 >
                   {opt.label}
@@ -190,19 +190,19 @@ export default function SchedulePanel() {
 
             {/* Time + day/weekday pickers (hidden for custom) */}
             {repeatMode !== 'custom' && (
-              <div className="space-y-3 bg-slate-900/30 rounded-xl p-3">
+              <div className="space-y-3 bg-bg-primary/30 rounded-xl p-3">
                 {/* Time inputs */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 w-12 shrink-0">Giờ</span>
+                  <span className="text-xs text-text-secondary w-12 shrink-0">Giờ</span>
                   <input
                     type="number"
                     min={0}
                     max={23}
                     value={scheduleHour}
                     onChange={(e) => setScheduleHour(Number(e.target.value))}
-                    className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-16 bg-bg-primary border border-border rounded-lg px-2 py-2 text-sm text-text-primary text-center focus:outline-none focus:border-accent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  <span className="text-slate-500 text-sm">:</span>
+                  <span className="text-text-muted text-sm">:</span>
                   <input
                     type="number"
                     min={0}
@@ -210,9 +210,9 @@ export default function SchedulePanel() {
                     step={15}
                     value={scheduleMinute}
                     onChange={(e) => setScheduleMinute(Number(e.target.value))}
-                    className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-16 bg-bg-primary border border-border rounded-lg px-2 py-2 text-sm text-text-primary text-center focus:outline-none focus:border-accent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-text-muted">
                     (giờ:phút, 24h)
                   </span>
                 </div>
@@ -220,7 +220,7 @@ export default function SchedulePanel() {
                 {/* Weekday picker (weekly only) */}
                 {repeatMode === 'weekly' && (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 w-12 shrink-0">Thứ</span>
+                    <span className="text-xs text-text-secondary w-12 shrink-0">Thứ</span>
                     <div className="flex gap-1">
                       {WEEKDAYS.map(w => (
                         <button
@@ -229,8 +229,8 @@ export default function SchedulePanel() {
                           onClick={() => setWeekday(w.value)}
                           className={`w-9 h-9 rounded-lg text-xs font-medium transition cursor-pointer ${
                             weekday === w.value
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-700'
+                              ? 'bg-accent-default text-white'
+                              : 'bg-bg-primary text-text-secondary hover:text-text-primary border border-border'
                           }`}
                         >
                           {w.label}
@@ -243,16 +243,16 @@ export default function SchedulePanel() {
                 {/* Month day picker (monthly + quarterly) */}
                 {(repeatMode === 'monthly' || repeatMode === 'quarterly') && (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 w-12 shrink-0">Ngày</span>
+                    <span className="text-xs text-text-secondary w-12 shrink-0">Ngày</span>
                     <input
                       type="number"
                       min={1}
                       max={28}
                       value={monthDay}
                       onChange={(e) => setMonthDay(Number(e.target.value))}
-                      className="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-20 bg-bg-primary border border-border rounded-lg px-2 py-2 text-sm text-text-primary text-center focus:outline-none focus:border-accent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <span className="text-xs text-slate-500">hàng tháng</span>
+                    <span className="text-xs text-text-muted">hàng tháng</span>
                   </div>
                 )}
               </div>
@@ -266,12 +266,12 @@ export default function SchedulePanel() {
                     type="text"
                     value={customCron}
                     onChange={(e) => setCustomCron(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
+                    className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent font-mono"
                     placeholder="0 9 * * *"
                   />
-                  <span className="block text-xxs text-slate-500 mt-1">
+                  <span className="block text-xxs text-text-muted mt-1">
                     Định dạng: phút giờ ngày tháng thứ.{' '}
-                    <a href="https://crontab.guru" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 underline">
+                    <a href="https://crontab.guru" target="_blank" rel="noopener noreferrer" className="text-accent-default hover:text-accent-default underline">
                       Tham khảo crontab.guru
                     </a>
                   </span>
@@ -283,46 +283,46 @@ export default function SchedulePanel() {
                     type="checkbox"
                     checked={showDateRange}
                     onChange={(e) => setShowDateRange(e.target.checked)}
-                    className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-500 focus:ring-indigo-500"
+                    className="w-4 h-4 rounded bg-bg-primary border-border text-accent-default focus:ring-accent-default"
                   />
-                  <span className="text-xs text-slate-400">Giới hạn thời gian tải</span>
+                  <span className="text-xs text-text-secondary">Giới hạn thời gian tải</span>
                 </label>
                 {showDateRange && (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400">Tải dữ liệu trong</span>
+                    <span className="text-xs text-text-secondary">Tải dữ liệu trong</span>
                     <input
                       type="number"
                       min={1}
                       max={365}
                       value={dateRangeDays}
                       onChange={(e) => setDateRangeDays(Number(e.target.value))}
-                      className="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 text-center focus:outline-none focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-20 bg-bg-primary border border-border rounded-lg px-2 py-2 text-sm text-text-primary text-center focus:outline-none focus:border-accent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <span className="text-xs text-slate-500">ngày qua</span>
+                    <span className="text-xs text-text-muted">ngày qua</span>
                   </div>
                 )}
               </div>
             )}
 
             {/* Computed cron preview (hidden by default, shown only on hover/focus) */}
-            <details className="text-xxs text-slate-600 group">
-              <summary className="cursor-pointer hover:text-slate-400 transition">Xem cron expression</summary>
-              <div className="mt-1 bg-slate-900/50 rounded-lg px-3 py-2 font-mono">
-                <span className="text-cyan-400">{cronExpression}</span>
+            <details className="text-xxs text-text-muted group">
+              <summary className="cursor-pointer hover:text-text-secondary transition">Xem cron expression</summary>
+              <div className="mt-1 bg-bg-primary/50 rounded-lg px-3 py-2 font-mono">
+                <span className="text-log-cyan">{cronExpression}</span>
               </div>
             </details>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Loại hoá đơn</label>
+            <label className="block text-xs font-semibold text-text-secondary mb-1">Loại hoá đơn</label>
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setInvoiceType('SELL')}
                 className={`py-2 px-3 rounded-xl border text-xs font-medium transition ${
                   invoiceType === 'SELL'
-                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                    ? 'bg-accent-default/20 border-accent-default text-accent-default'
+                    : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
                 }`}
               >
                 Bán ra
@@ -332,8 +332,8 @@ export default function SchedulePanel() {
                 onClick={() => setInvoiceType('BUY')}
                 className={`py-2 px-3 rounded-xl border text-xs font-medium transition ${
                   invoiceType === 'BUY'
-                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                    ? 'bg-accent-default/20 border-accent-default text-accent-default'
+                    : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
                 }`}
               >
                 Mua vào
@@ -343,8 +343,8 @@ export default function SchedulePanel() {
                 onClick={() => setInvoiceType('BOTH' as any)}
                 className={`py-2 px-3 rounded-xl border text-xs font-medium transition ${
                   invoiceType === ('BOTH' as any)
-                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                    ? 'bg-accent-default/20 border-accent-default text-accent-default'
+                    : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
                 }`}
               >
                 Cả hai
@@ -355,7 +355,7 @@ export default function SchedulePanel() {
           <button
             type="submit"
             disabled={creating}
-            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 text-white font-semibold py-2.5 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-indigo-500/20 flex items-center justify-center space-x-2 cursor-pointer"
+            className="w-full bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default disabled:opacity-50 text-white font-semibold py-2.5 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-accent-default/20 flex items-center justify-center space-x-2 cursor-pointer"
           >
             <Plus className="w-5 h-5" />
             <span>Thêm Lịch Mới</span>
@@ -364,13 +364,13 @@ export default function SchedulePanel() {
       </div>
 
       {/* Schedules List Card */}
-      <div className="lg:col-span-2 bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col">
-        <h2 className="text-lg font-semibold text-indigo-400 flex items-center mb-4">
+      <div className="lg:col-span-2 bg-card p-6 rounded-2xl border border-border shadow-xl flex flex-col">
+        <h2 className="text-lg font-semibold text-accent-default flex items-center mb-4">
           <Calendar className="w-5 h-5 mr-2" /> Danh Sách Lịch Tải Định Kỳ ({schedules.length})
         </h2>
         <div className="flex-1 overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
-            <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400 font-semibold uppercase text-xs">
+            <thead className="bg-bg-primary/50 border-b border-border text-text-secondary font-semibold uppercase text-xs">
               <tr>
                 <th className="p-3">Doanh nghiệp (MST)</th>
                 <th className="p-3">Chu kỳ (Cron)</th>
@@ -380,58 +380,58 @@ export default function SchedulePanel() {
                 <th className="p-3 text-center">Thao tác</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/50 text-slate-350">
+            <tbody className="divide-y divide-border/50 text-text-muted">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                  <td colSpan={6} className="p-8 text-center text-text-muted">
                     Đang tải danh sách lịch biểu...
                   </td>
                 </tr>
               ) : schedules.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                  <td colSpan={6} className="p-8 text-center text-text-muted">
                     Chưa thiết lập lịch tải tự động nào.
                   </td>
                 </tr>
               ) : (
                 schedules.map((sch) => (
-                  <tr key={sch.id} className="hover:bg-slate-900/30 transition-all border-b border-slate-800/30">
+                  <tr key={sch.id} className="hover:bg-bg-primary/30 transition-all border-b border-border/30">
                     <td className="p-3 font-medium">
                       <div>{sch.company?.name || 'Doanh nghiệp'}</div>
-                      <div className="text-xs text-slate-500">{sch.company?.taxCode || ''}</div>
+                      <div className="text-xs text-text-muted">{sch.company?.taxCode || ''}</div>
                     </td>
-                    <td className="p-3 font-mono text-cyan-400">{sch.cronExpression}</td>
+                    <td className="p-3 font-mono text-log-cyan">{sch.cronExpression}</td>
                     <td className="p-3">
                       <span
                         className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${
                           sch.invoiceType === 'SELL'
-                            ? 'bg-indigo-900/50 text-indigo-300'
+                            ? 'bg-accent-light-default text-accent-default'
                             : 'bg-amber-900/50 text-amber-300'
                         }`}
                       >
                         {sch.invoiceType === 'SELL' ? 'Bán ra' : 'Mua vào'}
                       </span>
                     </td>
-                    <td className="p-3 text-slate-400">
+                    <td className="p-3 text-text-secondary">
                       {sch.lastRun ? new Date(sch.lastRun).toLocaleString('vi-VN') : 'Chưa chạy'}
                     </td>
                     <td className="p-3 text-center">
                       <button
                         onClick={() => handleToggleActive(sch.id, sch.isActive)}
-                        className="transition text-slate-400 hover:text-white"
+                        className="transition text-text-secondary hover:text-text-primary"
                         title={sch.isActive ? 'Nhấp để Tạm dừng' : 'Nhấp để Kích hoạt'}
                       >
                         {sch.isActive ? (
-                          <ToggleRight className="w-8 h-8 text-indigo-500 cursor-pointer" />
+                          <ToggleRight className="w-8 h-8 text-accent-default cursor-pointer" />
                         ) : (
-                          <ToggleLeft className="w-8 h-8 text-slate-650 cursor-pointer" />
+                          <ToggleLeft className="w-8 h-8 text-text-muted cursor-pointer" />
                         )}
                       </button>
                     </td>
                     <td className="p-3 text-center">
                       <button
                         onClick={() => handleDelete(sch.id)}
-                        className="text-red-400 hover:text-red-300 p-1.5 hover:bg-slate-850 rounded-lg transition"
+                        className="text-red-400 hover:text-red-300 p-1.5 hover:bg-bg-tertiary rounded-lg transition"
                         title="Xóa lịch này"
                       >
                         <Trash2 className="w-4 h-4 cursor-pointer" />

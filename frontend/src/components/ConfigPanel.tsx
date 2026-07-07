@@ -45,19 +45,19 @@ export default function ConfigPanel() {
   return (
     <div className="space-y-8">
       {/* Global Gemini API Key Setting */}
-      <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
-        <h2 className="text-lg font-semibold text-indigo-400 flex items-center">
+      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl space-y-4">
+        <h2 className="text-lg font-semibold text-accent-default flex items-center">
           <Key className="w-5 h-5 mr-2" /> Cấu hình GEMINI API Key
         </h2>
-        <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
+        <p className="text-xs text-text-secondary max-w-2xl leading-relaxed">
           Gemini API Key được sử dụng toàn cục để tự động quét và giải mã hình ảnh Captcha từ Cổng thông tin Tổng cục Thuế đối với các doanh nghiệp được thiết lập ở chế độ <strong>Đăng nhập Tự động</strong>.
         </p>
 
         {settingsMessage.text && (
           <div className={`p-3.5 rounded-xl border text-xs flex items-center space-x-2 ${
             settingsMessage.type === 'success' 
-              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' 
-              : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+              ? 'bg-success-light border-success-default/20 text-success-default' 
+              : 'bg-danger-light border-danger-default/20 text-danger-default'
           }`}>
             {settingsMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
             <span>{settingsMessage.text}</span>
@@ -70,12 +70,12 @@ export default function ConfigPanel() {
             value={geminiApiKey}
             onChange={(e) => setGeminiApiKey(e.target.value)}
             placeholder="Nhập Gemini API Key (AIzaSy...)"
-            className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+            className="flex-1 bg-bg-primary border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
           />
           <button
             type="submit"
             disabled={settingsLoading}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold py-2.5 px-6 rounded-xl transition duration-150 flex items-center justify-center space-x-2 shrink-0 cursor-pointer shadow-lg shadow-indigo-600/20"
+            className="bg-accent-default hover:bg-accent-hover-default disabled:opacity-50 text-white font-semibold py-2.5 px-6 rounded-xl transition duration-150 flex items-center justify-center space-x-2 shrink-0 cursor-pointer shadow-lg shadow-accent-default/20"
           >
             <Save className="w-4 h-4" />
             <span>Lưu API Key</span>

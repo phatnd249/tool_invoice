@@ -41,20 +41,20 @@ export default function Login({ onLoginSuccess, errorMessage }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-card px-4 relative overflow-hidden">
       {/* Decorative backdrop gradients */}
-      <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] rounded-full bg-purple-500/10 blur-[120px] pointer-events-none" />
+      <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] rounded-full bg-accent-hover-default/10 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] rounded-full bg-accent-default/10 blur-[120px] pointer-events-none" />
 
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl space-y-6 relative z-10">
+      <div className="w-full max-w-md bg-bg-primary border border-border p-8 rounded-3xl shadow-2xl space-y-6 relative z-10">
         <div className="text-center space-y-2">
-          <div className="inline-flex p-3 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mb-2">
+          <div className="inline-flex p-3 rounded-2xl bg-accent-hover-default/10 text-accent-default border border-accent-default/20 mb-2">
             <Lock className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-100 to-slate-300 bg-clip-text text-transparent">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-text-primary to-text-secondary bg-clip-text text-transparent">
             Invoice Downloader
           </h1>
-          <p className="text-slate-400 text-sm">Đăng nhập vào hệ thống quản lý hóa đơn</p>
+          <p className="text-text-secondary text-sm">Đăng nhập vào hệ thống quản lý hóa đơn</p>
         </div>
 
         {error && (
@@ -66,9 +66,9 @@ export default function Login({ onLoginSuccess, errorMessage }: LoginProps) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-400">Tên đăng nhập</label>
+            <label className="block text-xs font-semibold text-text-secondary">Tên đăng nhập</label>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-text-muted">
                 <User className="w-4 h-4" />
               </span>
               <input
@@ -77,15 +77,15 @@ export default function Login({ onLoginSuccess, errorMessage }: LoginProps) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Nhập tên đăng nhập"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none transition-all duration-200"
+                className="w-full bg-card border border-border focus:border-accent focus:ring-1 focus:ring-accent-default/30 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder-text-muted focus:outline-none transition-all duration-200"
               />
             </div>
           </div>
 
           <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-400">Mật khẩu</label>
+            <label className="block text-xs font-semibold text-text-secondary">Mật khẩu</label>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-text-muted">
                 <Lock className="w-4 h-4" />
               </span>
               <input
@@ -94,7 +94,7 @@ export default function Login({ onLoginSuccess, errorMessage }: LoginProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none transition-all duration-200"
+                className="w-full bg-card border border-border focus:border-accent focus:ring-1 focus:ring-accent-default/30 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder-text-muted focus:outline-none transition-all duration-200"
               />
             </div>
           </div>
@@ -102,7 +102,7 @@ export default function Login({ onLoginSuccess, errorMessage }: LoginProps) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-indigo-500/20 transition-all duration-200 disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer mt-6"
+            className="w-full bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-accent-default/20 transition-all duration-200 disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer mt-6"
           >
             {loading ? (
               <>
@@ -119,8 +119,8 @@ export default function Login({ onLoginSuccess, errorMessage }: LoginProps) {
         </form>
 
         <div className="text-center pt-2">
-          <p className="text-xs text-slate-500">
-            Tài khoản quản trị mặc định: <code className="text-slate-400">admin</code> / <code className="text-slate-400">adminpassword</code>
+          <p className="text-xs text-text-muted">
+            Tài khoản quản trị mặc định: <code className="text-text-secondary">admin</code> / <code className="text-text-secondary">adminpassword</code>
           </p>
         </div>
       </div>

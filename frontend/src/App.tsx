@@ -13,7 +13,10 @@ import {
   MessageSquare,
   Search,
   X,
+  Sun,
+  Moon,
 } from 'lucide-react';
+import { useTheme } from './context/ThemeContext';
 import InvoiceDownloader from './components/InvoiceDownloader';
 import InvoiceHistory from './components/InvoiceHistory';
 import SchedulePanel from './components/SchedulePanel';
@@ -34,6 +37,7 @@ interface User {
 }
 
 export default function App() {
+  const { theme, toggleTheme } = useTheme();
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('user');
@@ -196,17 +200,17 @@ export default function App() {
   ];
 
   return (
-    <div className="bg-slate-900 text-slate-100 min-h-screen flex w-full relative">
+    <div className="bg-bg-primary text-text-primary min-h-screen flex w-full relative">
       {/* Sidebar */}
       <aside
         className={`${sidebarCollapsed ? 'w-20' : 'w-64'
-          } h-screen sticky top-0 overflow-y-auto bg-slate-950 border-r border-slate-800 flex flex-col justify-between shrink-0 transition-all duration-300`}
+          } h-screen sticky top-0 overflow-y-auto bg-sidebar border-r border-border flex flex-col justify-between shrink-0 transition-all duration-300`}
       >
         <div>
-          <div className="h-16 flex items-center px-6 border-b border-slate-800 bg-slate-950">
-            <FileText className="text-indigo-500 text-2xl w-8 h-8 mr-3 animate-pulse" />
+          <div className="h-16 flex items-center px-6 border-b border-white/10 bg-sidebar">
+            <FileText className="text-sidebar-brand text-2xl w-8 h-8 mr-3 animate-pulse" />
             {!sidebarCollapsed && (
-              <span className="text-lg font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent transition duration-200">
+              <span className="text-lg font-bold text-white transition duration-200">
                 Invoice Pro
               </span>
             )}
@@ -220,7 +224,7 @@ export default function App() {
               return (
                 <div key={group.label} className="mb-2">
                   {!sidebarCollapsed && (
-                    <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2 mt-2">
+                    <p className="text-[10px] font-bold text-sidebar-text-muted uppercase tracking-widest px-3 mb-2 mt-2">
                       {group.label}
                     </p>
                   )}
@@ -230,8 +234,8 @@ export default function App() {
                       onClick={() => setActiveTab(item.id)}
                       className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer mb-1 ${
                         activeTab === item.id
-                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                          ? 'bg-white/20 text-white shadow-md'
+                          : 'text-sidebar-text-muted hover:bg-white/10 hover:text-sidebar-text'
                       }`}
                     >
                       <item.icon className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
@@ -247,15 +251,15 @@ export default function App() {
         </div>
 
         {/* User Info and Logout Section */}
-        <div className="border-t border-slate-800/80 p-4 space-y-2">
+        <div className="border-t border-white/10 p-4 space-y-2">
           {!sidebarCollapsed && (
-            <div className="flex items-center space-x-3 px-3 py-2 bg-slate-900/50 rounded-xl border border-slate-800/60 mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-sm">
+            <div className="flex items-center space-x-3 px-3 py-2 bg-white/10 rounded-xl mb-1.5">
+              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center font-bold text-white text-sm">
                 {user.username.substring(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs font-bold text-slate-200 truncate">{user.username}</p>
-                <p className="text-[10px] text-slate-500 font-medium tracking-wide uppercase mt-0.5">
+                <p className="text-xs font-bold text-white truncate">{user.username}</p>
+                <p className="text-[10px] text-blue-200 font-medium tracking-wide uppercase mt-0.5">
                   {user.role === 'ADMIN' ? 'Quản trị viên' : 'Nhân viên'}
                 </p>
               </div>
@@ -264,14 +268,14 @@ export default function App() {
 
           <button
             onClick={() => handleLogout()}
-            className="w-full flex items-center px-4 py-3 text-sm font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 rounded-xl transition-colors duration-200 cursor-pointer"
+            className="w-full flex items-center px-4 py-3 text-sm font-medium text-red-300 hover:bg-white/10 hover:text-red-200 rounded-xl transition-colors duration-200 cursor-pointer"
           >
             <LogOut className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
             {!sidebarCollapsed && <span>Đăng Xuất</span>}
           </button>
 
           {!sidebarCollapsed && (
-            <div className="text-[10px] text-slate-600 text-center pt-2">
+            <div className="text-[10px] text-sidebar-text-muted text-center pt-2">
               v1.0.0 &copy; 2026 Invoice Pro
             </div>
           )}
@@ -281,17 +285,24 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 font-sans">
         {/* Header */}
-        <header className="h-16 border-b border-slate-800 bg-slate-950/50 backdrop-blur-sm flex items-center justify-between px-8 shrink-0">
+        <header className="h-16 border-b border-border bg-header-bg backdrop-blur-sm flex items-center justify-between px-8 shrink-0">
           <div className="flex items-center space-x-4">
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="text-slate-400 hover:text-white focus:outline-none transition duration-150 p-2 hover:bg-slate-800 rounded-lg cursor-pointer"
+              className="text-text-secondary hover:text-text-primary focus:outline-none transition duration-150 p-2 hover:bg-bg-tertiary rounded-lg cursor-pointer"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <h1 className="text-xl font-bold text-slate-100">{getPageTitle()}</h1>
+            <h1 className="text-xl font-bold text-text-primary">{getPageTitle()}</h1>
           </div>
           <div className="flex items-center space-x-4">
+            <button
+              onClick={toggleTheme}
+              className="text-text-secondary hover:text-text-primary p-2 hover:bg-bg-tertiary rounded-lg transition-all duration-200 cursor-pointer"
+              title={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
+            >
+              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
             <button
               onClick={() => {
                 setFeedbackModalOpen(true);
@@ -299,13 +310,13 @@ export default function App() {
                 setFeedbackError('');
                 setFeedbackSuccess(false);
               }}
-              className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3.5 py-1.5 rounded-xl cursor-pointer transition-all duration-150"
+              className="text-xs font-semibold text-accent-default hover:text-accent-default bg-accent-hover-default/10 hover:bg-accent-hover-default/20 border border-accent-default/20 px-3.5 py-1.5 rounded-xl cursor-pointer transition-all duration-150"
             >
               Góp ý
             </button>
             <div className="flex items-center space-x-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-              <span className="text-xs text-slate-400 font-medium">Hệ thống đang hoạt động</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-success-default animate-ping"></span>
+              <span className="text-xs text-text-secondary font-medium">Hệ thống đang hoạt động</span>
             </div>
           </div>
         </header>
@@ -325,54 +336,54 @@ export default function App() {
 
       {/* Feedback Submission Modal */}
       {feedbackModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center px-6 py-5 bg-slate-950/80 border-b border-slate-800">
-              <h2 className="text-md font-bold text-slate-200 flex items-center space-x-2">
-                <MessageSquare className="w-5 h-5 text-indigo-400" />
+        <div className="fixed inset-0 bg-overlay backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-lg bg-card border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center px-6 py-5 bg-bg-secondary/80 border-b border-border">
+              <h2 className="text-md font-bold text-text-primary flex items-center space-x-2">
+                <MessageSquare className="w-5 h-5 text-accent-default" />
                 <span>Gửi Ý Kiến Đóng Góp</span>
               </h2>
               <button
                 onClick={() => setFeedbackModalOpen(false)}
-                className="text-slate-400 hover:text-slate-100 p-1 bg-slate-850 hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                className="text-text-secondary hover:text-text-primary p-1 hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleSendFeedback} className="p-6 space-y-4">
               {feedbackError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl">
+                <div className="bg-error-bg border border-error-border text-danger text-sm px-4 py-3 rounded-xl">
                   {feedbackError}
                 </div>
               )}
               {feedbackSuccess && (
-                <div className="bg-green-500/10 border border-green-500/20 text-green-400 text-sm px-4 py-3 rounded-xl">
+                <div className="bg-success-bg border border-success-border text-success text-sm px-4 py-3 rounded-xl">
                   Cảm ơn đóng góp của bạn. Ý kiến đã được gửi thành công!
                 </div>
               )}
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-450">Nội dung góp ý của bạn</label>
+                <label className="block text-xs font-semibold text-text-secondary">Nội dung góp ý của bạn</label>
                 <textarea
                   required
                   rows={4}
                   value={feedbackContent}
                   onChange={(e) => setFeedbackContent(e.target.value)}
                   placeholder="Nhập ý kiến đóng góp, phản hồi hoặc báo lỗi của bạn tại đây..."
-                  className="w-full bg-slate-950 border border-slate-855 rounded-2xl px-4 py-3 text-sm text-slate-100 placeholder-slate-700 focus:outline-none focus:border-indigo-500 transition-colors duration-150 resize-none leading-relaxed"
+                  className="w-full bg-input border border-border rounded-2xl px-4 py-3 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-colors duration-150 resize-none leading-relaxed"
                 />
               </div>
               <div className="flex justify-end space-x-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setFeedbackModalOpen(false)}
-                  className="bg-slate-800 hover:bg-slate-755 text-slate-300 px-4 py-2 rounded-xl transition duration-150 cursor-pointer text-xs font-semibold"
+                  className="bg-bg-tertiary hover:bg-bg-tertiary text-text-secondary px-4 py-2 rounded-xl transition duration-150 cursor-pointer text-xs font-semibold"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={submittingFeedback}
-                  className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-4 py-2 rounded-xl transition duration-150 cursor-pointer text-xs font-semibold shadow-lg shadow-indigo-500/10 flex items-center justify-center space-x-1.5"
+                  className="bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default text-white px-4 py-2 rounded-xl transition duration-150 cursor-pointer text-xs font-semibold shadow-lg shadow-accent-default/10 flex items-center justify-center space-x-1.5"
                 >
                   {submittingFeedback ? (
                     <>
