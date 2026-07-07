@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { Play, Sliders, Terminal, Trash2 } from 'lucide-react';
+import {
+  Play, Sliders, Terminal, Trash2, ChevronDown, ChevronRight, Building2,
+} from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 interface Company {
@@ -15,14 +17,167 @@ interface LogEntry {
   type: 'info' | 'error' | 'warning' | 'system';
 }
 
-export default function InvoiceDownloader() {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState('');
-  const [companiesLoading, setCompaniesLoading] = useState(false);
+// ── Accordion Item ─────────────────────────────────────────────
+interface AccordionProps {
+  company: Company;
+  isExpanded: boolean;
+  onToggle: () => void;
+  addLog: (message: string, type: LogEntry['type']) => void;
+}
 
+function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionProps) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [invoiceType, setInvoiceType] = useState('BOTH');
+  const [loading, setLoading] = useState(false);
+
+  const formatDatePayload = (dateStr: string) => {
+    if (!dateStr) return '';
+    const [yyyy, mm, dd] = dateStr.split('-');
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  const handleDownload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loading) return;
+
+    const formattedStart = formatDatePayload(startDate);
+    const formattedEnd = formatDatePayload(endDate);
+
+    if (!formattedStart || !formattedEnd) {
+      addLog(`[${company.name}] Lỗi: Cần chọn đầy đủ ngày bắt đầu và kết thúc.`, 'error');
+      return;
+    }
+
+    setLoading(true);
+    addLog(`[${company.name}] Khởi chạy luồng tải hóa đơn từ ${formattedStart} đến ${formattedEnd}...`, 'info');
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/invoices/download`, {
+        companyId: company.id,
+        startDate: formattedStart,
+        endDate: formattedEnd,
+        invoiceType,
+        saveToDb: true,
+      });
+
+      if (response.status === 200) {
+        addLog(`[${company.name}] Hoàn tất! ${response.data.message || ''}`, 'info');
+        if (response.data.errors && response.data.errors.length > 0) {
+          response.data.errors.forEach((err: string) => addLog(`[${company.name}] Ngoại lệ: ${err}`, 'warning'));
+        }
+      } else {
+        addLog(`[${company.name}] Lỗi API: ${response.data.error || 'Unknown Error'}`, 'error');
+      }
+    } catch (err: any) {
+      const errMsg = err.response?.data?.error || err.response?.data?.details || err.message;
+      addLog(`[${company.name}] Lỗi tải hoá đơn: ${errMsg}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="border border-border rounded-2xl overflow-hidden transition-all duration-200">
+      {/* Accordion Header */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-5 py-4 bg-card hover:bg-bg-tertiary transition-colors duration-150 cursor-pointer text-left"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-accent-default/10 flex items-center justify-center shrink-0">
+            <Building2 className="w-5 h-5 text-accent-default" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-text-primary text-sm truncate">{company.name}</p>
+            <p className="text-xs text-text-muted font-mono">MST: {company.taxCode}</p>
+          </div>
+        </div>
+        <div className="shrink-0 ml-3">
+          {isExpanded ? (
+            <ChevronDown className="w-5 h-5 text-text-secondary transition-transform duration-200" />
+          ) : (
+            <ChevronRight className="w-5 h-5 text-text-secondary transition-transform duration-200" />
+          )}
+        </div>
+      </button>
+
+      {/* Accordion Body */}
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+          isExpanded ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0'
+        }`}
+      >
+        <div className="px-5 pb-5 pt-2 border-t border-border">
+          <form onSubmit={handleDownload} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Từ ngày</label>
+                <input
+                  type="date"
+                  required
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Đến ngày</label>
+                <input
+                  type="date"
+                  required
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Loại hoá đơn</label>
+                <select
+                  value={invoiceType}
+                  onChange={(e) => setInvoiceType(e.target.value)}
+                  className="w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
+                >
+                  <option value="SELL">Hóa đơn Bán ra</option>
+                  <option value="BUY">Hóa đơn Mua vào</option>
+                  <option value="BOTH">Cả hai loại</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default disabled:opacity-50 text-white font-semibold py-2.5 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-accent-default/20 flex items-center justify-center space-x-2 cursor-pointer"
+            >
+              {loading ? (
+                <span className="flex items-center space-x-2">
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Đang tải...</span>
+                </span>
+              ) : (
+                <>
+                  <Play className="w-4 h-4" />
+                  <span>Tải Hóa Đơn</span>
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ─────────────────────────────────────────────
+export default function InvoiceDownloader() {
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [expandedCompanyId, setExpandedCompanyId] = useState<number | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       time: new Date().toLocaleTimeString(),
@@ -30,29 +185,24 @@ export default function InvoiceDownloader() {
       type: 'system',
     },
   ]);
-  const [loading, setLoading] = useState(false);
 
-  // Fetch registered companies on mount
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     setCompaniesLoading(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/api/companies`);
       setCompanies(res.data);
-      if (res.data.length > 0) {
-        setSelectedCompanyId(String(res.data[0].id));
-      }
     } catch (err) {
       console.error('Failed to load companies:', err);
     } finally {
       setCompaniesLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchCompanies();
-  }, []);
+  }, [fetchCompanies]);
 
-  const addLog = (message: string, type: 'info' | 'error' | 'warning' | 'system' = 'info') => {
+  const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     setLogs((prev) => [
       ...prev,
       {
@@ -73,144 +223,43 @@ export default function InvoiceDownloader() {
     ]);
   };
 
-  const formatDatePayload = (dateStr: string) => {
-    if (!dateStr) return '';
-    const [yyyy, mm, dd] = dateStr.split('-');
-    return `${dd}/${mm}/${yyyy}`;
-  };
-
-  const handleDownload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loading) return;
-
-    if (!selectedCompanyId) {
-      addLog('Lỗi: Bạn cần cấu hình và chọn một Doanh nghiệp trước khi tải.', 'error');
-      return;
-    }
-
-    const formattedStart = formatDatePayload(startDate);
-    const formattedEnd = formatDatePayload(endDate);
-
-    if (!formattedStart || !formattedEnd) {
-      addLog('Lỗi: Cần chọn đầy đủ ngày bắt đầu và kết thúc.', 'error');
-      return;
-    }
-
-    const activeCompany = companies.find(c => String(c.id) === selectedCompanyId);
-    setLoading(true);
-    addLog(`Khởi chạy luồng tải hóa đơn cho [${activeCompany?.name}] từ ${formattedStart} đến ${formattedEnd}...`, 'info');
-
-    try {
-      const response = await axios.post(`${API_BASE_URL}/api/invoices/download`, {
-        companyId: Number(selectedCompanyId),
-        startDate: formattedStart,
-        endDate: formattedEnd,
-        invoiceType,
-        saveToDb: true,
-      });
-
-      if (response.status === 200) {
-        addLog(`Hoàn tất tải hóa đơn! ${response.data.message || ''}`, 'info');
-        if (response.data.errors && response.data.errors.length > 0) {
-          response.data.errors.forEach((err: string) => addLog(`Ngoại lệ: ${err}`, 'warning'));
-        }
-      } else {
-        addLog(`Lỗi API: ${response.data.error || 'Unknown Error'}`, 'error');
-      }
-    } catch (err: any) {
-      const errMsg = err.response?.data?.error || err.response?.data?.details || err.message;
-      addLog(`Lỗi tải hoá đơn: ${errMsg}`, 'error');
-    } finally {
-      setLoading(false);
-    }
+  const toggleAccordion = (companyId: number) => {
+    setExpandedCompanyId((prev) => (prev === companyId ? null : companyId));
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* Configuration Form Card */}
-      <div className="lg:col-span-2 bg-card p-6 rounded-2xl border border-border shadow-xl space-y-6">
+      {/* Company Accordion List */}
+      <div className="lg:col-span-2 space-y-4">
         <h2 className="text-lg font-semibold text-accent-default flex items-center">
-          <Sliders className="w-5 h-5 mr-2" /> Tham Số Tải Hoá Đơn
+          <Sliders className="w-5 h-5 mr-2" /> Danh Sách Doanh Nghiệp
         </h2>
-        <form onSubmit={handleDownload} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-text-secondary mb-1">Doanh Nghiệp (MST)</label>
-            <div className="relative">
-              <select
-                value={selectedCompanyId}
-                onChange={(e) => setSelectedCompanyId(e.target.value)}
-                disabled={companiesLoading || companies.length === 0}
-                className="w-full bg-input border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
-              >
-                {companies.length === 0 ? (
-                  <option value="">(Chưa cấu hình doanh nghiệp nào - Vui lòng vào Cấu Hình)</option>
-                ) : (
-                  companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.taxCode})
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-text-secondary mb-1">Từ ngày</label>
-              <input
-                type="date"
-                required
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-input border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-text-secondary mb-1">Đến ngày</label>
-              <input
-                type="date"
-                required
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-input border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-text-secondary mb-1">Loại hoá đơn</label>
-              <select
-                value={invoiceType}
-                onChange={(e) => setInvoiceType(e.target.value)}
-                className="w-full bg-input border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
-              >
-                <option value="SELL">Hóa đơn Bán ra</option>
-                <option value="BUY">Hóa đơn Mua vào</option>
-                <option value="BOTH">Cả hai loại</option>
-              </select>
-            </div>
+        {companiesLoading ? (
+          <div className="flex items-center justify-center py-16 text-text-muted">
+            <svg className="animate-spin h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Đang tải danh sách doanh nghiệp...
           </div>
-
-          <button
-            type="submit"
-            disabled={loading || companies.length === 0}
-            className="w-full bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-accent-default/20 flex items-center justify-center space-x-2 cursor-pointer"
-          >
-            {loading ? (
-              <span className="flex items-center space-x-2">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                <span>Đang tải hóa đơn...</span>
-              </span>
-            ) : (
-              <>
-                <Play className="w-5 h-5" />
-                <span>Bắt Đầu Tải Hóa Đơn</span>
-              </>
-            )}
-          </button>
-        </form>
+        ) : companies.length === 0 ? (
+          <div className="bg-card border border-border rounded-2xl p-8 text-center text-text-muted">
+            <Building2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p className="font-semibold text-text-secondary">Chưa có doanh nghiệp nào</p>
+            <p className="text-sm mt-1">Vui lòng vào mục Quản trị &gt; Doanh nghiệp để thêm</p>
+          </div>
+        ) : (
+          companies.map((company) => (
+            <CompanyAccordion
+              key={company.id}
+              company={company}
+              isExpanded={expandedCompanyId === company.id}
+              onToggle={() => toggleAccordion(company.id)}
+              addLog={addLog}
+            />
+          ))
+        )}
       </div>
 
       {/* Log Console Card */}

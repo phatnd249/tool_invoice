@@ -476,3 +476,90 @@ Login page có background gradient và blur circles dùng `purple-*` và `indigo
 ✅ Không còn class `indigo-*`, `cyan-*`, `emerald-*`, `rose-*`, `purple-*` cứng
 ✅ Light theme: button xanh dương (#2563eb), badge success xanh lá (#16a34a), badge error đỏ (#dc2626)
 ✅ Dark theme: giữ nguyên indigo để tương phản tốt
+
+---
+
+## Đợt 3: Chuyển dropdown doanh nghiệp sang dạng Accordion (trang InvoiceDownloader)
+
+### Yêu cầu
+- Trang "Tải Hoá Đơn" bỏ dropdown chọn doanh nghiệp (`<select>`)
+- Thay bằng danh sách accordion, mỗi doanh nghiệp là 1 accordion item
+- Mỗi accordion hiển thị thông tin doanh nghiệp và chứa form tải hoá đơn bên trong
+
+### Phân tích hiện trạng
+- File: `frontend/src/components/InvoiceDownloader.tsx`
+- State `selectedCompanyId` điều khiển doanh nghiệp được chọn trong dropdown
+- Form tải (`handleDownload`) dùng `selectedCompanyId` để gửi request
+- `companies` được fetch từ API `/api/companies` khi mount
+
+### Thiết kế Accordion
+
+```
+┌─────────────────────────────────────────────┐
+│ [▼] CÔNG TY ABC (MST: 0123456789)           │
+│                                             │
+│  ┌─────────────────────────────────────┐    │
+│  │ Từ ngày: [...], Đến ngày: [...]     │    │
+│  │ Loại: [Bán ra ▼]                    │    │
+│  │ [► Bắt Đầu Tải Hoá Đơn]             │    │
+│  └─────────────────────────────────────┘    │
+├─────────────────────────────────────────────┤
+│ [▶] CÔNG TY XYZ (MST: 0987654321)           │  ← collapsed
+├─────────────────────────────────────────────┤
+│ [▶] CÔNG TY 123 (MST: 0112233445)           │  ← collapsed
+└─────────────────────────────────────────────┘
+```
+
+### State mới cần thêm
+
+| State | Mô tả | Kiểu |
+|-------|-------|------|
+| `expandedCompanyId` | ID doanh nghiệp đang mở accordion | `number \| null` |
+| — | Bỏ `selectedCompanyId` (không cần thiết nữa) | — |
+
+### Logic thay đổi
+
+1. **Mở accordion:** Click vào header accordion → set `expandedCompanyId = company.id`
+2. **Form tải:** Mỗi accordion có form riêng, gồm startDate, endDate, invoiceType
+3. **handleDownload:** Dùng companyId của accordion đang mở, lấy từ form local state của accordion đó
+
+### Cấu trúc component mới (trong cùng file hoặc tách riêng)
+
+```tsx
+// Mỗi accordion item
+function CompanyAccordion({ company, isExpanded, onToggle, onLog }: Props) {
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [invoiceType, setInvoiceType] = useState('BOTH');
+  const [loading, setLoading] = useState(false);
+
+  // handleDownload riêng cho từng accordion
+}
+```
+
+### Danh sách công việc
+
+- [ ] Bỏ state `selectedCompanyId` và dropdown `<select>`
+- [ ] Thêm state `expandedCompanyId: number | null`
+- [ ] Tách form tải thành component con `CompanyAccordion` (có thể viết inline trong cùng file)
+- [ ] Mỗi accordion có input date riêng, select loại riêng, nút tải riêng
+- [ ] Accordion mở/đóng với animation (dùng max-height transition hoặc collapse)
+- [ ] Hiển thị MST, tên doanh nghiệp trong header accordion
+- [ ] Log console giữ nguyên ở cột bên phải
+- [ ] Xử lý loading state riêng cho từng accordion
+- [ ] Responsive: accordion full width trên mobile, log ở dưới
+
+### Thứ tự triển khai
+
+1. Sửa state + xoá dropdown
+2. Viết component CompanyAccordion
+3. Tích hợp vào layout grid
+4. Kiểm tra & build
+
+### Ước tính
+- Sửa state: 5 phút
+- Viết accordion: 30 phút
+- Tích hợp layout: 10 phút
+- Kiểm tra: 10 phút
+
+**Tổng: ~55 phút**
