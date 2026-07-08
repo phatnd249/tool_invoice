@@ -538,7 +538,6 @@ export default function InvoiceHistory() {
                   <th className="p-3 text-right">Tổng thanh toán</th>
                   <th className="p-3 text-center">ĐVT</th>
                   <th className="p-3 text-right">Tỷ giá</th>
-                  <th className="p-3 text-center">Trạng thái</th>
                   <th className="p-3 text-center">Thao tác</th>
                 </tr>
               </thead>
@@ -560,8 +559,6 @@ export default function InvoiceHistory() {
                   </tr>
                 ) : (
                   invoices.map((inv, idx) => {
-                    const status = getInvoiceStatus(inv);
-
                     return (
                       <tr key={inv.id} className="hover:bg-bg-primary/30 transition-all border-b border-border/30">
                         <td className="p-3 text-center">
@@ -626,11 +623,6 @@ export default function InvoiceHistory() {
                         </td>
                         <td className="p-3 text-right text-xs">
                           {inv.exchangeRate && inv.exchangeRate !== 1 ? inv.exchangeRate : '—'}
-                        </td>
-                        <td className="p-3 text-center">
-                          <span className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${status.color}`}>
-                            {status.label}
-                          </span>
                         </td>
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center space-x-1">
