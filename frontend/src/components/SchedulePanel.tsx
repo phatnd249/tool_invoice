@@ -497,29 +497,17 @@ export default function SchedulePanel() {
                     <td className="p-3">
                       <button
                         onClick={() => openCompanyModal(sch)}
-                        className="flex flex-wrap gap-1 items-center group cursor-pointer"
-                        title="Nhấp để chọn doanh nghiệp"
+                        className="flex items-center gap-1.5 group cursor-pointer"
+                        title="Nhấp để xem/chọn doanh nghiệp"
                       >
+                        <Building2 className="w-4 h-4 text-text-muted" />
                         {sch.companies.length === 0 ? (
-                          <span className="text-xs text-accent-default group-hover:underline flex items-center gap-1">
-                            <Building2 className="w-3.5 h-3.5" />
+                          <span className="text-xs text-accent-default group-hover:underline">
                             Chọn doanh nghiệp
                           </span>
                         ) : (
-                          <span className="flex flex-wrap gap-1 items-center">
-                            {sch.companies.map(sc => (
-                              <span
-                                key={sc.companyId}
-                                className="inline-flex items-center gap-1 bg-bg-tertiary px-2 py-0.5 rounded-lg text-xs"
-                              >
-                                <Building2 className="w-3 h-3 text-text-muted" />
-                                <span className="font-medium">{sc.company.name}</span>
-                                <span className="text-text-muted">({sc.company.taxCode})</span>
-                              </span>
-                            ))}
-                            <span className="text-xs text-text-muted group-hover:text-accent-default ml-1 opacity-0 group-hover:opacity-100 transition">
-                              ✎
-                            </span>
+                          <span className="text-sm font-medium group-hover:text-accent-default transition">
+                            {sch.companies.length} doanh nghiệp
                           </span>
                         )}
                       </button>
@@ -598,9 +586,14 @@ export default function SchedulePanel() {
             </div>
 
             <div className="p-4">
-              <p className="text-sm text-text-secondary mb-3">
-                Lịch: <strong>{companyModalSchedule.name || '(không tên)'}</strong>
-              </p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm text-text-secondary">
+                  Lịch: <strong>{companyModalSchedule.name || '(không tên)'}</strong>
+                </p>
+                <span className="text-xs text-text-muted bg-bg-tertiary px-2.5 py-1 rounded-lg">
+                  Đã chọn: <strong className="text-accent-default">{selectedCompanyIds.length}</strong> / {companies.length}
+                </span>
+              </div>
 
               <div className="max-h-64 overflow-y-auto space-y-1">
                 {companies.length === 0 ? (
