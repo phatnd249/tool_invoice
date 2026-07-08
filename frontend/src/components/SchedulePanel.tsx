@@ -203,9 +203,9 @@ export default function SchedulePanel() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="flex flex-col xl:flex-row gap-8">
       {/* Create Schedule Form Card */}
-      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl space-y-6">
+      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl space-y-6 w-full xl:w-[420px] shrink-0">
         <h2 className="text-lg font-semibold text-accent-default flex items-center">
           <Calendar className="w-5 h-5 mr-2" /> Thiết Lập Lịch Tự Động
         </h2>
@@ -458,7 +458,7 @@ export default function SchedulePanel() {
       </div>
 
       {/* Schedules List Card */}
-      <div className="lg:col-span-2 bg-card p-6 rounded-2xl border border-border shadow-xl flex flex-col">
+      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl flex flex-col flex-1 min-w-0">
         <h2 className="text-lg font-semibold text-accent-default flex items-center mb-4">
           <Calendar className="w-5 h-5 mr-2" /> Danh Sách Lịch Tải Định Kỳ ({schedules.length})
         </h2>
