@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Calendar, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Calendar, Plus, Trash2, ToggleLeft, ToggleRight, Building2, X, Check } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 interface Company {
@@ -39,18 +39,19 @@ const WEEKDAYS = [
 export default function SchedulePanel() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompanyIds, setSelectedCompanyIds] = useState<number[]>([]);
-  const [scheduleName, setScheduleName] = useState('');
-  const [invoiceType, setInvoiceType] = useState<'BUY' | 'SELL' | 'BOTH'>('SELL');
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  // Form state
+  const [scheduleName, setScheduleName] = useState('');
+  const [invoiceType, setInvoiceType] = useState<'BUY' | 'SELL' | 'BOTH'>('SELL');
 
   // Schedule timing state
   const [repeatMode, setRepeatMode] = useState<'weekly' | 'monthly' | 'quarterly' | 'custom' | 'once'>('weekly');
   const [scheduleHour, setScheduleHour] = useState(9);
   const [scheduleMinute, setScheduleMinute] = useState(0);
-  const [weekday, setWeekday] = useState(1);      // 0=CN, 1=T2... (for weekly)
-  const [monthDay, setMonthDay] = useState(1);    // 1-28 (for monthly/quarterly)
+  const [weekday, setWeekday] = useState(1);
+  const [monthDay, setMonthDay] = useState(1);
   const [customCron, setCustomCron] = useState('0 9 * * *');
   const [onceDatetime, setOnceDatetime] = useState(() => {
     const now = new Date();
@@ -61,12 +62,15 @@ export default function SchedulePanel() {
   const [dateRangeDays, setDateRangeDays] = useState(7);
   const [showDateRange, setShowDateRange] = useState(false);
 
-  // Validate hour/minute
+  // Modal state
+  const [companyModalSchedule, setCompanyModalSchedule] = useState<Schedule | null>(null);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<number[]>([]);
+  const [savingCompanies, setSavingCompanies] = useState(false);
+
   const hour = Math.max(0, Math.min(23, scheduleHour));
   const minute = Math.max(0, Math.min(59, scheduleMinute));
   const day = Math.max(1, Math.min(28, monthDay));
 
-  // Compute cron from preset
   const cronExpression = (() => {
     switch (repeatMode) {
       case 'weekly':
@@ -77,10 +81,8 @@ export default function SchedulePanel() {
         return `${minute} ${hour} ${day} 1,4,7,10 *`;
       case 'custom':
         return customCron;
-      case 'once':
-        return '';
       default:
-        return customCron;
+        return '';
     }
   })();
 
@@ -104,22 +106,11 @@ export default function SchedulePanel() {
     fetchData();
   }, []);
 
-  const toggleCompany = (id: number) => {
-    setSelectedCompanyIds(prev =>
-      prev.includes(id) ? prev.filter(cid => cid !== id) : [...prev, id]
-    );
-  };
-
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedCompanyIds.length === 0) {
-      alert('Vui lòng chọn ít nhất một doanh nghiệp.');
-      return;
-    }
     setCreating(true);
     try {
       await axios.post(`${API_BASE_URL}/api/schedules`, {
-        companyIds: selectedCompanyIds,
         name: scheduleName.trim() || undefined,
         cronExpression,
         scheduledAt: repeatMode === 'once' ? new Date(onceDatetime).toISOString() : undefined,
@@ -127,7 +118,6 @@ export default function SchedulePanel() {
         repeatMode,
         dateRangeDays: (repeatMode === 'custom' || repeatMode === 'once') && showDateRange ? dateRangeDays : null,
       });
-      setSelectedCompanyIds([]);
       setScheduleName('');
       fetchData();
     } catch (err: any) {
@@ -139,11 +129,11 @@ export default function SchedulePanel() {
 
   const handleToggleActive = async (id: number, currentActive: boolean) => {
     try {
-      await axios.patch(`${API_BASE_URL}/api/schedules/${id}`, {
+      const res = await axios.patch(`${API_BASE_URL}/api/schedules/${id}`, {
         isActive: !currentActive,
       });
       setSchedules((prev) =>
-        prev.map((sch) => (sch.id === id ? { ...sch, isActive: !currentActive } : sch))
+        prev.map((sch) => (sch.id === id ? res.data : sch))
       );
     } catch (err: any) {
       alert(`Thay đổi trạng thái thất bại: ${err.message}`);
@@ -157,6 +147,37 @@ export default function SchedulePanel() {
       setSchedules((prev) => prev.filter((sch) => sch.id !== id));
     } catch (err: any) {
       alert(`Xóa lịch thất bại: ${err.message}`);
+    }
+  };
+
+  // --- Company selection modal ---
+  const openCompanyModal = (schedule: Schedule) => {
+    setCompanyModalSchedule(schedule);
+    setSelectedCompanyIds(schedule.companies.map(sc => sc.companyId));
+  };
+
+  const toggleCompanySelection = (id: number) => {
+    setSelectedCompanyIds(prev =>
+      prev.includes(id) ? prev.filter(cid => cid !== id) : [...prev, id]
+    );
+  };
+
+  const saveCompanies = async () => {
+    if (!companyModalSchedule) return;
+    setSavingCompanies(true);
+    try {
+      const res = await axios.put(
+        `${API_BASE_URL}/api/schedules/${companyModalSchedule.id}/companies`,
+        { companyIds: selectedCompanyIds }
+      );
+      setSchedules((prev) =>
+        prev.map((sch) => (sch.id === companyModalSchedule.id ? res.data : sch))
+      );
+      setCompanyModalSchedule(null);
+    } catch (err: any) {
+      alert(`Cập nhật doanh nghiệp thất bại: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setSavingCompanies(false);
     }
   };
 
@@ -201,38 +222,6 @@ export default function SchedulePanel() {
             />
           </div>
 
-          {/* Multi-select companies */}
-          <div>
-            <label className="block text-xs font-semibold text-text-secondary mb-1">
-              Doanh Nghiệp <span className="text-danger">*</span>
-            </label>
-            <div className="max-h-48 overflow-y-auto bg-bg-primary border border-border rounded-xl p-2 space-y-1">
-              {companies.length === 0 ? (
-                <p className="text-xs text-text-muted p-2">Chưa có doanh nghiệp nào</p>
-              ) : (
-                companies.map((c) => (
-                  <label
-                    key={c.id}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition text-sm ${
-                      selectedCompanyIds.includes(c.id)
-                        ? 'bg-accent-default/15 text-accent-default'
-                        : 'hover:bg-bg-tertiary text-text-primary'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedCompanyIds.includes(c.id)}
-                      onChange={() => toggleCompany(c.id)}
-                      className="w-4 h-4 rounded bg-bg-primary border-border text-accent-default focus:ring-accent-default"
-                    />
-                    <span className="font-medium">{c.name}</span>
-                    <span className="text-xs text-text-muted ml-auto">({c.taxCode})</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
-
           <div className="space-y-3">
             <label className="block text-xs font-semibold text-text-secondary">Chu Kỳ Tự Động Tải</label>
 
@@ -263,7 +252,6 @@ export default function SchedulePanel() {
             {/* Time + day/weekday pickers (hidden for custom & once) */}
             {repeatMode !== 'custom' && repeatMode !== 'once' && (
               <div className="space-y-3 bg-bg-primary/30 rounded-xl p-3">
-                {/* Time inputs */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-text-secondary w-12 shrink-0">Giờ</span>
                   <input
@@ -284,12 +272,9 @@ export default function SchedulePanel() {
                     onChange={(e) => setScheduleMinute(Number(e.target.value))}
                     className="w-16 bg-bg-primary border border-border rounded-lg px-2 py-2 text-sm text-text-primary text-center focus:outline-none focus:border-accent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  <span className="text-xs text-text-muted">
-                    (giờ:phút, 24h)
-                  </span>
+                  <span className="text-xs text-text-muted">(giờ:phút, 24h)</span>
                 </div>
 
-                {/* Weekday picker (weekly only) */}
                 {repeatMode === 'weekly' && (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-text-secondary w-12 shrink-0">Thứ</span>
@@ -312,7 +297,6 @@ export default function SchedulePanel() {
                   </div>
                 )}
 
-                {/* Month day picker (monthly + quarterly) */}
                 {(repeatMode === 'monthly' || repeatMode === 'quarterly') && (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-text-secondary w-12 shrink-0">Ngày</span>
@@ -342,7 +326,6 @@ export default function SchedulePanel() {
                     className="flex-1 bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                   />
                 </div>
-                {/* Date range toggle for once mode */}
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -388,7 +371,6 @@ export default function SchedulePanel() {
                   </span>
                 </div>
 
-                {/* Date range toggle for custom mode */}
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -415,7 +397,6 @@ export default function SchedulePanel() {
               </div>
             )}
 
-            {/* Computed cron preview (for recurring modes) */}
             {repeatMode !== 'once' && (
               <details className="text-xxs text-text-muted group">
                 <summary className="cursor-pointer hover:text-text-secondary transition">Xem cron expression</summary>
@@ -514,14 +495,34 @@ export default function SchedulePanel() {
                       {sch.name || <span className="text-text-muted italic">—</span>}
                     </td>
                     <td className="p-3">
-                      <div className="space-y-0.5">
-                        {sch.companies.map(sc => (
-                          <div key={sc.companyId} className="text-sm">
-                            <span className="font-medium">{sc.company.name}</span>
-                            <span className="text-xs text-text-muted ml-1">({sc.company.taxCode})</span>
-                          </div>
-                        ))}
-                      </div>
+                      <button
+                        onClick={() => openCompanyModal(sch)}
+                        className="flex flex-wrap gap-1 items-center group cursor-pointer"
+                        title="Nhấp để chọn doanh nghiệp"
+                      >
+                        {sch.companies.length === 0 ? (
+                          <span className="text-xs text-accent-default group-hover:underline flex items-center gap-1">
+                            <Building2 className="w-3.5 h-3.5" />
+                            Chọn doanh nghiệp
+                          </span>
+                        ) : (
+                          <span className="flex flex-wrap gap-1 items-center">
+                            {sch.companies.map(sc => (
+                              <span
+                                key={sc.companyId}
+                                className="inline-flex items-center gap-1 bg-bg-tertiary px-2 py-0.5 rounded-lg text-xs"
+                              >
+                                <Building2 className="w-3 h-3 text-text-muted" />
+                                <span className="font-medium">{sc.company.name}</span>
+                                <span className="text-text-muted">({sc.company.taxCode})</span>
+                              </span>
+                            ))}
+                            <span className="text-xs text-text-muted group-hover:text-accent-default ml-1 opacity-0 group-hover:opacity-100 transition">
+                              ✎
+                            </span>
+                          </span>
+                        )}
+                      </button>
                     </td>
                     <td className="p-3">
                       <div className="font-medium">{formatRepeatMode(sch.repeatMode)}</div>
@@ -578,6 +579,92 @@ export default function SchedulePanel() {
           </table>
         </div>
       </div>
+
+      {/* Company Selection Modal */}
+      {companyModalSchedule && (
+        <div className="fixed inset-0 bg-overlay backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-lg bg-card border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center px-6 py-5 bg-bg-secondary/80 border-b border-border">
+              <h2 className="text-md font-bold text-text-primary flex items-center space-x-2">
+                <Building2 className="w-5 h-5 text-accent-default" />
+                <span>Chọn Doanh Nghiệp</span>
+              </h2>
+              <button
+                onClick={() => setCompanyModalSchedule(null)}
+                className="text-text-secondary hover:text-text-primary p-1 hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4">
+              <p className="text-sm text-text-secondary mb-3">
+                Lịch: <strong>{companyModalSchedule.name || '(không tên)'}</strong>
+              </p>
+
+              <div className="max-h-64 overflow-y-auto space-y-1">
+                {companies.length === 0 ? (
+                  <p className="text-xs text-text-muted p-2">Chưa có doanh nghiệp nào.</p>
+                ) : (
+                  companies.map((c) => (
+                    <label
+                      key={c.id}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition text-sm ${
+                        selectedCompanyIds.includes(c.id)
+                          ? 'bg-accent-default/10 text-accent-default'
+                          : 'hover:bg-bg-tertiary text-text-primary'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedCompanyIds.includes(c.id)}
+                        onChange={() => toggleCompanySelection(c.id)}
+                        className="w-4 h-4 rounded bg-bg-primary border-border text-accent-default focus:ring-accent-default"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{c.name}</div>
+                        <div className="text-xs text-text-muted">MST: {c.taxCode}</div>
+                      </div>
+                      {selectedCompanyIds.includes(c.id) && (
+                        <Check className="w-4 h-4 shrink-0 text-accent-default" />
+                      )}
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 py-4 bg-bg-secondary/40 border-t border-border">
+              <button
+                onClick={() => setCompanyModalSchedule(null)}
+                className="bg-bg-tertiary hover:bg-bg-tertiary text-text-secondary px-4 py-2 rounded-xl transition duration-150 cursor-pointer text-xs font-semibold"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={saveCompanies}
+                disabled={savingCompanies}
+                className="bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default disabled:opacity-50 text-white px-4 py-2 rounded-xl transition duration-150 cursor-pointer text-xs font-semibold shadow-lg shadow-accent-default/10 flex items-center gap-1.5"
+              >
+                {savingCompanies ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span>Đang lưu...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Lưu</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

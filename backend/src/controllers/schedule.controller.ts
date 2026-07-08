@@ -28,15 +28,10 @@ export class ScheduleController {
 
   /**
    * POST /api/schedules
-   * Create a new schedule with multiple companies and start its cron job.
+   * Create a new schedule (companies can be assigned later).
    */
   static async create(req: AuthRequest, res: Response): Promise<void> {
-    const { companyIds, name, cronExpression, scheduledAt, invoiceType, repeatMode, dateRangeDays } = req.body;
-
-    if (!companyIds || !Array.isArray(companyIds) || companyIds.length === 0) {
-      res.status(400).json({ error: 'Thiếu thông tin bắt buộc: companyIds phải là mảng có ít nhất một doanh nghiệp.' });
-      return;
-    }
+    const { name, cronExpression, scheduledAt, invoiceType, repeatMode, dateRangeDays } = req.body;
 
     if (repeatMode !== 'once' && !cronExpression) {
       res.status(400).json({ error: 'Thiếu cronExpression cho lịch định kỳ.' });
@@ -53,15 +48,6 @@ export class ScheduleController {
       return;
     }
 
-    // Validate all companies exist
-    const companies = await prisma.company.findMany({
-      where: { id: { in: companyIds } },
-    });
-    if (companies.length !== companyIds.length) {
-      res.status(404).json({ error: 'Một số doanh nghiệp không tồn tại.' });
-      return;
-    }
-
     const effectiveCron = repeatMode === 'once' ? '' : cronExpression;
 
     const schedule = await prisma.schedule.create({
@@ -73,15 +59,9 @@ export class ScheduleController {
         dateRangeDays: dateRangeDays || null,
         invoiceType,
         isActive: true,
-        companies: {
-          create: companyIds.map((cid: number) => ({ companyId: cid })),
-        },
       },
       include: { companies: { include: { company: true } } },
     });
-
-    // Start the cron job immediately
-    schedulerService.startJob(formatSchedule(schedule));
 
     res.status(201).json(formatSchedule(schedule));
   }
@@ -111,6 +91,59 @@ export class ScheduleController {
     if (updated.isActive) {
       schedulerService.startJob(formatSchedule(updated));
     } else {
+      schedulerService.stopJob(id);
+    }
+
+    res.json(formatSchedule(updated));
+  }
+
+  /**
+   * PUT /api/schedules/:id/companies
+   * Replace the list of companies assigned to a schedule.
+   */
+  static async updateCompanies(req: AuthRequest, res: Response): Promise<void> {
+    const id = Number(req.params.id);
+    const { companyIds } = req.body;
+
+    if (!companyIds || !Array.isArray(companyIds)) {
+      res.status(400).json({ error: 'companyIds phải là một mảng.' });
+      return;
+    }
+
+    const schedule = await prisma.schedule.findUnique({ where: { id } });
+    if (!schedule) {
+      res.status(404).json({ error: 'Không tìm thấy lịch.' });
+      return;
+    }
+
+    // Delete old associations and create new ones in a transaction
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.scheduleCompany.deleteMany({ where: { scheduleId: id } });
+
+      if (companyIds.length > 0) {
+        // Validate companies exist
+        const companies = await tx.company.findMany({
+          where: { id: { in: companyIds } },
+        });
+        if (companies.length !== companyIds.length) {
+          throw new Error('Một số doanh nghiệp không tồn tại.');
+        }
+
+        await tx.scheduleCompany.createMany({
+          data: companyIds.map((cid: number) => ({ scheduleId: id, companyId: cid })),
+        });
+      }
+
+      return tx.schedule.findUnique({
+        where: { id },
+        include: { companies: { include: { company: true } } },
+      });
+    });
+
+    // Restart the job with updated companies if active
+    if (updated?.isActive && updated.companies.length > 0) {
+      schedulerService.startJob(formatSchedule(updated));
+    } else if (updated) {
       schedulerService.stopJob(id);
     }
 
