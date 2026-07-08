@@ -20,11 +20,22 @@ interface Invoice {
   invoiceNumber: string;
   invoiceDate: string;
   type: 'SELL' | 'BUY';
+  templateSymbol: string;
+  invoiceSymbol: string;
   sellerName: string;
   sellerTaxCode: string;
+  sellerAddress?: string | null;
   buyerName: string;
   buyerTaxCode: string;
+  buyerAddress?: string | null;
+  totalBeforeTax: number;
+  taxAmount: number;
   totalAmount: number;
+  currency?: string;
+  exchangeRate?: number;
+  paymentMethod?: string | null;
+  totalAmountInWords?: string | null;
+  pdfPath?: string | null;
   xmlPath?: string | null;
   zipPath?: string | null;
   items?: InvoiceItem[];
@@ -47,6 +58,30 @@ interface PaginatedResponse<T> {
   size: number;
   total: number;
   totalPages: number;
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('vi-VN').format(value);
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('vi-VN');
+}
+
+function formatInvoiceNumber(num: string): string {
+  return String(num).padStart(8, '0');
+}
+
+function getInvoiceStatus(inv: Invoice): { label: string; color: string } {
+  const hasZip = inv.zipPath && inv.zipPath !== 'VIRTUAL_HTML';
+  const hasPdf = !!inv.pdfPath;
+  const hasXml = !!inv.xmlPath;
+
+  if (hasZip && hasPdf && hasXml) return { label: 'Đã tải đủ', color: 'bg-emerald-900/50 text-emerald-300' };
+  if (hasPdf && hasXml) return { label: 'Thiếu ZIP', color: 'bg-amber-900/50 text-amber-300' };
+  if (inv.zipPath === 'VIRTUAL_HTML') return { label: 'HTML online', color: 'bg-blue-900/50 text-blue-300' };
+  if (hasPdf || hasXml || hasZip) return { label: 'Tải một phần', color: 'bg-amber-900/50 text-amber-300' };
+  return { label: 'Chưa tải file', color: 'bg-gray-700/50 text-gray-400' };
 }
 
 const PAGE_SIZES = [10, 20, 50, 100];
@@ -470,7 +505,7 @@ export default function InvoiceHistory() {
             <table className="w-full text-left border-collapse text-sm">
               <thead className="bg-bg-primary/50 border-b border-border text-text-secondary font-semibold uppercase text-xs">
                 <tr>
-                  <th className="p-4 w-12 text-center">
+                  <th className="p-3 w-10 text-center">
                     <input
                       type="checkbox"
                       checked={invoices.length > 0 && selectedIds.length === invoices.length}
@@ -478,20 +513,31 @@ export default function InvoiceHistory() {
                       className="w-4 h-4 rounded border-border text-accent-default focus:ring-accent-default bg-bg-primary"
                     />
                   </th>
-                  <th className="p-4">Số Hóa Đơn</th>
-                  <th className="p-4">Ngày Lập</th>
-                  <th className="p-4">Loại HĐ</th>
-                  <th className="p-4">Bên Bán</th>
-                  <th className="p-4">Bên Mua</th>
-                  <th className="p-4 text-right">Tổng Thanh Toán</th>
-                  <th className="p-4 text-center">Chi Tiết</th>
-                  <th className="p-4 text-center">Tải Tệp</th>
+                  <th className="p-3 w-10 text-center">STT</th>
+                  <th className="p-3">Ký hiệu mẫu số</th>
+                  <th className="p-3">Ký hiệu HĐ</th>
+                  <th className="p-3">Số HĐ</th>
+                  <th className="p-3">Ngày lập</th>
+                  <th className="p-3">MST người bán</th>
+                  <th className="p-3">Tên người bán</th>
+                  <th className="p-3">MST người mua</th>
+                  <th className="p-3">Tên người mua</th>
+                  <th className="p-3">Địa chỉ người mua</th>
+                  <th className="p-3 text-right">Tiền trước thuế</th>
+                  <th className="p-3 text-right">Tiền thuế</th>
+                  <th className="p-3 text-right">Chiết khấu</th>
+                  <th className="p-3 text-right">Phí</th>
+                  <th className="p-3 text-right">Tổng thanh toán</th>
+                  <th className="p-3 text-center">ĐVT</th>
+                  <th className="p-3 text-right">Tỷ giá</th>
+                  <th className="p-3 text-center">Trạng thái</th>
+                  <th className="p-3 text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50 text-text-muted">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="p-12 text-center text-text-muted">
+                    <td colSpan={20} className="p-12 text-center text-text-muted">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <Loader2 className="w-8 h-8 text-accent-default animate-spin" />
                         <span>Đang tải danh sách hóa đơn từ Database...</span>
@@ -500,21 +546,17 @@ export default function InvoiceHistory() {
                   </tr>
                 ) : invoices.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-text-muted">
+                    <td colSpan={20} className="p-8 text-center text-text-muted">
                       Không có hóa đơn nào trong cơ sở dữ liệu.
                     </td>
                   </tr>
                 ) : (
-                  invoices.map((inv) => {
-                    const dateStr = new Date(inv.invoiceDate).toLocaleDateString('vi-VN');
-                    const formattedAmount = new Intl.NumberFormat('vi-VN', {
-                      style: 'currency',
-                      currency: 'VND',
-                    }).format(inv.totalAmount);
+                  invoices.map((inv, idx) => {
+                    const status = getInvoiceStatus(inv);
 
                     return (
                       <tr key={inv.id} className="hover:bg-bg-primary/30 transition-all border-b border-border/30">
-                        <td className="p-4 text-center">
+                        <td className="p-3 text-center">
                           <input
                             type="checkbox"
                             checked={selectedIds.includes(inv.id)}
@@ -522,53 +564,78 @@ export default function InvoiceHistory() {
                             className="w-4 h-4 rounded border-border text-accent-default focus:ring-accent-default bg-bg-primary"
                           />
                         </td>
-                        <td className="p-4 font-semibold text-text-primary">
-                          {String(inv.invoiceNumber).padStart(8, '0')}
+                        <td className="p-3 text-center text-text-muted text-xs">
+                          {idx + 1 + page * size}
                         </td>
-                        <td className="p-4 text-text-secondary">{dateStr}</td>
-                        <td className="p-4">
-                          <span
-                            className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${inv.type === 'SELL' ? 'bg-accent-light-default text-accent-default' : 'bg-amber-900/50 text-amber-300'
-                              }`}
-                          >
-                            {inv.type === 'SELL' ? 'Bán ra' : 'Mua vào'}
+                        <td className="p-3 font-mono text-xs text-text-secondary">
+                          {inv.templateSymbol || '—'}
+                        </td>
+                        <td className="p-3 font-mono text-xs text-text-secondary">
+                          {inv.invoiceSymbol || '—'}
+                        </td>
+                        <td className="p-3 font-semibold text-text-primary font-mono text-xs">
+                          {formatInvoiceNumber(inv.invoiceNumber)}
+                        </td>
+                        <td className="p-3 text-text-secondary text-xs whitespace-nowrap">
+                          {formatDate(inv.invoiceDate)}
+                        </td>
+                        <td className="p-3 font-mono text-xs">
+                          {inv.sellerTaxCode}
+                        </td>
+                        <td className="p-3 max-w-[160px] truncate text-xs" title={inv.sellerName}>
+                          <span className="font-medium text-text-primary">{inv.sellerName}</span>
+                        </td>
+                        <td className="p-3 font-mono text-xs">
+                          {inv.buyerTaxCode}
+                        </td>
+                        <td className="p-3 max-w-[160px] truncate text-xs" title={inv.buyerName}>
+                          <span className="font-medium text-text-primary">{inv.buyerName}</span>
+                        </td>
+                        <td className="p-3 max-w-[160px] truncate text-text-muted text-xs" title={inv.buyerAddress || ''}>
+                          {inv.buyerAddress || '—'}
+                        </td>
+                        <td className="p-3 text-right text-xs">
+                          {formatNumber(inv.totalBeforeTax)}
+                        </td>
+                        <td className="p-3 text-right text-xs">
+                          {formatNumber(inv.taxAmount)}
+                        </td>
+                        <td className="p-3 text-right text-text-muted text-xs">—</td>
+                        <td className="p-3 text-right text-text-muted text-xs">—</td>
+                        <td className="p-3 text-right font-bold text-success-default text-xs">
+                          {formatNumber(inv.totalAmount)}
+                        </td>
+                        <td className="p-3 text-center text-xs">
+                          {inv.currency || 'VND'}
+                        </td>
+                        <td className="p-3 text-right text-xs">
+                          {inv.exchangeRate && inv.exchangeRate !== 1 ? inv.exchangeRate : '—'}
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${status.color}`}>
+                            {status.label}
                           </span>
                         </td>
-                        <td className="p-4 max-w-[200px] truncate">
-                          <div className="font-medium text-text-primary truncate" title={inv.sellerName}>
-                            {inv.sellerName}
-                          </div>
-                          <div className="text-xs text-text-muted">{inv.sellerTaxCode}</div>
-                        </td>
-                        <td className="p-4 max-w-[200px] truncate">
-                          <div className="font-medium text-text-primary truncate" title={inv.buyerName}>
-                            {inv.buyerName}
-                          </div>
-                          <div className="text-xs text-text-muted">{inv.buyerTaxCode}</div>
-                        </td>
-                        <td className="p-4 text-right font-bold text-success-default">{formattedAmount}</td>
-                        <td className="p-4 text-center">
-                          <button
-                            onClick={() => setDetailInvoice(inv)}
-                            className="text-accent-default hover:text-accent-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
-                            title="Xem chi tiết sản phẩm"
-                          >
-                            <List className="w-5 h-5" />
-                          </button>
-                        </td>
-                        <td className="p-4 text-center">
-                          <div className="flex items-center justify-center space-x-2">
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center space-x-1">
+                            <button
+                              onClick={() => setDetailInvoice(inv)}
+                              className="text-accent-default hover:text-accent-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
+                              title="Xem chi tiết sản phẩm"
+                            >
+                              <List className="w-4 h-4" />
+                            </button>
                             {inv.zipPath ? (
                               <button
                                 onClick={() => openPreview(inv.id)}
                                 className="text-success-default hover:text-success-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
                                 title="Xem trước hóa đơn (HTML)"
                               >
-                                <Eye className="w-5 h-5" />
+                                <Eye className="w-4 h-4" />
                               </button>
                             ) : (
                               <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc để preview">
-                                <Eye className="w-5 h-5 opacity-30" />
+                                <Eye className="w-4 h-4 opacity-30" />
                               </span>
                             )}
                             {inv.xmlPath ? (
@@ -577,11 +644,11 @@ export default function InvoiceHistory() {
                                 className="text-accent-default hover:text-accent-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
                                 title="Tải file XML gốc"
                               >
-                                <FileDown className="w-5 h-5" />
+                                <FileDown className="w-4 h-4" />
                               </button>
                             ) : (
                               <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có file XML gốc">
-                                <FileDown className="w-5 h-5 opacity-30" />
+                                <FileDown className="w-4 h-4 opacity-30" />
                               </span>
                             )}
                             {inv.zipPath ? (
@@ -590,16 +657,16 @@ export default function InvoiceHistory() {
                                 className="text-danger-default hover:text-danger-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
                                 title="Tải bản thể hiện (PDF)"
                               >
-                                <FileText className="w-5 h-5" />
+                                <FileText className="w-4 h-4" />
                               </button>
                             ) : (
                               <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có bản thể hiện PDF">
-                                <FileText className="w-5 h-5 opacity-30" />
+                                <FileText className="w-4 h-4 opacity-30" />
                               </span>
                             )}
                             {inv.zipPath === 'VIRTUAL_HTML' ? (
                               <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Chỉ có bản thể hiện HTML, không có file ZIP gốc">
-                                <FileArchive className="w-5 h-5 opacity-30" />
+                                <FileArchive className="w-4 h-4 opacity-30" />
                               </span>
                             ) : inv.zipPath ? (
                               <button
@@ -607,11 +674,11 @@ export default function InvoiceHistory() {
                                 className="text-amber-400 hover:text-amber-300 transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
                                 title="Tải tệp nén ZIP gốc"
                               >
-                                <FileArchive className="w-5 h-5" />
+                                <FileArchive className="w-4 h-4" />
                               </button>
                             ) : (
                               <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc">
-                                <FileArchive className="w-5 h-5 opacity-30" />
+                                <FileArchive className="w-4 h-4 opacity-30" />
                               </span>
                             )}
                           </div>
