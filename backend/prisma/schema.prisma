@@ -24,17 +24,17 @@ model User {
 }
 
 model Company {
-  id             Int           @id @default(autoincrement())
-  taxCode        String        @unique
+  id             Int               @id @default(autoincrement())
+  taxCode        String            @unique
   name           String
   lookupPassword String
   token          String?
   tokenExpiredAt DateTime?
-  loginMode      String        @default("AUTO") // "AUTO" or "MANUAL"
-  downloadCount  Int           @default(0)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  schedules      Schedule[]
+  loginMode      String            @default("AUTO") // "AUTO" or "MANUAL"
+  downloadCount  Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  scheduleCompanies ScheduleCompany[]
   users          UserCompany[]
 }
 
@@ -121,16 +121,27 @@ model DownloadHistory {
 
 model Schedule {
   id             Int       @id @default(autoincrement())
-  companyId      Int
-  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  cronExpression String    // e.g., "0 9 * * *" (9 AM daily)
-  repeatMode     String    @default("weekly") // "weekly" | "monthly" | "quarterly" | "custom"
+  name           String?   // Tên gợi nhớ cho lịch (VD: "Lịch cuối tháng")
+  cronExpression String    // e.g., "0 9 * * *" (9 AM daily), or "" for one-time
+  repeatMode     String    @default("weekly") // "daily" | "weekly" | "monthly" | "quarterly" | "custom" | "once"
+  scheduledAt    DateTime? // Ngày giờ cụ thể (dùng khi repeatMode = "once")
   dateRangeDays  Int?      // Số ngày tải ngược từ hôm nay (null = auto-detect từ repeatMode)
-  invoiceType    String    // "BUY" or "SELL"
+  invoiceType    String    // "BUY" | "SELL" | "BOTH"
   isActive       Boolean   @default(true)
   lastRun        DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+
+  companies      ScheduleCompany[]
+}
+
+model ScheduleCompany {
+  scheduleId Int
+  schedule   Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  companyId  Int
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([scheduleId, companyId])
 }
 
 model Setting {

@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron, { ScheduledTask } from 'node-cron';
 import prisma from '../utils/db.js';
 
 /**
@@ -37,6 +37,11 @@ function getDateRange(schedule: {
 
   // Auto-detect from repeatMode
   switch (schedule.repeatMode) {
+    case 'daily': {
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return { startDate: formatDate(yesterday), endDate: formatDate(yesterday) };
+    }
     case 'weekly': {
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
@@ -62,7 +67,8 @@ function getDateRange(schedule: {
  * Jobs are persisted in DB (Schedule table) and re-created on server restart.
  */
 class SchedulerService {
-  private jobs = new Map<number, cron.ScheduledTask>();
+  private jobs = new Map<number, ScheduledTask>();
+  private timeouts = new Map<number, ReturnType<typeof setTimeout>>();
 
   /**
    * Start all active schedules from database.
@@ -72,11 +78,11 @@ class SchedulerService {
     try {
       const schedules = await prisma.schedule.findMany({
         where: { isActive: true },
-        include: { company: true },
+        include: { companies: { include: { company: true } } },
       });
 
       for (const s of schedules) {
-        this.startJob(s);
+        this.startJob(this.formatSchedule(s));
       }
 
       console.log(`[Scheduler] Started ${schedules.length} active schedule(s).`);
@@ -86,45 +92,53 @@ class SchedulerService {
   }
 
   /**
-   * Create and start a cron job for a schedule.
+   * Normalise schedule object: convert DB shape to the expected interface.
    */
-  startJob(schedule: {
-    id: number;
-    cronExpression: string;
-    companyId: number;
-    repeatMode: string;
-    dateRangeDays: number | null;
-    invoiceType: string;
-    company?: { taxCode: string };
-  }): void {
-    const { id, cronExpression, companyId, repeatMode, dateRangeDays, invoiceType } = schedule;
-    const taxCode = schedule.company?.taxCode || 'unknown';
+  private formatSchedule(s: any): ScheduleWithCompanies {
+    const companies = s.companies?.map((sc: any) => ({
+      companyId: sc.companyId,
+      company: sc.company,
+    })) || [];
+    return {
+      id: s.id,
+      name: s.name,
+      cronExpression: s.cronExpression,
+      repeatMode: s.repeatMode,
+      scheduledAt: s.scheduledAt,
+      dateRangeDays: s.dateRangeDays,
+      invoiceType: s.invoiceType,
+      isActive: s.isActive,
+      lastRun: s.lastRun,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      companies,
+    };
+  }
 
-    // Stop existing job if any
-    this.stopJob(id);
+  /**
+   * Run the download task for all companies in a schedule.
+   */
+  private async runDownload(schedule: ScheduleWithCompanies): Promise<void> {
+    const { id, repeatMode, dateRangeDays, invoiceType, companies } = schedule;
+    const companyNames = companies.map(c => c.company.taxCode).join(',');
+    console.log(`[Scheduler] Running schedule #${id} (${companyNames}, ${invoiceType})...`);
 
-    if (!cron.validate(cronExpression)) {
-      console.error(`[Scheduler] Invalid cron "${cronExpression}" for schedule #${id}`);
-      return;
-    }
+    try {
+      const { startDate, endDate } = getDateRange({ repeatMode, dateRangeDays });
+      console.log(`[Scheduler] Date range: ${startDate} → ${endDate}`);
 
-    const job = cron.schedule(cronExpression, async () => {
-      console.log(`[Scheduler] Running schedule #${id} (${taxCode}, ${invoiceType})...`);
+      const { InvoiceController } = await import('../controllers/invoice.controller.js');
 
-      try {
-        const { startDate, endDate } = getDateRange({ repeatMode, dateRangeDays });
-        console.log(`[Scheduler] Date range: ${startDate} → ${endDate}`);
+      for (const sc of companies) {
+        const taxCode = sc.company.taxCode;
+        console.log(`[Scheduler] Downloading for company ${taxCode}...`);
 
-        // Import dynamically to avoid circular dependency at module level
-        const { InvoiceController } = await import('../controllers/invoice.controller.js');
-
-        // Build a fake Request/Response for the download handler
         const mockReq = {
           body: {
             startDate,
             endDate,
             invoiceType,
-            companyId,
+            companyId: sc.companyId,
           },
           user: { id: null, username: 'scheduler', role: 'ADMIN' },
         } as any;
@@ -135,7 +149,7 @@ class SchedulerService {
           status: (code: number) => ({
             json: (data: any) => {
               if (code >= 400) {
-                console.error(`[Scheduler] Schedule #${id} failed with status ${code}:`, data?.error || data);
+                console.error(`[Scheduler] Schedule #${id} company #${sc.companyId} failed with status ${code}:`, data?.error || data);
               }
               resultMessage = data?.message || data?.error || JSON.stringify(data);
             },
@@ -143,32 +157,90 @@ class SchedulerService {
         } as any;
 
         await InvoiceController.downloadInvoices(mockReq, mockRes);
+        console.log(`[Scheduler] Company ${taxCode} done: ${resultMessage}`);
+      }
 
-        // Update lastRun
+      // Update lastRun
+      await prisma.schedule.update({
+        where: { id },
+        data: { lastRun: new Date() },
+      });
+
+      // Auto-deactivate one-time schedules after first run
+      if (repeatMode === 'once') {
         await prisma.schedule.update({
           where: { id },
-          data: { lastRun: new Date() },
+          data: { isActive: false },
         });
-
-        console.log(`[Scheduler] Schedule #${id} completed: ${resultMessage}`);
-      } catch (err: any) {
-        console.error(`[Scheduler] Schedule #${id} error:`, err.message);
+        this.stopJob(id);
+        console.log(`[Scheduler] One-time schedule #${id} completed and deactivated.`);
       }
-    });
 
-    this.jobs.set(id, job);
-    console.log(`[Scheduler] Job #${id} scheduled: ${cronExpression} (mode=${repeatMode}, days=${dateRangeDays ?? 'auto'})`);
+      console.log(`[Scheduler] Schedule #${id} completed.`);
+    } catch (err: any) {
+      console.error(`[Scheduler] Schedule #${id} error:`, err.message);
+    }
   }
 
   /**
-   * Stop and remove a single job.
+   * Create and start a cron job (or timeout) for a schedule.
+   */
+  startJob(schedule: ScheduleWithCompanies): void {
+    const { id, cronExpression, repeatMode, scheduledAt } = schedule;
+    const companies = schedule.companies || [];
+    const taxCodes = companies.map(c => c.company.taxCode).join(',') || 'unknown';
+
+    // Stop existing job if any
+    this.stopJob(id);
+
+    if (repeatMode === 'once') {
+      // One-time: use setTimeout
+      if (!scheduledAt) {
+        console.error(`[Scheduler] No scheduledAt for one-time schedule #${id}`);
+        return;
+      }
+      const delayMs = new Date(scheduledAt).getTime() - Date.now();
+      if (delayMs <= 0) {
+        console.log(`[Scheduler] One-time schedule #${id} is in the past, skipping.`);
+        // Deactivate it
+        prisma.schedule.update({ where: { id }, data: { isActive: false } }).catch(() => {});
+        return;
+      }
+      const timeout = setTimeout(() => {
+        this.runDownload(schedule);
+      }, delayMs);
+      this.timeouts.set(id, timeout);
+      console.log(`[Scheduler] One-time job #${id} scheduled in ${Math.round(delayMs / 1000)}s (at ${new Date(scheduledAt).toISOString()})`);
+      return;
+    }
+
+    // Recurring: use cron
+    if (!cron.validate(cronExpression)) {
+      console.error(`[Scheduler] Invalid cron "${cronExpression}" for schedule #${id}`);
+      return;
+    }
+
+    const job = cron.schedule(cronExpression, async () => {
+      await this.runDownload(schedule);
+    });
+
+    this.jobs.set(id, job);
+    console.log(`[Scheduler] Job #${id} scheduled: ${cronExpression} (mode=${repeatMode}, companies=${taxCodes})`);
+  }
+
+  /**
+   * Stop and remove a single job (cron or timeout).
    */
   stopJob(id: number): void {
     const job = this.jobs.get(id);
     if (job) {
       job.stop();
       this.jobs.delete(id);
-      console.log(`[Scheduler] Job #${id} stopped.`);
+    }
+    const timeout = this.timeouts.get(id);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.timeouts.delete(id);
     }
   }
 
@@ -180,8 +252,27 @@ class SchedulerService {
       job.stop();
     }
     this.jobs.clear();
+    for (const [id, timeout] of this.timeouts) {
+      clearTimeout(timeout);
+    }
+    this.timeouts.clear();
     console.log('[Scheduler] All jobs stopped.');
   }
 }
 
 export const schedulerService = new SchedulerService();
+
+export interface ScheduleWithCompanies {
+  id: number;
+  name: string | null;
+  cronExpression: string;
+  repeatMode: string;
+  scheduledAt: Date | null;
+  dateRangeDays: number | null;
+  invoiceType: string;
+  isActive: boolean;
+  lastRun: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  companies: { companyId: number; company: { id: number; taxCode: string; name: string } }[];
+}

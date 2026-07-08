@@ -9,14 +9,21 @@ interface Company {
   name: string;
 }
 
-interface Schedule {
-  id: number;
+interface ScheduleCompany {
   companyId: number;
   company: Company;
+}
+
+interface Schedule {
+  id: number;
+  name: string | null;
   cronExpression: string;
-  invoiceType: 'BUY' | 'SELL';
+  repeatMode: string;
+  scheduledAt: string | null;
+  invoiceType: string;
   isActive: boolean;
   lastRun?: string | null;
+  companies: ScheduleCompany[];
 }
 
 const WEEKDAYS = [
@@ -32,18 +39,25 @@ const WEEKDAYS = [
 export default function SchedulePanel() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState('');
-  const [invoiceType, setInvoiceType] = useState<'BUY' | 'SELL'>('SELL');
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<number[]>([]);
+  const [scheduleName, setScheduleName] = useState('');
+  const [invoiceType, setInvoiceType] = useState<'BUY' | 'SELL' | 'BOTH'>('SELL');
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
   // Schedule timing state
-  const [repeatMode, setRepeatMode] = useState<'weekly' | 'monthly' | 'quarterly' | 'custom'>('weekly');
+  const [repeatMode, setRepeatMode] = useState<'weekly' | 'monthly' | 'quarterly' | 'custom' | 'once'>('weekly');
   const [scheduleHour, setScheduleHour] = useState(9);
   const [scheduleMinute, setScheduleMinute] = useState(0);
   const [weekday, setWeekday] = useState(1);      // 0=CN, 1=T2... (for weekly)
   const [monthDay, setMonthDay] = useState(1);    // 1-28 (for monthly/quarterly)
   const [customCron, setCustomCron] = useState('0 9 * * *');
+  const [onceDatetime, setOnceDatetime] = useState(() => {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    now.setHours(now.getHours() + 1);
+    return now.toISOString().slice(0, 16);
+  });
   const [dateRangeDays, setDateRangeDays] = useState(7);
   const [showDateRange, setShowDateRange] = useState(false);
 
@@ -63,6 +77,10 @@ export default function SchedulePanel() {
         return `${minute} ${hour} ${day} 1,4,7,10 *`;
       case 'custom':
         return customCron;
+      case 'once':
+        return '';
+      default:
+        return customCron;
     }
   })();
 
@@ -75,9 +93,6 @@ export default function SchedulePanel() {
       ]);
       setSchedules(schedulesRes.data);
       setCompanies(companiesRes.data);
-      if (companiesRes.data.length > 0) {
-        setSelectedCompanyId(String(companiesRes.data[0].id));
-      }
     } catch (err) {
       console.error('Error fetching schedules/companies:', err);
     } finally {
@@ -89,24 +104,34 @@ export default function SchedulePanel() {
     fetchData();
   }, []);
 
+  const toggleCompany = (id: number) => {
+    setSelectedCompanyIds(prev =>
+      prev.includes(id) ? prev.filter(cid => cid !== id) : [...prev, id]
+    );
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCompanyId) {
-      alert('Vui lòng chọn hoặc thêm một doanh nghiệp trước.');
+    if (selectedCompanyIds.length === 0) {
+      alert('Vui lòng chọn ít nhất một doanh nghiệp.');
       return;
     }
     setCreating(true);
     try {
       await axios.post(`${API_BASE_URL}/api/schedules`, {
-        companyId: Number(selectedCompanyId),
+        companyIds: selectedCompanyIds,
+        name: scheduleName.trim() || undefined,
         cronExpression,
+        scheduledAt: repeatMode === 'once' ? new Date(onceDatetime).toISOString() : undefined,
         invoiceType,
         repeatMode,
-        dateRangeDays: repeatMode === 'custom' && showDateRange ? dateRangeDays : null,
+        dateRangeDays: (repeatMode === 'custom' || repeatMode === 'once') && showDateRange ? dateRangeDays : null,
       });
+      setSelectedCompanyIds([]);
+      setScheduleName('');
       fetchData();
     } catch (err: any) {
-      alert(`Thêm lịch hẹn giờ thất bại: ${err.message}`);
+      alert(`Thêm lịch thất bại: ${err.response?.data?.error || err.message}`);
     } finally {
       setCreating(false);
     }
@@ -126,12 +151,33 @@ export default function SchedulePanel() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa lịch hẹn giờ này?')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa lịch này?')) return;
     try {
       await axios.delete(`${API_BASE_URL}/api/schedules/${id}`);
       setSchedules((prev) => prev.filter((sch) => sch.id !== id));
     } catch (err: any) {
-      alert(`Xóa lịch hẹn giờ thất bại: ${err.message}`);
+      alert(`Xóa lịch thất bại: ${err.message}`);
+    }
+  };
+
+  const formatInvoiceType = (type: string) => {
+    switch (type) {
+      case 'SELL': return 'Bán ra';
+      case 'BUY': return 'Mua vào';
+      case 'BOTH': return 'Cả hai';
+      default: return type;
+    }
+  };
+
+  const formatRepeatMode = (mode: string) => {
+    switch (mode) {
+      case 'daily': return 'Hàng ngày';
+      case 'weekly': return 'Hàng tuần';
+      case 'monthly': return 'Hàng tháng';
+      case 'quarterly': return 'Hàng quý';
+      case 'custom': return 'Tuỳ chỉnh';
+      case 'once': return 'Một lần';
+      default: return mode;
     }
   };
 
@@ -143,34 +189,60 @@ export default function SchedulePanel() {
           <Calendar className="w-5 h-5 mr-2" /> Thiết Lập Lịch Tự Động
         </h2>
         <form onSubmit={handleCreate} className="space-y-4">
+          {/* Schedule name */}
           <div>
-            <label className="block text-xs font-semibold text-text-secondary mb-1">Doanh Nghiệp</label>
-            <select
-              value={selectedCompanyId}
-              onChange={(e) => setSelectedCompanyId(e.target.value)}
+            <label className="block text-xs font-semibold text-text-secondary mb-1">Tên lịch (tuỳ chọn)</label>
+            <input
+              type="text"
+              value={scheduleName}
+              onChange={(e) => setScheduleName(e.target.value)}
+              placeholder="VD: Lịch cuối tháng"
               className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
-            >
+            />
+          </div>
+
+          {/* Multi-select companies */}
+          <div>
+            <label className="block text-xs font-semibold text-text-secondary mb-1">
+              Doanh Nghiệp <span className="text-danger">*</span>
+            </label>
+            <div className="max-h-48 overflow-y-auto bg-bg-primary border border-border rounded-xl p-2 space-y-1">
               {companies.length === 0 ? (
-                <option value="">Chưa có MST doanh nghiệp nào</option>
+                <p className="text-xs text-text-muted p-2">Chưa có doanh nghiệp nào</p>
               ) : (
                 companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.taxCode})
-                  </option>
+                  <label
+                    key={c.id}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition text-sm ${
+                      selectedCompanyIds.includes(c.id)
+                        ? 'bg-accent-default/15 text-accent-default'
+                        : 'hover:bg-bg-tertiary text-text-primary'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedCompanyIds.includes(c.id)}
+                      onChange={() => toggleCompany(c.id)}
+                      className="w-4 h-4 rounded bg-bg-primary border-border text-accent-default focus:ring-accent-default"
+                    />
+                    <span className="font-medium">{c.name}</span>
+                    <span className="text-xs text-text-muted ml-auto">({c.taxCode})</span>
+                  </label>
                 ))
               )}
-            </select>
+            </div>
           </div>
 
           <div className="space-y-3">
             <label className="block text-xs font-semibold text-text-secondary">Chu Kỳ Tự Động Tải</label>
 
             {/* Repeat mode presets */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {([
                 { value: 'weekly' as const, label: 'Hàng tuần' },
                 { value: 'monthly' as const, label: 'Hàng tháng' },
                 { value: 'quarterly' as const, label: 'Hàng quý' },
+                { value: 'once' as const, label: 'Một lần' },
                 { value: 'custom' as const, label: 'Tuỳ chỉnh' },
               ]).map(opt => (
                 <button
@@ -188,8 +260,8 @@ export default function SchedulePanel() {
               ))}
             </div>
 
-            {/* Time + day/weekday pickers (hidden for custom) */}
-            {repeatMode !== 'custom' && (
+            {/* Time + day/weekday pickers (hidden for custom & once) */}
+            {repeatMode !== 'custom' && repeatMode !== 'once' && (
               <div className="space-y-3 bg-bg-primary/30 rounded-xl p-3">
                 {/* Time inputs */}
                 <div className="flex items-center gap-2">
@@ -258,6 +330,45 @@ export default function SchedulePanel() {
               </div>
             )}
 
+            {/* Once mode: datetime picker */}
+            {repeatMode === 'once' && (
+              <div className="bg-bg-primary/30 rounded-xl p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-text-secondary w-16 shrink-0">Thời điểm</span>
+                  <input
+                    type="datetime-local"
+                    value={onceDatetime}
+                    onChange={(e) => setOnceDatetime(e.target.value)}
+                    className="flex-1 bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+                  />
+                </div>
+                {/* Date range toggle for once mode */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showDateRange}
+                    onChange={(e) => setShowDateRange(e.target.checked)}
+                    className="w-4 h-4 rounded bg-bg-primary border-border text-accent-default focus:ring-accent-default"
+                  />
+                  <span className="text-xs text-text-secondary">Giới hạn thời gian tải</span>
+                </label>
+                {showDateRange && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-text-secondary">Tải dữ liệu trong</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={dateRangeDays}
+                      onChange={(e) => setDateRangeDays(Number(e.target.value))}
+                      className="w-20 bg-bg-primary border border-border rounded-lg px-2 py-2 text-sm text-text-primary text-center focus:outline-none focus:border-accent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <span className="text-xs text-text-muted">ngày qua</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Custom cron input */}
             {repeatMode === 'custom' && (
               <div className="space-y-3">
@@ -304,13 +415,15 @@ export default function SchedulePanel() {
               </div>
             )}
 
-            {/* Computed cron preview (hidden by default, shown only on hover/focus) */}
-            <details className="text-xxs text-text-muted group">
-              <summary className="cursor-pointer hover:text-text-secondary transition">Xem cron expression</summary>
-              <div className="mt-1 bg-bg-primary/50 rounded-lg px-3 py-2 font-mono">
-                <span className="text-log-cyan">{cronExpression}</span>
-              </div>
-            </details>
+            {/* Computed cron preview (for recurring modes) */}
+            {repeatMode !== 'once' && (
+              <details className="text-xxs text-text-muted group">
+                <summary className="cursor-pointer hover:text-text-secondary transition">Xem cron expression</summary>
+                <div className="mt-1 bg-bg-primary/50 rounded-lg px-3 py-2 font-mono">
+                  <span className="text-log-cyan">{cronExpression}</span>
+                </div>
+              </details>
+            )}
           </div>
 
           <div>
@@ -340,9 +453,9 @@ export default function SchedulePanel() {
               </button>
               <button
                 type="button"
-                onClick={() => setInvoiceType('BOTH' as any)}
+                onClick={() => setInvoiceType('BOTH')}
                 className={`py-2 px-3 rounded-xl border text-xs font-medium transition ${
-                  invoiceType === ('BOTH' as any)
+                  invoiceType === 'BOTH'
                     ? 'bg-accent-default/20 border-accent-default text-accent-default'
                     : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
                 }`}
@@ -372,8 +485,9 @@ export default function SchedulePanel() {
           <table className="w-full text-left border-collapse text-sm">
             <thead className="bg-bg-primary/50 border-b border-border text-text-secondary font-semibold uppercase text-xs">
               <tr>
-                <th className="p-3">Doanh nghiệp (MST)</th>
-                <th className="p-3">Chu kỳ (Cron)</th>
+                <th className="p-3">Tên lịch</th>
+                <th className="p-3">Doanh nghiệp</th>
+                <th className="p-3">Chu kỳ</th>
                 <th className="p-3">Loại HĐ</th>
                 <th className="p-3">Lần chạy cuối</th>
                 <th className="p-3 text-center">Trạng thái</th>
@@ -383,13 +497,13 @@ export default function SchedulePanel() {
             <tbody className="divide-y divide-border/50 text-text-muted">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-text-muted">
+                  <td colSpan={7} className="p-8 text-center text-text-muted">
                     Đang tải danh sách lịch biểu...
                   </td>
                 </tr>
               ) : schedules.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-text-muted">
+                  <td colSpan={7} className="p-8 text-center text-text-muted">
                     Chưa thiết lập lịch tải tự động nào.
                   </td>
                 </tr>
@@ -397,19 +511,39 @@ export default function SchedulePanel() {
                 schedules.map((sch) => (
                   <tr key={sch.id} className="hover:bg-bg-primary/30 transition-all border-b border-border/30">
                     <td className="p-3 font-medium">
-                      <div>{sch.company?.name || 'Doanh nghiệp'}</div>
-                      <div className="text-xs text-text-muted">{sch.company?.taxCode || ''}</div>
+                      {sch.name || <span className="text-text-muted italic">—</span>}
                     </td>
-                    <td className="p-3 font-mono text-log-cyan">{sch.cronExpression}</td>
+                    <td className="p-3">
+                      <div className="space-y-0.5">
+                        {sch.companies.map(sc => (
+                          <div key={sc.companyId} className="text-sm">
+                            <span className="font-medium">{sc.company.name}</span>
+                            <span className="text-xs text-text-muted ml-1">({sc.company.taxCode})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <div className="font-medium">{formatRepeatMode(sch.repeatMode)}</div>
+                      {sch.repeatMode !== 'once' ? (
+                        <div className="text-xs font-mono text-log-cyan mt-0.5">{sch.cronExpression}</div>
+                      ) : sch.scheduledAt ? (
+                        <div className="text-xs text-text-muted mt-0.5">
+                          {new Date(sch.scheduledAt).toLocaleString('vi-VN')}
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="p-3">
                       <span
                         className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${
                           sch.invoiceType === 'SELL'
                             ? 'bg-accent-light-default text-accent-default'
-                            : 'bg-amber-900/50 text-amber-300'
+                            : sch.invoiceType === 'BUY'
+                            ? 'bg-amber-900/50 text-amber-300'
+                            : 'bg-emerald-900/50 text-emerald-300'
                         }`}
                       >
-                        {sch.invoiceType === 'SELL' ? 'Bán ra' : 'Mua vào'}
+                        {formatInvoiceType(sch.invoiceType)}
                       </span>
                     </td>
                     <td className="p-3 text-text-secondary">
