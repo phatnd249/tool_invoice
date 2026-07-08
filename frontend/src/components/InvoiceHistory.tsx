@@ -467,7 +467,7 @@ export default function InvoiceHistory() {
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               className="bg-bg-primary border border-border rounded-xl pl-10 pr-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent w-64"
-              placeholder={subTab === 'invoices' ? "Tìm theo số HĐ, tên..." : "Tìm theo MST, người tải..."}
+              placeholder={subTab === 'invoices' ? "Số HĐ, tên doanh nghiệp..." : "Tìm theo MST, người tải..."}
             />
           </div>
 
