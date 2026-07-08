@@ -43,8 +43,9 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   options: RetryOptions = {}
 ): Promise<T> {
+  const envMaxRetries = process.env.DOWNLOAD_MAX_RETRIES ? parseInt(process.env.DOWNLOAD_MAX_RETRIES, 10) : undefined;
   const {
-    maxRetries = 3,
+    maxRetries = envMaxRetries ?? 3,
     baseDelayMs = 2000,
     maxDelayMs = 15000,
     logger = console.warn,
@@ -96,11 +97,15 @@ export async function processWithRateLimit<T, R>(
   processor: (item: T) => Promise<R>,
   options: BatchOptions = {}
 ): Promise<{ results: R[]; errors: Error[] }> {
+  const envBatchSize = process.env.DOWNLOAD_BATCH_SIZE ? parseInt(process.env.DOWNLOAD_BATCH_SIZE, 10) : undefined;
+  const envItemDelayMs = process.env.DOWNLOAD_DELAY_MS ? parseInt(process.env.DOWNLOAD_DELAY_MS, 10) : undefined;
+  const envBatchDelayMs = process.env.DOWNLOAD_BATCH_DELAY_MS ? parseInt(process.env.DOWNLOAD_BATCH_DELAY_MS, 10) : undefined;
+  const envMaxRetries = process.env.DOWNLOAD_MAX_RETRIES ? parseInt(process.env.DOWNLOAD_MAX_RETRIES, 10) : undefined;
   const {
-    batchSize = 5,
-    itemDelayMs = 1500,
-    batchDelayMs = 10000,
-    maxRetries = 3,
+    batchSize = envBatchSize ?? 5,
+    itemDelayMs = envItemDelayMs ?? 1500,
+    batchDelayMs = envBatchDelayMs ?? 10000,
+    maxRetries = envMaxRetries ?? 3,
     baseDelayMs = 2000,
     maxDelayMs = 15000,
     logger = console.warn,
