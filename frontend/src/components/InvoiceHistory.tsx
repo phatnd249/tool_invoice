@@ -518,11 +518,19 @@ export default function InvoiceHistory() {
                   <th className="p-3">Ký hiệu HĐ</th>
                   <th className="p-3">Số HĐ</th>
                   <th className="p-3">Ngày lập</th>
-                  <th className="p-3">MST người bán</th>
-                  <th className="p-3">Tên người bán</th>
-                  <th className="p-3">MST người mua</th>
-                  <th className="p-3">Tên người mua</th>
-                  <th className="p-3">Địa chỉ người mua</th>
+                  {(!filterType || filterType !== 'BUY') && (
+                    <>
+                      <th className="p-3">MST người bán</th>
+                      <th className="p-3">Tên người bán</th>
+                    </>
+                  )}
+                  {(!filterType || filterType !== 'SELL') && (
+                    <>
+                      <th className="p-3">MST người mua</th>
+                      <th className="p-3">Tên người mua</th>
+                      <th className="p-3">Địa chỉ người mua</th>
+                    </>
+                  )}
                   <th className="p-3 text-right">Tiền trước thuế</th>
                   <th className="p-3 text-right">Tiền thuế</th>
                   <th className="p-3 text-right">Chiết khấu</th>
@@ -579,21 +587,29 @@ export default function InvoiceHistory() {
                         <td className="p-3 text-text-secondary text-xs whitespace-nowrap">
                           {formatDate(inv.invoiceDate)}
                         </td>
-                        <td className="p-3 font-mono text-xs">
-                          {inv.sellerTaxCode}
-                        </td>
-                        <td className="p-3 max-w-[160px] truncate text-xs" title={inv.sellerName}>
-                          <span className="font-medium text-text-primary">{inv.sellerName}</span>
-                        </td>
-                        <td className="p-3 font-mono text-xs">
-                          {inv.buyerTaxCode}
-                        </td>
-                        <td className="p-3 max-w-[160px] truncate text-xs" title={inv.buyerName}>
-                          <span className="font-medium text-text-primary">{inv.buyerName}</span>
-                        </td>
-                        <td className="p-3 max-w-[160px] truncate text-text-muted text-xs" title={inv.buyerAddress || ''}>
-                          {inv.buyerAddress || '—'}
-                        </td>
+                        {(!filterType || filterType !== 'BUY') && (
+                          <>
+                            <td className="p-3 font-mono text-xs">
+                              {inv.sellerTaxCode}
+                            </td>
+                            <td className="p-3 max-w-[160px] truncate text-xs" title={inv.sellerName}>
+                              <span className="font-medium text-text-primary">{inv.sellerName}</span>
+                            </td>
+                          </>
+                        )}
+                        {(!filterType || filterType !== 'SELL') && (
+                          <>
+                            <td className="p-3 font-mono text-xs">
+                              {inv.buyerTaxCode}
+                            </td>
+                            <td className="p-3 max-w-[160px] truncate text-xs" title={inv.buyerName}>
+                              <span className="font-medium text-text-primary">{inv.buyerName}</span>
+                            </td>
+                            <td className="p-3 max-w-[160px] truncate text-text-muted text-xs" title={inv.buyerAddress || ''}>
+                              {inv.buyerAddress || '—'}
+                            </td>
+                          </>
+                        )}
                         <td className="p-3 text-right text-xs">
                           {formatNumber(inv.totalBeforeTax)}
                         </td>
