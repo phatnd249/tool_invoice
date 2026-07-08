@@ -138,9 +138,6 @@ export default function InvoiceHistory() {
 
   // Modals
   const [selectedHistory, setSelectedHistory] = useState<DownloadHistory | null>(null);
-  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Invoice Detail (items) Modal state
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
@@ -351,20 +348,30 @@ export default function InvoiceHistory() {
   };
 
   const openPreview = async (invoiceId: string) => {
-    setPreviewInvoiceId(invoiceId);
-    setPreviewLoading(true);
-    setPreviewHtml(null);
     try {
       const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview?t=${Date.now()}`, {
         responseType: 'text',
       });
-      setPreviewHtml(response.data);
+      const html = response.data;
+      const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+      const blobUrl = URL.createObjectURL(blob);
+      const newTab = window.open(blobUrl, '_blank');
+      if (!newTab) {
+        // Popup blocked — fallback to document.write
+        const fallbackTab = window.open('', '_blank');
+        if (fallbackTab) {
+          fallbackTab.document.write(html);
+          fallbackTab.document.close();
+        } else {
+          alert('Trình duyệt đã chặn popup. Vui lòng cho phép popup cho trang này hoặc dùng nút tải PDF thay thế.');
+        }
+      }
+      // Revoke blob URL after enough time for the new tab to load
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     } catch (err: any) {
       console.error('Error loading preview:', err);
       const msg = err.response?.data?.error || 'Không thể tải preview hóa đơn.';
-      setPreviewHtml(`<div style="padding:40px;text-align:center;color:#999;">${msg}</div>`);
-    } finally {
-      setPreviewLoading(false);
+      alert(msg);
     }
   };
 
@@ -709,45 +716,6 @@ export default function InvoiceHistory() {
             onPageChange={setPage}
             onSizeChange={(s) => { setSize(s); setPage(0); }}
           />
-        </div>
-      )}
-
-      {/* Preview Invoice Modal */}
-      {previewInvoiceId && (
-        <div className="fixed inset-0 bg-card/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-5xl bg-bg-primary border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center px-6 py-5 bg-card/80 border-b border-border">
-              <h2 className="text-md font-bold text-text-primary flex items-center space-x-2">
-                <Eye className="w-5 h-5 text-success-default" />
-                <span>Xem Trước Hóa Đơn</span>
-              </h2>
-              <button
-                onClick={() => { setPreviewInvoiceId(null); setPreviewHtml(null); }}
-                className="text-text-secondary hover:text-text-primary p-1 bg-bg-tertiary hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-0 flex-1 overflow-hidden bg-white">
-              {previewLoading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 text-accent-default animate-spin" />
-                  <span className="ml-3 text-text-muted">Đang tải nội dung hóa đơn...</span>
-                </div>
-              ) : previewHtml ? (
-                <iframe
-                  srcDoc={previewHtml}
-                  className="w-full h-full min-h-[70vh] border-0"
-                  title="Preview Invoice"
-                  sandbox="allow-same-origin"
-                />
-              ) : (
-                <div className="flex items-center justify-center h-64 text-text-muted">
-                  Không thể tải nội dung preview.
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       )}
 
