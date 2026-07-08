@@ -66,6 +66,7 @@ export default function SchedulePanel() {
   const [companyModalSchedule, setCompanyModalSchedule] = useState<Schedule | null>(null);
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<number[]>([]);
   const [savingCompanies, setSavingCompanies] = useState(false);
+  const [companySearch, setCompanySearch] = useState('');
 
   const hour = Math.max(0, Math.min(23, scheduleHour));
   const minute = Math.max(0, Math.min(59, scheduleMinute));
@@ -154,6 +155,7 @@ export default function SchedulePanel() {
   const openCompanyModal = (schedule: Schedule) => {
     setCompanyModalSchedule(schedule);
     setSelectedCompanyIds(schedule.companies.map(sc => sc.companyId));
+    setCompanySearch('');
   };
 
   const toggleCompanySelection = (id: number) => {
@@ -161,6 +163,12 @@ export default function SchedulePanel() {
       prev.includes(id) ? prev.filter(cid => cid !== id) : [...prev, id]
     );
   };
+
+  const filteredCompanies = companies.filter(c =>
+    !companySearch ||
+    c.name.toLowerCase().includes(companySearch.toLowerCase()) ||
+    c.taxCode.toLowerCase().includes(companySearch.toLowerCase())
+  );
 
   const saveCompanies = async () => {
     if (!companyModalSchedule) return;
@@ -595,11 +603,37 @@ export default function SchedulePanel() {
                 </span>
               </div>
 
+              {/* Search */}
+              <div className="relative mb-3">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={companySearch}
+                  onChange={(e) => setCompanySearch(e.target.value)}
+                  placeholder="Tìm doanh nghiệp theo tên hoặc MST..."
+                  className="w-full bg-bg-primary border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
+                  autoFocus
+                />
+                {companySearch && (
+                  <button
+                    type="button"
+                    onClick={() => setCompanySearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
               <div className="max-h-64 overflow-y-auto space-y-1">
-                {companies.length === 0 ? (
-                  <p className="text-xs text-text-muted p-2">Chưa có doanh nghiệp nào.</p>
+                {filteredCompanies.length === 0 ? (
+                  <p className="text-xs text-text-muted p-4 text-center">
+                    {companySearch ? 'Không tìm thấy doanh nghiệp phù hợp.' : 'Chưa có doanh nghiệp nào.'}
+                  </p>
                 ) : (
-                  companies.map((c) => (
+                  filteredCompanies.map((c) => (
                     <label
                       key={c.id}
                       className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition text-sm ${
@@ -616,7 +650,7 @@ export default function SchedulePanel() {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate">{c.name}</div>
-                        <div className="text-xs text-text-muted">MST: {c.taxCode}</div>
+                        <div className="text-xs text-text-muted truncate">MST: {c.taxCode}</div>
                       </div>
                       {selectedCompanyIds.includes(c.id) && (
                         <Check className="w-4 h-4 shrink-0 text-accent-default" />
