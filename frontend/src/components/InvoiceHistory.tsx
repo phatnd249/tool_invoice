@@ -518,13 +518,13 @@ export default function InvoiceHistory() {
                   <th className="p-3">Ký hiệu HĐ</th>
                   <th className="p-3">Số HĐ</th>
                   <th className="p-3">Ngày lập</th>
-                  {(!filterType || filterType !== 'BUY') && (
+                  {filterType !== 'SELL' && (
                     <>
                       <th className="p-3">MST người bán</th>
                       <th className="p-3">Tên người bán</th>
                     </>
                   )}
-                  {(!filterType || filterType !== 'SELL') && (
+                  {filterType !== 'BUY' && (
                     <>
                       <th className="p-3">MST người mua</th>
                       <th className="p-3">Tên người mua</th>
@@ -587,7 +587,7 @@ export default function InvoiceHistory() {
                         <td className="p-3 text-text-secondary text-xs whitespace-nowrap">
                           {formatDate(inv.invoiceDate)}
                         </td>
-                        {(!filterType || filterType !== 'BUY') && (
+                        {filterType !== 'SELL' && (
                           <>
                             <td className="p-3 font-mono text-xs">
                               {inv.sellerTaxCode}
@@ -597,7 +597,7 @@ export default function InvoiceHistory() {
                             </td>
                           </>
                         )}
-                        {(!filterType || filterType !== 'SELL') && (
+                        {filterType !== 'BUY' && (
                           <>
                             <td className="p-3 font-mono text-xs">
                               {inv.buyerTaxCode}
