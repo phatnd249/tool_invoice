@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import {
   Play, Sliders, Terminal, Trash2, ChevronDown, ChevronRight, Building2,
+  MapPin, Phone, User, CheckCircle2,
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
@@ -122,25 +123,25 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
             <div className="bg-bg-primary/40 border border-border rounded-xl p-3 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
               {company.address && (
                 <div className="flex gap-2 col-span-full">
-                  <span className="text-text-muted shrink-0">📍</span>
+                  <MapPin className="w-3.5 h-3.5 text-text-muted shrink-0 mt-0.5" />
                   <span className="text-text-primary">{company.address}</span>
                 </div>
               )}
               {company.representative && (
                 <div className="flex gap-2">
-                  <span className="text-text-muted shrink-0">👤</span>
+                  <User className="w-3.5 h-3.5 text-text-muted shrink-0 mt-0.5" />
                   <span className="text-text-primary">{company.representative}</span>
                 </div>
               )}
               {company.phone && (
                 <div className="flex gap-2">
-                  <span className="text-text-muted shrink-0">📞</span>
+                  <Phone className="w-3.5 h-3.5 text-text-muted shrink-0 mt-0.5" />
                   <span className="text-text-primary">{company.phone}</span>
                 </div>
               )}
               {company.status && (
                 <div className="flex gap-2">
-                  <span className="text-text-muted shrink-0">📋</span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                   <span className="text-emerald-400 font-medium">{company.status}</span>
                 </div>
               )}
