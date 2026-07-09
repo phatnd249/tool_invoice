@@ -488,7 +488,7 @@ export default function InvoiceDownloader() {
       </div>
 
       {/* Log Console Card */}
-      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl flex flex-col h-[420px] lg:h-auto">
+      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl flex flex-col h-[420px] lg:h-[480px]">
         <div className="flex items-center justify-between mb-3 shrink-0">
           <h2 className="text-lg font-semibold text-log-cyan flex items-center">
             <Terminal className="w-5 h-5 mr-2" /> Tiến Trình Tải
