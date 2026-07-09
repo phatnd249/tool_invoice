@@ -72,6 +72,7 @@ function formatInvoiceNumber(num: string): string {
   return String(num).padStart(8, '0');
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getInvoiceStatus(inv: Invoice): { label: string; color: string } {
   const hasZip = inv.zipPath && inv.zipPath !== 'VIRTUAL_HTML';
   const hasPdf = !!inv.pdfPath;
@@ -332,7 +333,7 @@ export default function InvoiceHistory() {
       const opt = {
         margin:       10,
         filename:     `invoice_${invoiceId.slice(0, 8)}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
+        image:        { type: 'jpeg' as const, quality: 0.98 },
         html2canvas:  { scale: 2, useCORS: true, logging: false },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };

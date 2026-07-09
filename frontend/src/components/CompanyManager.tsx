@@ -228,7 +228,7 @@ export default function CompanyManager() {
   };
 
   // Sync company info from masothue.com
-  const handleSyncInfo = async (id: number, name: string) => {
+  const handleSyncInfo = async (id: number, _name: string) => {
     setSyncingMap((prev) => ({ ...prev, [id]: true }));
     try {
       await axios.put(`${API_BASE_URL}/api/companies/${id}/sync-info`);
@@ -412,7 +412,7 @@ export default function CompanyManager() {
                   </tr>
                 ) : (
                   filteredCompanies.map((c) => {
-                    const tokenStatus = getTokenStatus(c.tokenExpiredAt);
+                    const _tokenStatus = getTokenStatus(c.tokenExpiredAt);
                     const cDate = new Date(c.createdAt).toLocaleDateString('vi-VN', {
                       day: '2-digit',
                       month: '2-digit',
