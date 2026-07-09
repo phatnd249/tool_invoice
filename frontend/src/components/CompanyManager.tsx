@@ -298,28 +298,6 @@ export default function CompanyManager() {
   };
 
   // Check token status expiration
-  const getTokenStatus = (expiredAtStr?: string | null) => {
-    if (!expiredAtStr) return { label: 'Chưa xác thực', color: 'bg-danger-light border-danger-default/30 text-danger-default' };
-    
-    const expiredAt = new Date(expiredAtStr);
-    const now = new Date();
-    
-    if (expiredAt < now) {
-      return { label: 'Hết hiệu lực', color: 'bg-danger-light border-danger-default/30 text-danger-default' };
-    }
-
-    // Format local time string
-    const timeStr = expiredAt.toLocaleString('vi-VN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    
-    return { label: `Hiệu lực đến: ${timeStr}`, color: 'bg-success-light border-success-default/30 text-success-default' };
-  };
-
   return (
     <div className="space-y-8">
       {/* Companies Table List (Full Width) */}
