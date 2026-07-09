@@ -412,7 +412,6 @@ export default function CompanyManager() {
                   </tr>
                 ) : (
                   filteredCompanies.map((c) => {
-                    const _tokenStatus = getTokenStatus(c.tokenExpiredAt);
                     const cDate = new Date(c.createdAt).toLocaleDateString('vi-VN', {
                       day: '2-digit',
                       month: '2-digit',
