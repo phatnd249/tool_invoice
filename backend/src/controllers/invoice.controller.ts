@@ -1191,19 +1191,22 @@ export class InvoiceController {
       const dateChunks = downloaderService.splitDateRange(start, end);
       let totalSuccessCount = 0;
       const allErrors: string[] = [];
-      let accumulatedTotal = 0;
-      let accumulatedCurrent = 0;
+
+      // ── Step 1: Query ALL types upfront to get grand total ──
+      interface TypeInvoiceList { type: string; invoices: any[] }
+      const allTypeInvoices: TypeInvoiceList[] = [];
+      let grandTotal = 0;
 
       for (const type of types) {
         if (aborted) break;
         sendLog(`Đang truy vấn hoá đơn ${type === 'BUY' ? 'mua vào' : 'bán ra'}...`);
 
-        const allQueryInvoices: any[] = [];
+        const invoices: any[] = [];
         try {
           for (const chunk of dateChunks) {
             if (aborted) break;
             const chunkRes = await downloaderService.queryInvoicesInRange(chunk.start, chunk.end, activeToken, type);
-            allQueryInvoices.push(...chunkRes);
+            invoices.push(...chunkRes);
           }
         } catch (error: any) {
           allErrors.push(`Truy vấn ${type} thất bại: ${error.message}`);
@@ -1212,56 +1215,68 @@ export class InvoiceController {
         }
 
         if (aborted) break;
-        sendLog(`Tìm thấy ${allQueryInvoices.length} hoá đơn ${type === 'BUY' ? 'mua vào' : 'bán ra'}.`);
+        sendLog(`Tìm thấy ${invoices.length} hoá đơn ${type === 'BUY' ? 'mua vào' : 'bán ra'}.`);
+        allTypeInvoices.push({ type, invoices });
+        grandTotal += invoices.length;
+      }
 
-        accumulatedTotal += allQueryInvoices.length;
-        // Send accumulated total
-        sendEvent('total', { type, total: accumulatedTotal, typeTotal: allQueryInvoices.length });
+      // Send single grand total event
+      sendEvent('total', { total: grandTotal });
 
-        if (allQueryInvoices.length === 0) continue;
+      if (grandTotal === 0) {
+        sendEvent('done', { message: 'Không có hoá đơn nào để tải.', successCount: 0, errorCount: 0, errors: [] });
+        res.end();
+        return;
+      }
 
-        // Resolve target directory
-        let companyFolder = '';
-        if (dbCompany?.name) {
-          companyFolder = dbCompany.name.replace(/[\\/*?:"<>|]/g, '').trim();
-        }
-        const baseDir = process.env.INVOICES_DIR || path.join(process.cwd(), 'invoices');
+      // ── Step 2: Resolve target directory ──
+      let companyFolder = '';
+      if (dbCompany?.name) {
+        companyFolder = dbCompany.name.replace(/[\\/*?:"<>|]/g, '').trim();
+      }
+      const baseDir = process.env.INVOICES_DIR || path.join(process.cwd(), 'invoices');
 
-        // Download each invoice with progress events
-        for (const inv of allQueryInvoices) {
+      // ── Step 3: Process all invoices sequentially ──
+      let accumulatedCurrent = 0;
+
+      for (const { type, invoices } of allTypeInvoices) {
+        if (aborted) break;
+        const invoiceType = type as 'BUY' | 'SELL';
+
+        for (const inv of invoices) {
           if (aborted) break;
 
           accumulatedCurrent++;
           const invNum = inv.shdon || 'unknown';
-          sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: đang xử lý...`);
+          sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đang xử lý...`);
 
           try {
             const invoiceDate = inv.tdlap ? (isNaN(Date.parse(inv.tdlap)) ? new Date() : new Date(inv.tdlap)) : new Date();
             const sellerTaxCode = inv.nbmst || tokenMst;
             const invCompanyName = companyFolder || sellerTaxCode;
-            const invoiceTargetDir = resolveTargetDir(baseDir, invCompanyName, type, invoiceDate);
+            const invoiceTargetDir = resolveTargetDir(baseDir, invCompanyName, invoiceType, invoiceDate);
 
             let zipPath: string | null = null;
             try {
               zipPath = await downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir);
               if (zipPath) {
-                sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: đã tải ZIP.`, 'info');
+                sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đã tải ZIP.`, 'info');
               }
             } catch (downloadError: any) {
-              sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: ${downloadError.message}`, 'warning');
+              sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: ${downloadError.message}`, 'warning');
             }
 
             if (!zipPath) {
               try {
-                const savedInvoice = await saveBasicInvoiceFromGdt(inv, type);
+                const savedInvoice = await saveBasicInvoiceFromGdt(inv, invoiceType);
                 await prisma.invoice.update({
                   where: { id: savedInvoice.id },
                   data: { zipPath: 'VIRTUAL_HTML' },
                 });
-                sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: lưu metadata (không có ZIP).`, 'info');
+                sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: lưu metadata (không có ZIP).`, 'info');
               } catch (dbErr: any) {
-                allErrors.push(`[${type}] Invoice ${inv.shdon}: ${dbErr.message}`);
-                sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: ${dbErr.message}`, 'error');
+                allErrors.push(`[${invoiceType}] Invoice ${inv.shdon}: ${dbErr.message}`);
+                sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: ${dbErr.message}`, 'error');
               }
             } else {
               // Parse and save
@@ -1350,33 +1365,33 @@ export class InvoiceController {
                   });
 
                   totalSuccessCount++;
-                  sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: đã lưu thành công.`, 'info');
+                  sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đã lưu thành công.`, 'info');
                 } else {
-                  allErrors.push(`[${type}] Invoice ${inv.shdon}: Không thể giải nén hoặc parse XML.`);
-                  sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: không thể parse XML.`, 'error');
+                  allErrors.push(`[${invoiceType}] Invoice ${inv.shdon}: Không thể giải nén hoặc parse XML.`);
+                  sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: không thể parse XML.`, 'error');
                 }
               } catch (parseErr: any) {
-                allErrors.push(`[${type}] Invoice ${inv.shdon}: ${parseErr.message}`);
+                allErrors.push(`[${invoiceType}] Invoice ${inv.shdon}: ${parseErr.message}`);
               }
             }
 
             sendEvent('progress', {
-              type,
+              type: invoiceType,
               current: accumulatedCurrent,
-              total: accumulatedTotal,
+              total: grandTotal,
               invoiceNumber: inv.shdon,
               invoiceDate: inv.tdlap,
             });
           } catch (err: any) {
             allErrors.push(`[${type}] Invoice ${inv.shdon}: ${err.message}`);
             sendEvent('progress', {
-              type,
+              type: invoiceType,
               current: accumulatedCurrent,
-              total: accumulatedTotal,
+              total: grandTotal,
               invoiceNumber: inv.shdon,
               error: err.message,
             });
-            sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: lỗi - ${err.message}`, 'error');
+            sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: lỗi - ${err.message}`, 'error');
           }
 
           // Small delay between invoices to avoid rate limiting
