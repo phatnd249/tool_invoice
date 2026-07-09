@@ -113,7 +113,7 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
 
       {/* Accordion Body */}
       <div
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+        className={`overflow-hidden transition-all duration-300 ease-in-out bg-card ${
           isExpanded ? 'max-h-[520px] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
