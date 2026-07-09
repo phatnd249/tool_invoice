@@ -9,6 +9,13 @@ interface Company {
   id: number;
   taxCode: string;
   name: string;
+  address?: string | null;
+  taxAddress?: string | null;
+  representative?: string | null;
+  phone?: string | null;
+  status?: string | null;
+  companyType?: string | null;
+  lastSyncedAt?: string | null;
 }
 
 interface LogEntry {
@@ -106,10 +113,39 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
       {/* Accordion Body */}
       <div
         className={`overflow-hidden transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0'
+          isExpanded ? 'max-h-[520px] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
         <div className="px-5 pb-5 pt-2 border-t border-border">
+          {/* Company Info Card */}
+          {(company.address || company.representative || company.phone || company.status) && (
+            <div className="bg-bg-primary/40 border border-border rounded-xl p-3 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+              {company.address && (
+                <div className="flex gap-2 col-span-full">
+                  <span className="text-text-muted shrink-0">📍</span>
+                  <span className="text-text-primary">{company.address}</span>
+                </div>
+              )}
+              {company.representative && (
+                <div className="flex gap-2">
+                  <span className="text-text-muted shrink-0">👤</span>
+                  <span className="text-text-primary">{company.representative}</span>
+                </div>
+              )}
+              {company.phone && (
+                <div className="flex gap-2">
+                  <span className="text-text-muted shrink-0">📞</span>
+                  <span className="text-text-primary">{company.phone}</span>
+                </div>
+              )}
+              {company.status && (
+                <div className="flex gap-2">
+                  <span className="text-text-muted shrink-0">📋</span>
+                  <span className="text-emerald-400 font-medium">{company.status}</span>
+                </div>
+              )}
+            </div>
+          )}
           <form onSubmit={handleDownload} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>

@@ -383,9 +383,10 @@ export default function CompanyManager() {
                 <tr>
                   <th className="p-3">Mã Số Thuế</th>
                   <th className="p-3">Tên Doanh Nghiệp</th>
+                  <th className="p-3">Địa chỉ</th>
                   <th className="p-3">Chế Độ</th>
+                  <th className="p-3">Tình trạng</th>
                   <th className="p-3">Số Lần Tải</th>
-                  <th className="p-3">Trạng Thái Token</th>
                   <th className="p-3">Ngày Tạo</th>
                   <th className="p-3 text-center">Thao Tác</th>
                 </tr>
@@ -393,19 +394,19 @@ export default function CompanyManager() {
               <tbody className="divide-y divide-border text-text-secondary">
                 {companiesLoading && companies.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-text-muted">
+                    <td colSpan={8} className="p-8 text-center text-text-muted">
                       Đang tải danh sách...
                     </td>
                   </tr>
                 ) : companies.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-text-muted">
+                    <td colSpan={8} className="p-8 text-center text-text-muted">
                       Chưa có doanh nghiệp nào được lưu cấu hình.
                     </td>
                   </tr>
                 ) : filteredCompanies.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-text-muted">
+                    <td colSpan={8} className="p-8 text-center text-text-muted">
                       Không tìm thấy doanh nghiệp phù hợp với bộ lọc.
                     </td>
                   </tr>
@@ -426,6 +427,9 @@ export default function CompanyManager() {
                         <td className="p-3 font-medium text-text-secondary max-w-[200px] truncate" title={c.name}>
                           {c.name}
                         </td>
+                        <td className="p-3 max-w-[180px] truncate text-text-muted" title={c.address || c.taxAddress || ''}>
+                          {c.address || c.taxAddress || <span className="italic">—</span>}
+                        </td>
                         <td className="p-3">
                           <span className={`px-2 py-0.5 rounded text-xxs font-medium ${
                             c.loginMode === 'AUTO' 
@@ -435,13 +439,17 @@ export default function CompanyManager() {
                             {c.loginMode === 'AUTO' ? 'Tự động' : 'Thủ công'}
                           </span>
                         </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-xxs font-medium ${
+                            c.status
+                              ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-700/30'
+                              : 'bg-gray-700/30 text-gray-400 border border-gray-600/30'
+                          }`}>
+                            {c.status || 'Chưa đồng bộ'}
+                          </span>
+                        </td>
                         <td className="p-3 font-semibold text-accent-default font-mono">
                           {c.downloadCount || 0}
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2 py-1 rounded-lg border text-xxs font-medium ${tokenStatus.color}`}>
-                            {tokenStatus.label}
-                          </span>
                         </td>
                         <td className="p-3 text-text-secondary">{cDate}</td>
                         <td className="p-3">
@@ -532,6 +540,71 @@ export default function CompanyManager() {
             <p className="text-xxs text-text-secondary">
               MST: <span className="font-mono text-accent-default select-all">{editingCompany.taxCode}</span>
             </p>
+
+            {/* Synced Company Info */}
+            {(editingCompany.address || editingCompany.representative || editingCompany.phone || editingCompany.status) && (
+              <div className="bg-bg-primary/50 border border-border rounded-xl p-4 space-y-2">
+                <h4 className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-accent-default" />
+                  Thông tin doanh nghiệp
+                  {editingCompany.lastSyncedAt && (
+                    <span className="text-xxs text-text-muted font-normal ml-auto">
+                      Đồng bộ: {new Date(editingCompany.lastSyncedAt).toLocaleString('vi-VN')}
+                    </span>
+                  )}
+                </h4>
+                <div className="grid grid-cols-1 gap-1.5 text-xs">
+                  {editingCompany.address && (
+                    <div className="flex gap-2">
+                      <span className="text-text-muted shrink-0 w-20">Địa chỉ:</span>
+                      <span className="text-text-primary">{editingCompany.address}</span>
+                    </div>
+                  )}
+                  {editingCompany.taxAddress && editingCompany.taxAddress !== editingCompany.address && (
+                    <div className="flex gap-2">
+                      <span className="text-text-muted shrink-0 w-20">Địa chỉ thuế:</span>
+                      <span className="text-text-primary">{editingCompany.taxAddress}</span>
+                    </div>
+                  )}
+                  {editingCompany.representative && (
+                    <div className="flex gap-2">
+                      <span className="text-text-muted shrink-0 w-20">Đại diện:</span>
+                      <span className="text-text-primary">{editingCompany.representative}</span>
+                    </div>
+                  )}
+                  {editingCompany.phone && (
+                    <div className="flex gap-2">
+                      <span className="text-text-muted shrink-0 w-20">Điện thoại:</span>
+                      <span className="text-text-primary">{editingCompany.phone}</span>
+                    </div>
+                  )}
+                  {editingCompany.status && (
+                    <div className="flex gap-2">
+                      <span className="text-text-muted shrink-0 w-20">Tình trạng:</span>
+                      <span className="text-emerald-400 font-medium">{editingCompany.status}</span>
+                    </div>
+                  )}
+                  {editingCompany.companyType && (
+                    <div className="flex gap-2">
+                      <span className="text-text-muted shrink-0 w-20">Loại hình:</span>
+                      <span className="text-text-primary">{editingCompany.companyType}</span>
+                    </div>
+                  )}
+                  {editingCompany.activeDate && (
+                    <div className="flex gap-2">
+                      <span className="text-text-muted shrink-0 w-20">Ngày HĐ:</span>
+                      <span className="text-text-primary">{editingCompany.activeDate}</span>
+                    </div>
+                  )}
+                  {editingCompany.managedBy && (
+                    <div className="flex gap-2">
+                      <span className="text-text-muted shrink-0 w-20">QL bởi:</span>
+                      <span className="text-text-primary">{editingCompany.managedBy}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {editError && (
               <div className="p-3 bg-danger-light border border-danger-default/20 text-danger-default rounded-xl text-xs flex items-center space-x-2">
