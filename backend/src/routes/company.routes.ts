@@ -12,5 +12,6 @@ router.put('/:id', CompanyController.updateCompany);
 router.delete('/:id', CompanyController.deleteCompany);
 router.post('/:id/refresh', CompanyController.refreshToken);
 router.post('/:id/login-manual', CompanyController.loginManual);
+router.put('/:id/sync-info', CompanyController.syncCompanyInfo as any);
 
 export default router;

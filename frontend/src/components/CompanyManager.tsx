@@ -26,6 +26,16 @@ interface Company {
   loginMode: 'AUTO' | 'MANUAL';
   downloadCount?: number;
   createdAt: string;
+  // Fields from masothue sync
+  address?: string | null;
+  taxAddress?: string | null;
+  representative?: string | null;
+  phone?: string | null;
+  activeDate?: string | null;
+  managedBy?: string | null;
+  companyType?: string | null;
+  status?: string | null;
+  lastSyncedAt?: string | null;
 }
 
 export default function CompanyManager() {
@@ -49,6 +59,7 @@ export default function CompanyManager() {
   // Password Visibility
   const [showAddPassword, setShowAddPassword] = useState(false);
   const [refreshingMap, setRefreshingMap] = useState<Record<number, boolean>>({});
+  const [syncingMap, setSyncingMap] = useState<Record<number, boolean>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // Edit Modal State
@@ -212,6 +223,19 @@ export default function CompanyManager() {
       alert(`Làm mới token thất bại: ${err.response?.data?.error || err.message}`);
     } finally {
       setRefreshingMap((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
+  // Sync company info from masothue.com
+  const handleSyncInfo = async (id: number, name: string) => {
+    setSyncingMap((prev) => ({ ...prev, [id]: true }));
+    try {
+      await axios.put(`${API_BASE_URL}/api/companies/${id}/sync-info`);
+      fetchCompanies();
+    } catch (err: any) {
+      alert(`Cập nhật thông tin thất bại: ${err.response?.data?.details || err.response?.data?.error || err.message}`);
+    } finally {
+      setSyncingMap((prev) => ({ ...prev, [id]: false }));
     }
   };
 
@@ -445,6 +469,16 @@ export default function CompanyManager() {
                                 <Lock className="w-3.5 h-3.5" />
                               </button>
                             )}
+
+                            {/* Sync Info action */}
+                            <button
+                              onClick={() => handleSyncInfo(c.id, c.name)}
+                              disabled={syncingMap[c.id]}
+                              title="Cập nhật thông tin doanh nghiệp từ masothue.com"
+                              className="p-1.5 bg-bg-primary hover:bg-blue-500/20 border border-border hover:border-blue-500/40 text-text-secondary hover:text-blue-400 rounded-lg cursor-pointer transition disabled:opacity-50"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${syncingMap[c.id] ? 'animate-spin text-blue-400' : ''}`} />
+                            </button>
 
                             {/* Edit Action */}
                             <button

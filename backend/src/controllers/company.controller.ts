@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service.js';
+import { MaSoThueService } from '../services/masothue.service.js';
 import prisma from '../utils/db.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
 
@@ -283,6 +284,49 @@ export class CompanyController {
       res.json({ token: updated.token, tokenExpiredAt: updated.tokenExpiredAt });
     } catch (error: any) {
       res.status(400).json({ error: 'Đăng nhập thủ công thất bại.', details: error.message });
+    }
+  }
+
+  /**
+   * PUT /api/companies/:id/sync-info
+   * Tra cứu và cập nhật thông tin doanh nghiệp từ masothue.com
+   */
+  public static async syncCompanyInfo(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
+    try {
+      const company = await prisma.company.findUnique({ where: { id: Number(id) } });
+      if (!company) {
+        res.status(404).json({ error: 'Không tìm thấy doanh nghiệp.' });
+        return;
+      }
+
+      const info = await MaSoThueService.lookup(company.taxCode);
+
+      const updated = await prisma.company.update({
+        where: { id: company.id },
+        data: {
+          name: info.name || company.name,
+          address: info.address,
+          taxAddress: info.taxAddress,
+          representative: info.representative,
+          phone: info.phone,
+          activeDate: info.activeDate,
+          managedBy: info.managedBy,
+          companyType: info.type,
+          status: info.status,
+          lastSyncedAt: new Date(),
+        }
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(502).json({ error: 'Tra cứu thông tin doanh nghiệp thất bại.', details: error.message });
     }
   }
 }

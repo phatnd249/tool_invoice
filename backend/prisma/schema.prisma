@@ -32,6 +32,18 @@ model Company {
   tokenExpiredAt DateTime?
   loginMode      String            @default("AUTO") // "AUTO" or "MANUAL"
   downloadCount  Int               @default(0)
+
+  // Thông tin từ masothue.com
+  address         String?   // Địa chỉ trụ sở chính
+  taxAddress      String?   // Địa chỉ thuế
+  representative  String?   // Người đại diện pháp luật
+  phone           String?   // Số điện thoại
+  activeDate      String?   // Ngày hoạt động
+  managedBy       String?   // Quản lý bởi (CQT)
+  companyType     String?   // Loại hình pháp lý
+  status          String?   // Tình trạng (Đang hoạt động,...)
+  lastSyncedAt    DateTime? // Lần đồng bộ gần nhất
+
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   scheduleCompanies ScheduleCompany[]
