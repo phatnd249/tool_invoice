@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import {
   Play, Sliders, Terminal, Trash2, ChevronDown, ChevronRight, Building2,
-  MapPin, Phone, User, CheckCircle2,
+  MapPin, PhoneCall, User, CheckCircle2,
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
@@ -135,7 +135,7 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
               )}
               {company.phone && (
                 <div className="flex gap-2">
-                  <Phone className="w-3.5 h-3.5 text-text-muted shrink-0 mt-0.5" />
+                  <PhoneCall className="w-3.5 h-3.5 text-text-muted shrink-0 mt-0.5" />
                   <span className="text-text-primary">{company.phone}</span>
                 </div>
               )}
