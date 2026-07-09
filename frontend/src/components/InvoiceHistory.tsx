@@ -75,7 +75,6 @@ function formatInvoiceNumber(num: string): string {
 }
 
 function getInvoiceStatusLabel(inv: Invoice): { label: string; color: string } | null {
-  // Ưu tiên dùng invoiceStatus (tthai) nếu có
   if (inv.invoiceStatus !== undefined && inv.invoiceStatus !== null) {
     switch (inv.invoiceStatus) {
       case 1: return { label: 'Hoá đơn mới', color: 'bg-emerald-900/50 text-emerald-300' };
@@ -86,16 +85,7 @@ function getInvoiceStatusLabel(inv: Invoice): { label: string; color: string } |
       case 6: return { label: 'Đã huỷ', color: 'bg-red-900/50 text-red-300' };
     }
   }
-  // Fallback: dựa vào file paths như cũ
-  const hasZip = inv.zipPath && inv.zipPath !== 'VIRTUAL_HTML';
-  const hasPdf = !!inv.pdfPath;
-  const hasXml = !!inv.xmlPath;
-
-  if (hasZip && hasPdf && hasXml) return { label: 'Đã tải đủ', color: 'bg-emerald-900/50 text-emerald-300' };
-  if (hasPdf && hasXml) return { label: 'Thiếu ZIP', color: 'bg-amber-900/50 text-amber-300' };
-  if (inv.zipPath === 'VIRTUAL_HTML') return { label: 'HTML online', color: 'bg-blue-900/50 text-blue-300' };
-  if (hasPdf || hasXml || hasZip) return { label: 'Tải một phần', color: 'bg-amber-900/50 text-amber-300' };
-  return null; // Không hiển thị nếu không có thông tin
+  return null;
 }
 
 const PAGE_SIZES = [10, 20, 50, 100];
