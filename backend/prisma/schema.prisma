@@ -96,6 +96,8 @@ model Invoice {
   pdfPath            String?
   xmlPath            String?
   zipPath            String?       // Đường dẫn file ZIP gốc đã tải
+  invoiceStatus      Int?          // tthai — Trạng thái hoá đơn (1=mới, 2=thay thế, 3=điều chỉnh, 4=bị thay thế, 5=bị điều chỉnh, 6=đã huỷ)
+  processStatus      Int?          // ttxly — Tình trạng xử lý của CQT (0=đã nhận, 5=đã cấp mã, ...)
   isSavedToDb        Boolean       @default(true)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt

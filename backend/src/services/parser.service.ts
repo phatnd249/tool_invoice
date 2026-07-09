@@ -48,6 +48,8 @@ export interface ParsedInvoice {
 
   pdfPath?: string;
   zipPath?: string;
+  invoiceStatus?: number;   // tthai — 1=mới, 6=đã huỷ
+  processStatus?: number;   // ttxly — 5=đã cấp mã
 
   items: ParsedInvoiceItem[];
 }
@@ -219,6 +221,10 @@ export class ParserService {
       taxAmount: this.toNumber(this.findKeyRecursive(tToan, 'TgTThue')),
       totalAmount: this.toNumber(this.findKeyRecursive(tToan, 'TgTTTBSo')),
       totalAmountInWords: this.getSafeText(this.findKeyRecursive(tToan, 'TgTTTBChu')) || undefined,
+
+      // Invoice status from GDT
+      invoiceStatus: this.toNumber(this.findKeyRecursive(ttChung, 'TThai')) || undefined,
+      processStatus: this.toNumber(this.findKeyRecursive(ttChung, 'TTXLy')) || undefined,
 
       items,
     };

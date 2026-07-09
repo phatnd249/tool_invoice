@@ -38,6 +38,8 @@ interface Invoice {
   pdfPath?: string | null;
   xmlPath?: string | null;
   zipPath?: string | null;
+  invoiceStatus?: number | null;
+  processStatus?: number | null;
   items?: InvoiceItem[];
 }
 
