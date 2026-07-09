@@ -384,10 +384,10 @@ export default function InvoiceDownloader() {
                     [companyId]: {
                       status: 'downloading',
                       total: data.total,
-                      current: 0,
+                      current: prev[companyId]?.current || 0,
                     },
                   }));
-                  addLog(`[SSE] Tìm thấy ${data.total} hoá đơn ${data.type}`, 'info');
+                  addLog(`[SSE] Tìm thấy ${data.typeTotal} hoá đơn ${data.type}`, 'info');
                   break;
 
                 case 'progress':

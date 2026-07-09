@@ -1191,6 +1191,8 @@ export class InvoiceController {
       const dateChunks = downloaderService.splitDateRange(start, end);
       let totalSuccessCount = 0;
       const allErrors: string[] = [];
+      let accumulatedTotal = 0;
+      let accumulatedCurrent = 0;
 
       for (const type of types) {
         if (aborted) break;
@@ -1212,8 +1214,9 @@ export class InvoiceController {
         if (aborted) break;
         sendLog(`Tìm thấy ${allQueryInvoices.length} hoá đơn ${type === 'BUY' ? 'mua vào' : 'bán ra'}.`);
 
-        // Send total event
-        sendEvent('total', { type, total: allQueryInvoices.length });
+        accumulatedTotal += allQueryInvoices.length;
+        // Send accumulated total
+        sendEvent('total', { type, total: accumulatedTotal, typeTotal: allQueryInvoices.length });
 
         if (allQueryInvoices.length === 0) continue;
 
@@ -1225,13 +1228,12 @@ export class InvoiceController {
         const baseDir = process.env.INVOICES_DIR || path.join(process.cwd(), 'invoices');
 
         // Download each invoice with progress events
-        let processed = 0;
         for (const inv of allQueryInvoices) {
           if (aborted) break;
 
-          processed++;
+          accumulatedCurrent++;
           const invNum = inv.shdon || 'unknown';
-          sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: đang xử lý...`);
+          sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: đang xử lý...`);
 
           try {
             const invoiceDate = inv.tdlap ? (isNaN(Date.parse(inv.tdlap)) ? new Date() : new Date(inv.tdlap)) : new Date();
@@ -1243,10 +1245,10 @@ export class InvoiceController {
             try {
               zipPath = await downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir);
               if (zipPath) {
-                sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: đã tải ZIP.`, 'info');
+                sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: đã tải ZIP.`, 'info');
               }
             } catch (downloadError: any) {
-              sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: ${downloadError.message}`, 'warning');
+              sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: ${downloadError.message}`, 'warning');
             }
 
             if (!zipPath) {
@@ -1256,10 +1258,10 @@ export class InvoiceController {
                   where: { id: savedInvoice.id },
                   data: { zipPath: 'VIRTUAL_HTML' },
                 });
-                sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: lưu metadata (không có ZIP).`, 'info');
+                sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: lưu metadata (không có ZIP).`, 'info');
               } catch (dbErr: any) {
                 allErrors.push(`[${type}] Invoice ${inv.shdon}: ${dbErr.message}`);
-                sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: ${dbErr.message}`, 'error');
+                sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: ${dbErr.message}`, 'error');
               }
             } else {
               // Parse and save
@@ -1348,21 +1350,20 @@ export class InvoiceController {
                   });
 
                   totalSuccessCount++;
-                  sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: đã lưu thành công.`, 'info');
+                  sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: đã lưu thành công.`, 'info');
                 } else {
                   allErrors.push(`[${type}] Invoice ${inv.shdon}: Không thể giải nén hoặc parse XML.`);
-                  sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: không thể parse XML.`, 'error');
+                  sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: không thể parse XML.`, 'error');
                 }
               } catch (parseErr: any) {
                 allErrors.push(`[${type}] Invoice ${inv.shdon}: ${parseErr.message}`);
               }
             }
 
-            processed++;
             sendEvent('progress', {
               type,
-              current: processed,
-              total: allQueryInvoices.length,
+              current: accumulatedCurrent,
+              total: accumulatedTotal,
               invoiceNumber: inv.shdon,
               invoiceDate: inv.tdlap,
             });
@@ -1370,12 +1371,12 @@ export class InvoiceController {
             allErrors.push(`[${type}] Invoice ${inv.shdon}: ${err.message}`);
             sendEvent('progress', {
               type,
-              current: processed,
-              total: allQueryInvoices.length,
+              current: accumulatedCurrent,
+              total: accumulatedTotal,
               invoiceNumber: inv.shdon,
               error: err.message,
             });
-            sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: lỗi - ${err.message}`, 'error');
+            sendLog(`[${accumulatedCurrent}/${accumulatedTotal}] Hoá đơn ${invNum}: lỗi - ${err.message}`, 'error');
           }
 
           // Small delay between invoices to avoid rate limiting
