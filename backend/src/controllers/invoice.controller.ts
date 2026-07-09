@@ -1081,6 +1081,333 @@ export class InvoiceController {
       res.status(500).json({ error: 'Failed to preview invoice', details: error.message });
     }
   }
+
+  /**
+   * GET /api/invoices/download/stream
+   * Download invoices with SSE progress events.
+   * Query params: startDate, endDate, companyId, invoiceType, token (optional)
+   */
+  public static async downloadInvoicesStream(req: AuthRequest, res: Response): Promise<void> {
+    const { startDate, endDate, companyId, invoiceType = 'SELL' } = req.query as Record<string, string>;
+
+    if (!startDate || !endDate) {
+      res.status(400).json({ error: 'Missing required parameters: startDate, endDate' });
+      return;
+    }
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    let aborted = false;
+    req.on('close', () => { aborted = true; });
+
+    const sendEvent = (event: string, data: any) => {
+      if (aborted) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const sendLog = (message: string, type: string = 'info') => {
+      sendEvent('log', { time: new Date().toISOString(), message, type });
+    };
+
+    try {
+      // Resolve company
+      let dbCompany = null;
+      let activeToken: string | null = null;
+      let effectiveUsername = '';
+      let effectivePassword = '';
+
+      if (companyId) {
+        dbCompany = await prisma.company.findUnique({ where: { id: Number(companyId) } });
+        if (!dbCompany) {
+          sendEvent('error', { message: 'Không tìm thấy doanh nghiệp.' });
+          res.end();
+          return;
+        }
+        effectiveUsername = dbCompany.taxCode;
+        effectivePassword = dbCompany.lookupPassword;
+
+        // Resolve token
+        if (dbCompany.token && !new AuthService().isTokenExpired(dbCompany.token)) {
+          activeToken = dbCompany.token;
+        } else if (dbCompany.loginMode === 'AUTO') {
+          sendLog('Token hết hạn, đang gia hạn tự động...');
+          const geminiSetting = await prisma.setting.findUnique({ where: { key: 'geminiApiKey' } });
+          const apiKey = geminiSetting?.value || process.env.GEMINI_API_KEY;
+          if (!apiKey) {
+            sendEvent('error', { message: 'Chưa cấu hình Gemini API Key để gia hạn token.' });
+            res.end();
+            return;
+          }
+          activeToken = await authService.loginAndGetToken(dbCompany.taxCode, dbCompany.lookupPassword, apiKey);
+          const tokenExpiredAt = authService.getTokenExpiration(activeToken);
+          await prisma.company.update({
+            where: { id: dbCompany.id },
+            data: { token: activeToken, tokenExpiredAt },
+          });
+          sendLog('Token đã được gia hạn thành công.');
+        } else {
+          sendEvent('error', { message: `Token của doanh nghiệp ${dbCompany.name} đã hết hạn. Vui lòng đăng nhập lại thủ công.` });
+          res.end();
+          return;
+        }
+      } else {
+        sendEvent('error', { message: 'Thiếu companyId.' });
+        res.end();
+        return;
+      }
+
+      const tokenMst = downloaderService.getMstFromToken(activeToken);
+      if (!tokenMst) {
+        sendEvent('error', { message: 'Token không hợp lệ.' });
+        res.end();
+        return;
+      }
+
+      const types: Array<'BUY' | 'SELL'> = invoiceType === 'BOTH'
+        ? ['BUY', 'SELL']
+        : [invoiceType === 'BUY' ? 'BUY' : 'SELL'];
+
+      let start: Date;
+      let end: Date;
+      try {
+        start = parseDateString(startDate);
+        end = parseDateString(endDate);
+      } catch (e: any) {
+        sendEvent('error', { message: e.message });
+        res.end();
+        return;
+      }
+
+      const dateChunks = downloaderService.splitDateRange(start, end);
+      let totalSuccessCount = 0;
+      const allErrors: string[] = [];
+
+      for (const type of types) {
+        if (aborted) break;
+        sendLog(`Đang truy vấn hoá đơn ${type === 'BUY' ? 'mua vào' : 'bán ra'}...`);
+
+        const allQueryInvoices: any[] = [];
+        try {
+          for (const chunk of dateChunks) {
+            if (aborted) break;
+            const chunkRes = await downloaderService.queryInvoicesInRange(chunk.start, chunk.end, activeToken, type);
+            allQueryInvoices.push(...chunkRes);
+          }
+        } catch (error: any) {
+          allErrors.push(`Truy vấn ${type} thất bại: ${error.message}`);
+          sendLog(`Lỗi truy vấn ${type}: ${error.message}`, 'error');
+          continue;
+        }
+
+        if (aborted) break;
+        sendLog(`Tìm thấy ${allQueryInvoices.length} hoá đơn ${type === 'BUY' ? 'mua vào' : 'bán ra'}.`);
+
+        // Send total event
+        sendEvent('total', { type, total: allQueryInvoices.length });
+
+        if (allQueryInvoices.length === 0) continue;
+
+        // Resolve target directory
+        let companyFolder = '';
+        if (dbCompany?.name) {
+          companyFolder = dbCompany.name.replace(/[\\/*?:"<>|]/g, '').trim();
+        }
+        const baseDir = process.env.INVOICES_DIR || path.join(process.cwd(), 'invoices');
+
+        // Download each invoice with progress events
+        let processed = 0;
+        for (const inv of allQueryInvoices) {
+          if (aborted) break;
+
+          try {
+            const invoiceDate = inv.tdlap ? (isNaN(Date.parse(inv.tdlap)) ? new Date() : new Date(inv.tdlap)) : new Date();
+            const sellerTaxCode = inv.nbmst || tokenMst;
+            const invCompanyName = companyFolder || sellerTaxCode;
+            const invoiceTargetDir = resolveTargetDir(baseDir, invCompanyName, type, invoiceDate);
+
+            let zipPath: string | null = null;
+            try {
+              zipPath = await downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir);
+            } catch (downloadError: any) {
+              sendLog(`Hoá đơn ${inv.shdon}: ${downloadError.message}`, 'warning');
+            }
+
+            if (!zipPath) {
+              try {
+                const savedInvoice = await saveBasicInvoiceFromGdt(inv, type);
+                await prisma.invoice.update({
+                  where: { id: savedInvoice.id },
+                  data: { zipPath: 'VIRTUAL_HTML' },
+                });
+              } catch (dbErr: any) {
+                allErrors.push(`[${type}] Invoice ${inv.shdon}: ${dbErr.message}`);
+              }
+            } else {
+              // Parse and save
+              try {
+                const parsed = parserService.extractAndParseZip(zipPath, path.dirname(zipPath));
+                if (parsed) {
+                  parsed.zipPath = zipPath;
+                  parsed.xmlFile = path.join(path.dirname(zipPath), parsed.xmlFile);
+
+                  await prisma.$transaction(async (tx) => {
+                    const compositeKey = {
+                      invoiceNumber_sellerTaxCode_buyerTaxCode: {
+                        invoiceNumber: parsed.invoiceNumber,
+                        sellerTaxCode: parsed.sellerTaxCode,
+                        buyerTaxCode: parsed.buyerTaxCode,
+                      },
+                    };
+
+                    const dataObj = {
+                      invoiceNumber: parsed.invoiceNumber,
+                      invoiceDate: parsed.invoiceDate,
+                      templateSymbol: parsed.templateSymbol,
+                      invoiceSymbol: parsed.invoiceSymbol,
+                      paymentMethod: parsed.paymentMethod,
+                      currency: parsed.currency,
+                      exchangeRate: parsed.exchangeRate,
+                      taxAuthorityCode: parsed.taxAuthorityCode,
+                      lookupCode: parsed.lookupCode,
+                      invoiceName: parsed.invoiceName,
+                      version: parsed.version,
+                      gdtProviderTaxCode: parsed.gdtProviderTaxCode,
+                      sellerName: parsed.sellerName,
+                      sellerTaxCode: parsed.sellerTaxCode,
+                      sellerAddress: parsed.sellerAddress,
+                      sellerPhone: parsed.sellerPhone,
+                      buyerName: parsed.buyerName,
+                      buyerTaxCode: parsed.buyerTaxCode,
+                      buyerAddress: parsed.buyerAddress,
+                      buyerCustomerId: parsed.buyerCustomerId,
+                      totalBeforeTax: parsed.totalBeforeTax,
+                      taxAmount: parsed.taxAmount,
+                      totalAmount: parsed.totalAmount,
+                      totalAmountInWords: parsed.totalAmountInWords,
+                      type,
+                      pdfPath: parsed.pdfPath,
+                      xmlPath: parsed.xmlFile,
+                      zipPath: parsed.zipPath,
+                      isSavedToDb: true,
+                    };
+
+                    const existing = await tx.invoice.findUnique({ where: compositeKey });
+                    if (existing) {
+                      await tx.invoiceItem.deleteMany({ where: { invoiceId: existing.id } });
+                      await tx.invoice.update({ where: { id: existing.id }, data: dataObj });
+                      if (parsed.items && parsed.items.length > 0) {
+                        await tx.invoiceItem.createMany({
+                          data: parsed.items.map((item: any) => ({
+                            invoiceId: existing.id,
+                            lineNumber: item.lineNumber,
+                            name: item.name,
+                            unit: item.unit,
+                            quantity: item.quantity,
+                            price: item.price,
+                            amount: item.amount,
+                            taxRate: item.taxRate,
+                          })),
+                        });
+                      }
+                    } else {
+                      const created = await tx.invoice.create({ data: dataObj });
+                      if (parsed.items && parsed.items.length > 0) {
+                        await tx.invoiceItem.createMany({
+                          data: parsed.items.map((item: any) => ({
+                            invoiceId: created.id,
+                            lineNumber: item.lineNumber,
+                            name: item.name,
+                            unit: item.unit,
+                            quantity: item.quantity,
+                            price: item.price,
+                            amount: item.amount,
+                            taxRate: item.taxRate,
+                          })),
+                        });
+                      }
+                    }
+                  });
+
+                  totalSuccessCount++;
+                } else {
+                  allErrors.push(`[${type}] Invoice ${inv.shdon}: Không thể giải nén hoặc parse XML.`);
+                }
+              } catch (parseErr: any) {
+                allErrors.push(`[${type}] Invoice ${inv.shdon}: ${parseErr.message}`);
+              }
+            }
+
+            processed++;
+            sendEvent('progress', {
+              type,
+              current: processed,
+              total: allQueryInvoices.length,
+              invoiceNumber: inv.shdon,
+              invoiceDate: inv.tdlap,
+            });
+          } catch (err: any) {
+            allErrors.push(`[${type}] Invoice ${inv.shdon}: ${err.message}`);
+            processed++;
+            sendEvent('progress', {
+              type,
+              current: processed,
+              total: allQueryInvoices.length,
+              invoiceNumber: inv.shdon,
+              error: err.message,
+            });
+          }
+
+          // Small delay between invoices to avoid rate limiting
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+
+      if (aborted) {
+        sendLog('Kết nối bị ngắt bởi người dùng.', 'warning');
+        res.end();
+        return;
+      }
+
+      sendEvent('done', {
+        message: totalSuccessCount > 0
+          ? `Đã tải thành công ${totalSuccessCount} hoá đơn.`
+          : 'Không có hoá đơn nào được tải.',
+        successCount: totalSuccessCount,
+        errorCount: allErrors.length,
+        errors: allErrors.slice(0, 20),
+      });
+
+      // Record download history
+      if (totalSuccessCount > 0 || allErrors.length > 0) {
+        await prisma.downloadHistory.create({
+          data: {
+            taxCode: effectiveUsername || tokenMst,
+            invoiceType,
+            status: allErrors.length === 0 ? 'SUCCESS' : totalSuccessCount > 0 ? 'PARTIAL' : 'FAILED',
+            log: allErrors.slice(0, 5).join('; '),
+            countDownloaded: totalSuccessCount,
+            userId: req.user.id,
+            username: req.user.username,
+          },
+        });
+      }
+
+      res.end();
+    } catch (error: any) {
+      sendEvent('error', { message: `Lỗi hệ thống: ${error.message}` });
+      res.end();
+    }
+  }
 }
 
 /**

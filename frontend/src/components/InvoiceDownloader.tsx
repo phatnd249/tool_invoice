@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import {
   Play, Sliders, Terminal, Trash2, ChevronDown, ChevronRight, Building2,
-  MapPin, PhoneCall, User, CheckCircle2,
+  MapPin, PhoneCall, User, CheckCircle2, Loader2, XCircle, Check,
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
@@ -25,19 +25,66 @@ interface LogEntry {
   type: 'info' | 'error' | 'warning' | 'system';
 }
 
+interface ProgressState {
+  status: 'idle' | 'connecting' | 'downloading' | 'done' | 'error';
+  total: number;
+  current: number;
+  message?: string;
+}
+
+// ── Progress Bar Component ────────────────────────────────────
+function ProgressBar({ state }: { state: ProgressState }) {
+  const pct = state.total > 0 ? Math.round((state.current / state.total) * 100) : 0;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-text-secondary">
+          {state.status === 'connecting' && 'Đang kết nối...'}
+          {state.status === 'downloading' && `Đang tải: ${state.current}/${state.total} hoá đơn`}
+          {state.status === 'done' && (
+            <span className="text-success-default font-medium flex items-center gap-1">
+              <Check className="w-3.5 h-3.5" />
+              Hoàn thành ({state.total} hoá đơn)
+            </span>
+          )}
+          {state.status === 'error' && (
+            <span className="text-danger-default font-medium flex items-center gap-1">
+              <XCircle className="w-3.5 h-3.5" />
+              {state.message || 'Có lỗi xảy ra'}
+            </span>
+          )}
+        </span>
+        {state.status === 'downloading' && (
+          <span className="font-mono text-accent-default font-semibold">{pct}%</span>
+        )}
+      </div>
+      {(state.status === 'connecting' || state.status === 'downloading') && (
+        <div className="w-full h-2 bg-bg-tertiary rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-accent-default to-accent-hover-default rounded-full transition-all duration-300 ease-out"
+            style={{ width: `${Math.max(pct, 2)}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Accordion Item ─────────────────────────────────────────────
 interface AccordionProps {
   company: Company;
   isExpanded: boolean;
   onToggle: () => void;
   addLog: (message: string, type: LogEntry['type']) => void;
+  progress: ProgressState;
+  onStartDownload: (companyId: number, startDate: string, endDate: string, invoiceType: string) => void;
 }
 
-function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionProps) {
+function CompanyAccordion({ company, isExpanded, onToggle, addLog, progress, onStartDownload }: AccordionProps) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [invoiceType, setInvoiceType] = useState('BOTH');
-  const [loading, setLoading] = useState(false);
 
   const formatDatePayload = (dateStr: string) => {
     if (!dateStr) return '';
@@ -47,8 +94,6 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
 
   const handleDownload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
-
     const formattedStart = formatDatePayload(startDate);
     const formattedEnd = formatDatePayload(endDate);
 
@@ -57,33 +102,10 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
       return;
     }
 
-    setLoading(true);
-    addLog(`[${company.name}] Khởi chạy luồng tải hóa đơn từ ${formattedStart} đến ${formattedEnd}...`, 'info');
-
-    try {
-      const response = await axios.post(`${API_BASE_URL}/api/invoices/download`, {
-        companyId: company.id,
-        startDate: formattedStart,
-        endDate: formattedEnd,
-        invoiceType,
-        saveToDb: true,
-      });
-
-      if (response.status === 200) {
-        addLog(`[${company.name}] Hoàn tất! ${response.data.message || ''}`, 'info');
-        if (response.data.errors && response.data.errors.length > 0) {
-          response.data.errors.forEach((err: string) => addLog(`[${company.name}] Ngoại lệ: ${err}`, 'warning'));
-        }
-      } else {
-        addLog(`[${company.name}] Lỗi API: ${response.data.error || 'Unknown Error'}`, 'error');
-      }
-    } catch (err: any) {
-      const errMsg = err.response?.data?.error || err.response?.data?.details || err.message;
-      addLog(`[${company.name}] Lỗi tải hoá đơn: ${errMsg}`, 'error');
-    } finally {
-      setLoading(false);
-    }
+    onStartDownload(company.id, formattedStart, formattedEnd, invoiceType);
   };
+
+  const isDownloading = progress.status === 'connecting' || progress.status === 'downloading';
 
   return (
     <div className="border border-border rounded-2xl overflow-hidden transition-all duration-200">
@@ -114,7 +136,7 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
       {/* Accordion Body */}
       <div
         className={`overflow-hidden transition-all duration-300 ease-in-out bg-card ${
-          isExpanded ? 'max-h-[520px] opacity-100' : 'max-h-0 opacity-0'
+          isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
         <div className="px-5 pb-5 pt-2 border-t border-border">
@@ -147,6 +169,14 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
               )}
             </div>
           )}
+
+          {/* Progress bar */}
+          {progress.status !== 'idle' && (
+            <div className="mb-4">
+              <ProgressBar state={progress} />
+            </div>
+          )}
+
           <form onSubmit={handleDownload} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -156,7 +186,8 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
                   required
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+                  disabled={isDownloading}
+                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent disabled:opacity-50"
                 />
               </div>
               <div>
@@ -166,15 +197,17 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
                   required
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+                  disabled={isDownloading}
+                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent disabled:opacity-50"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1">Loại hoá đơn</label>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Loại hóa đơn</label>
                 <select
                   value={invoiceType}
                   onChange={(e) => setInvoiceType(e.target.value)}
-                  className="w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
+                  disabled={isDownloading}
+                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent disabled:opacity-50 cursor-pointer"
                 >
                   <option value="SELL">Hóa đơn Bán ra</option>
                   <option value="BUY">Hóa đơn Mua vào</option>
@@ -185,15 +218,12 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog }: AccordionPr
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={isDownloading}
               className="w-full bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default disabled:opacity-50 text-white font-semibold py-2.5 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-accent-default/20 flex items-center justify-center space-x-2 cursor-pointer"
             >
-              {loading ? (
+              {isDownloading ? (
                 <span className="flex items-center space-x-2">
-                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Đang tải...</span>
                 </span>
               ) : (
@@ -215,6 +245,8 @@ export default function InvoiceDownloader() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companiesLoading, setCompaniesLoading] = useState(false);
   const [expandedCompanyId, setExpandedCompanyId] = useState<number | null>(null);
+  const [progressMap, setProgressMap] = useState<Record<number, ProgressState>>({});
+  const abortRef = useRef<Record<number, AbortController>>({});
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       time: new Date().toLocaleTimeString(),
@@ -264,6 +296,144 @@ export default function InvoiceDownloader() {
     setExpandedCompanyId((prev) => (prev === companyId ? null : companyId));
   };
 
+  // Handle SSE download
+  const startDownload = async (companyId: number, startDate: string, endDate: string, invoiceType: string) => {
+    // Abort previous download for this company if any
+    if (abortRef.current[companyId]) {
+      abortRef.current[companyId].abort();
+    }
+
+    const abortController = new AbortController();
+    abortRef.current[companyId] = abortController;
+
+    const token = localStorage.getItem('token');
+    const baseUrl = API_BASE_URL || '';
+
+    // Construct SSE URL with query params and token
+    const url = `${baseUrl}/api/invoices/download/stream?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}&companyId=${companyId}&invoiceType=${invoiceType}&token=${encodeURIComponent(token || '')}`;
+
+    setProgressMap((prev) => ({
+      ...prev,
+      [companyId]: { status: 'connecting', total: 0, current: 0 },
+    }));
+
+    addLog(`[${companies.find(c => c.id === companyId)?.name}] Bắt đầu tải hoá đơn...`, 'info');
+
+    try {
+      const response = await fetch(url, {
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        let currentEvent = '';
+        let currentData = '';
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            currentData = line.slice(6).trim();
+          } else if (line === '' && currentEvent && currentData) {
+            // Process event
+            try {
+              const data = JSON.parse(currentData);
+
+              switch (currentEvent) {
+                case 'log':
+                  addLog(`[SSE] ${data.message}`, data.type || 'info');
+                  break;
+
+                case 'total':
+                  setProgressMap((prev) => ({
+                    ...prev,
+                    [companyId]: {
+                      status: 'downloading',
+                      total: data.total,
+                      current: 0,
+                    },
+                  }));
+                  addLog(`[SSE] Tìm thấy ${data.total} hoá đơn ${data.type}`, 'info');
+                  break;
+
+                case 'progress':
+                  setProgressMap((prev) => {
+                    const existing = prev[companyId];
+                    return {
+                      ...prev,
+                      [companyId]: {
+                        ...existing,
+                        status: 'downloading',
+                        current: data.current,
+                        total: data.total,
+                      },
+                    };
+                  });
+                  break;
+
+                case 'done':
+                  setProgressMap((prev) => ({
+                    ...prev,
+                    [companyId]: {
+                      status: 'done',
+                      total: data.successCount,
+                      current: data.successCount,
+                      message: data.message,
+                    },
+                  }));
+                  addLog(`[SSE] Hoàn thành: ${data.message}`, data.errorCount > 0 ? 'warning' : 'info');
+                  break;
+
+                case 'error':
+                  setProgressMap((prev) => ({
+                    ...prev,
+                    [companyId]: {
+                      status: 'error',
+                      total: 0,
+                      current: 0,
+                      message: data.message,
+                    },
+                  }));
+                  addLog(`[SSE] Lỗi: ${data.message}`, 'error');
+                  break;
+              }
+            } catch (parseErr) {
+              // ignore parse errors for incomplete chunks
+            }
+
+            currentEvent = '';
+            currentData = '';
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        addLog(`[${companies.find(c => c.id === companyId)?.name}] Đã huỷ tải.`, 'warning');
+        return;
+      }
+      setProgressMap((prev) => ({
+        ...prev,
+        [companyId]: { status: 'error', total: 0, current: 0, message: err.message },
+      }));
+      addLog(`[SSE] Lỗi kết nối: ${err.message}`, 'error');
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Company Accordion List */}
@@ -274,10 +444,7 @@ export default function InvoiceDownloader() {
 
         {companiesLoading ? (
           <div className="flex items-center justify-center py-16 text-text-muted">
-            <svg className="animate-spin h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
+            <Loader2 className="w-6 h-6 mr-3 animate-spin" />
             Đang tải danh sách doanh nghiệp...
           </div>
         ) : companies.length === 0 ? (
@@ -294,6 +461,8 @@ export default function InvoiceDownloader() {
               isExpanded={expandedCompanyId === company.id}
               onToggle={() => toggleAccordion(company.id)}
               addLog={addLog}
+              progress={progressMap[company.id] || { status: 'idle', total: 0, current: 0 }}
+              onStartDownload={startDownload}
             />
           ))
         )}

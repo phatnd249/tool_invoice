@@ -6,6 +6,9 @@ const router = Router();
 
 router.use(authenticateToken as any);
 
+// Route to trigger querying and downloading invoices (SSE streaming)
+router.get('/download/stream', InvoiceController.downloadInvoicesStream as any);
+
 // Route to trigger querying and downloading invoices
 router.post('/download', InvoiceController.downloadInvoices);
 
