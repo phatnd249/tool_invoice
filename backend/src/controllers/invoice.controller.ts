@@ -1229,6 +1229,10 @@ export class InvoiceController {
         for (const inv of allQueryInvoices) {
           if (aborted) break;
 
+          processed++;
+          const invNum = inv.shdon || 'unknown';
+          sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: đang xử lý...`);
+
           try {
             const invoiceDate = inv.tdlap ? (isNaN(Date.parse(inv.tdlap)) ? new Date() : new Date(inv.tdlap)) : new Date();
             const sellerTaxCode = inv.nbmst || tokenMst;
@@ -1238,8 +1242,11 @@ export class InvoiceController {
             let zipPath: string | null = null;
             try {
               zipPath = await downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir);
+              if (zipPath) {
+                sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: đã tải ZIP.`, 'info');
+              }
             } catch (downloadError: any) {
-              sendLog(`Hoá đơn ${inv.shdon}: ${downloadError.message}`, 'warning');
+              sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: ${downloadError.message}`, 'warning');
             }
 
             if (!zipPath) {
@@ -1249,8 +1256,10 @@ export class InvoiceController {
                   where: { id: savedInvoice.id },
                   data: { zipPath: 'VIRTUAL_HTML' },
                 });
+                sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: lưu metadata (không có ZIP).`, 'info');
               } catch (dbErr: any) {
                 allErrors.push(`[${type}] Invoice ${inv.shdon}: ${dbErr.message}`);
+                sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: ${dbErr.message}`, 'error');
               }
             } else {
               // Parse and save
@@ -1339,8 +1348,10 @@ export class InvoiceController {
                   });
 
                   totalSuccessCount++;
+                  sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: đã lưu thành công.`, 'info');
                 } else {
                   allErrors.push(`[${type}] Invoice ${inv.shdon}: Không thể giải nén hoặc parse XML.`);
+                  sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: không thể parse XML.`, 'error');
                 }
               } catch (parseErr: any) {
                 allErrors.push(`[${type}] Invoice ${inv.shdon}: ${parseErr.message}`);
@@ -1357,7 +1368,6 @@ export class InvoiceController {
             });
           } catch (err: any) {
             allErrors.push(`[${type}] Invoice ${inv.shdon}: ${err.message}`);
-            processed++;
             sendEvent('progress', {
               type,
               current: processed,
@@ -1365,6 +1375,7 @@ export class InvoiceController {
               invoiceNumber: inv.shdon,
               error: err.message,
             });
+            sendLog(`[${processed}/${allQueryInvoices.length}] Hoá đơn ${invNum}: lỗi - ${err.message}`, 'error');
           }
 
           // Small delay between invoices to avoid rate limiting

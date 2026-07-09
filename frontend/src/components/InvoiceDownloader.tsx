@@ -254,6 +254,25 @@ export default function InvoiceDownloader() {
       type: 'system',
     },
   ]);
+  const logContainerRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  // Auto-scroll to bottom when new logs arrive
+  useEffect(() => {
+    if (autoScroll && logContainerRef.current) {
+      const el = logContainerRef.current;
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    }
+  }, [logs.length, autoScroll]);
+
+  const handleLogScroll = useCallback(() => {
+    if (!logContainerRef.current) return;
+    const el = logContainerRef.current;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    setAutoScroll(isAtBottom);
+  }, []);
 
   const fetchCompanies = useCallback(async () => {
     setCompaniesLoading(true);
@@ -479,20 +498,44 @@ export default function InvoiceDownloader() {
             <span>Xóa log</span>
           </button>
         </div>
-        <div className="flex-1 bg-black border border-border rounded-xl p-4 font-mono text-xs overflow-y-auto space-y-2 select-text">
+        <div
+          ref={logContainerRef}
+          onScroll={handleLogScroll}
+          className="flex-1 bg-black border border-border rounded-xl p-4 font-mono text-xs overflow-y-auto space-y-1.5 select-text"
+        >
           {logs.map((log, idx) => {
             let color = 'text-success-default';
-            if (log.type === 'error') color = 'text-red-400';
-            if (log.type === 'warning') color = 'text-yellow-400';
-            if (log.type === 'system') color = 'text-text-muted';
+            let icon = '•';
+            if (log.type === 'error') { color = 'text-red-400'; icon = '✖'; }
+            else if (log.type === 'warning') { color = 'text-yellow-400'; icon = '⚠'; }
+            else if (log.type === 'system') { color = 'text-text-muted'; icon = '■'; }
+            else if (log.type === 'info') icon = '›';
+
             return (
-              <div key={idx} className={`leading-relaxed ${color}`}>
-                [{log.time}] {log.message}
+              <div
+                key={idx}
+                className={`leading-relaxed ${color} animate-fade-in`}
+                style={{ animationDelay: `${idx === logs.length - 1 ? 0 : 0}ms` }}
+              >
+                <span className="opacity-50 mr-1.5">{icon}</span>
+                <span className="opacity-40 mr-1.5">[{log.time}]</span>
+                {log.message}
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Fade-in animation for log entries */}
+      <style>{`
+        @keyframes log-fade-in {
+          from { opacity: 0; transform: translateY(-4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: log-fade-in 0.2s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
