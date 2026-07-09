@@ -72,19 +72,6 @@ function formatInvoiceNumber(num: string): string {
   return String(num).padStart(8, '0');
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function getInvoiceStatus(inv: Invoice): { label: string; color: string } {
-  const hasZip = inv.zipPath && inv.zipPath !== 'VIRTUAL_HTML';
-  const hasPdf = !!inv.pdfPath;
-  const hasXml = !!inv.xmlPath;
-
-  if (hasZip && hasPdf && hasXml) return { label: 'Đã tải đủ', color: 'bg-emerald-900/50 text-emerald-300' };
-  if (hasPdf && hasXml) return { label: 'Thiếu ZIP', color: 'bg-amber-900/50 text-amber-300' };
-  if (inv.zipPath === 'VIRTUAL_HTML') return { label: 'HTML online', color: 'bg-blue-900/50 text-blue-300' };
-  if (hasPdf || hasXml || hasZip) return { label: 'Tải một phần', color: 'bg-amber-900/50 text-amber-300' };
-  return { label: 'Chưa tải file', color: 'bg-gray-700/50 text-gray-400' };
-}
-
 const PAGE_SIZES = [10, 20, 50, 100];
 
 function Pagination({
