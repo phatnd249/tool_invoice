@@ -12,7 +12,8 @@ import {
   AlertCircle, 
   CheckCircle2, 
   X,
-  Search
+  Search,
+  CloudDownload
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
@@ -477,7 +478,7 @@ export default function CompanyManager() {
                               title="Cập nhật thông tin doanh nghiệp từ masothue.com"
                               className="p-1.5 bg-bg-primary hover:bg-blue-500/20 border border-border hover:border-blue-500/40 text-text-secondary hover:text-blue-400 rounded-lg cursor-pointer transition disabled:opacity-50"
                             >
-                              <RefreshCw className={`w-3.5 h-3.5 ${syncingMap[c.id] ? 'animate-spin text-blue-400' : ''}`} />
+                              <CloudDownload className={`w-3.5 h-3.5 ${syncingMap[c.id] ? 'animate-pulse text-blue-400' : ''}`} />
                             </button>
 
                             {/* Edit Action */}
