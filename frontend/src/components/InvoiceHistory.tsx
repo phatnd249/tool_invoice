@@ -74,6 +74,30 @@ function formatInvoiceNumber(num: string): string {
   return String(num).padStart(8, '0');
 }
 
+function getInvoiceStatusLabel(inv: Invoice): { label: string; color: string } | null {
+  // Ưu tiên dùng invoiceStatus (tthai) nếu có
+  if (inv.invoiceStatus !== undefined && inv.invoiceStatus !== null) {
+    switch (inv.invoiceStatus) {
+      case 1: return { label: 'Hoá đơn mới', color: 'bg-emerald-900/50 text-emerald-300' };
+      case 2: return { label: 'Thay thế', color: 'bg-blue-900/50 text-blue-300' };
+      case 3: return { label: 'Điều chỉnh', color: 'bg-amber-900/50 text-amber-300' };
+      case 4: return { label: 'Đã bị thay thế', color: 'bg-orange-900/50 text-orange-300' };
+      case 5: return { label: 'Đã bị điều chỉnh', color: 'bg-orange-900/50 text-orange-300' };
+      case 6: return { label: 'Đã huỷ', color: 'bg-red-900/50 text-red-300' };
+    }
+  }
+  // Fallback: dựa vào file paths như cũ
+  const hasZip = inv.zipPath && inv.zipPath !== 'VIRTUAL_HTML';
+  const hasPdf = !!inv.pdfPath;
+  const hasXml = !!inv.xmlPath;
+
+  if (hasZip && hasPdf && hasXml) return { label: 'Đã tải đủ', color: 'bg-emerald-900/50 text-emerald-300' };
+  if (hasPdf && hasXml) return { label: 'Thiếu ZIP', color: 'bg-amber-900/50 text-amber-300' };
+  if (inv.zipPath === 'VIRTUAL_HTML') return { label: 'HTML online', color: 'bg-blue-900/50 text-blue-300' };
+  if (hasPdf || hasXml || hasZip) return { label: 'Tải một phần', color: 'bg-amber-900/50 text-amber-300' };
+  return null; // Không hiển thị nếu không có thông tin
+}
+
 const PAGE_SIZES = [10, 20, 50, 100];
 
 function Pagination({
@@ -528,13 +552,14 @@ export default function InvoiceHistory() {
                   <th className="p-3 text-right">Tổng thanh toán</th>
                   <th className="p-3 text-center">ĐVT</th>
                   <th className="p-3 text-right">Tỷ giá</th>
+                  <th className="p-3 text-center">Trạng thái</th>
                   <th className="p-3 text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50 text-text-muted">
                 {loading ? (
                   <tr>
-                    <td colSpan={20} className="p-12 text-center text-text-muted">
+                    <td colSpan={21} className="p-12 text-center text-text-muted">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <Loader2 className="w-8 h-8 text-accent-default animate-spin" />
                         <span>Đang tải danh sách hóa đơn từ Database...</span>
@@ -543,7 +568,7 @@ export default function InvoiceHistory() {
                   </tr>
                 ) : invoices.length === 0 ? (
                   <tr>
-                    <td colSpan={20} className="p-8 text-center text-text-muted">
+                    <td colSpan={21} className="p-8 text-center text-text-muted">
                       Không có hóa đơn nào trong cơ sở dữ liệu.
                     </td>
                   </tr>
@@ -613,6 +638,15 @@ export default function InvoiceHistory() {
                         </td>
                         <td className="p-3 text-right text-xs">
                           {inv.exchangeRate && inv.exchangeRate !== 1 ? inv.exchangeRate : '—'}
+                        </td>
+                        <td className="p-3 text-center">
+                          {(getInvoiceStatusLabel(inv) as any) ? (
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${(getInvoiceStatusLabel(inv) as any).color}`}>
+                              {(getInvoiceStatusLabel(inv) as any).label}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-text-muted">—</span>
+                          )}
                         </td>
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center space-x-1">
