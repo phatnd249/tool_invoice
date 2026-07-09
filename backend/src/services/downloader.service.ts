@@ -36,6 +36,19 @@ function formatGdtError(responseBody: string, invoiceLabel: string, status: numb
 }
 
 /**
+ * Map processStatus (ttxly) to result code for file naming:
+ *   C = Đã cấp mã (ttxly=5)
+ *   K = Cục thuế đã nhận không mã / không đủ điều kiện cấp mã (ttxly=6 BUY, 4 SELL)
+ *   M = Máy tính tiền (ttxly=8)
+ */
+function mapProcessStatusToCode(ttxly: number | undefined | null, invoiceType: 'BUY' | 'SELL'): string {
+  if (ttxly === 5) return 'C';
+  if (ttxly === 8) return 'M';
+  if (ttxly === 6 || ttxly === 4) return 'K';
+  return 'K'; // Default
+}
+
+/**
  * Extract response body from an axios error or response as a string.
  */
 function extractResponseBody(data: any): string {
@@ -255,7 +268,8 @@ export class DownloaderService {
   public async downloadInvoiceZip(
     invoice: any,
     token: string,
-    outputDir: string
+    outputDir: string,
+    invoiceType: 'BUY' | 'SELL' = 'SELL'
   ): Promise<string> {
     const nbmst = invoice.nbmst;         // Seller tax code
     const khmshdon = invoice.khmshdon;   // Invoice template symbol
@@ -266,7 +280,8 @@ export class DownloaderService {
     if (!nbmst || shdon === undefined || !khmshdon || !khhdon) {
       throw new Error(`Thiếu thông tin hoá đơn (nbmst/shd on/khmshdon/khhdon) để tải ZIP.`);
     }
-    const zipFileName = `${nbmst}-${shdon}.zip`;
+    const resultCode = mapProcessStatusToCode(invoice.ttxly, invoiceType);
+    const zipFileName = `${nbmst} - ${resultCode} - ${shdon}.zip`;
 
     const zipPath = path.join(outputDir, zipFileName);
 

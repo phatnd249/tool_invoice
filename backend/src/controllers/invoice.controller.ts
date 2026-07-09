@@ -367,7 +367,7 @@ export class InvoiceController {
           let zipPath: string | null = null;
           try {
             zipPath = await withRetry(
-              () => downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir),
+              () => downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir, type),
               { maxRetries: 2, baseDelayMs: 2000, maxDelayMs: 8000 }
             );
           } catch (downloadError: any) {
@@ -1260,7 +1260,7 @@ export class InvoiceController {
 
             let zipPath: string | null = null;
             try {
-              zipPath = await downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir);
+              zipPath = await downloaderService.downloadInvoiceZip(inv, activeToken, invoiceTargetDir, invoiceType);
               if (zipPath) {
                 sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đã tải ZIP.`, 'info');
               }
