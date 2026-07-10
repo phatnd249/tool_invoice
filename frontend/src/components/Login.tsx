@@ -118,11 +118,7 @@ export default function Login({ onLoginSuccess, errorMessage }: LoginProps) {
           </button>
         </form>
 
-        <div className="text-center pt-2">
-          <p className="text-xs text-text-muted">
-            Tài khoản quản trị mặc định: <code className="text-text-secondary">admin</code> / <code className="text-text-secondary">adminpassword</code>
-          </p>
-        </div>
+
       </div>
     </div>
   );
