@@ -36,15 +36,22 @@ function formatGdtError(responseBody: string, invoiceLabel: string, status: numb
 }
 
 /**
- * Map processStatus (ttxly) to result code for file naming:
- *   C = Đã cấp mã (ttxly=5)
- *   K = Cục thuế đã nhận không mã / không đủ điều kiện cấp mã (ttxly=6 BUY, 4 SELL)
- *   M = Máy tính tiền (ttxly=8)
+ * Lấy ký hiệu (C = có mã, K = không mã, M = máy tính tiền)
+ * Dựa vào sourceApi, khhdon, hoặc ttxly
  */
-function mapProcessStatusToCode(ttxly: number | undefined | null, invoiceType: 'BUY' | 'SELL'): string {
-  if (ttxly === 5) return 'C';
+function mapProcessStatusToCode(invoice: any): string {
+  const khhdon = String(invoice.khhdon || '').toUpperCase();
+  if (khhdon.match(/^[1-6]?M/)) return 'M';
+  if (khhdon.match(/^[1-6]?C/)) return 'C';
+  if (khhdon.match(/^[1-6]?K/)) return 'K';
+
+  const ttxly = invoice.ttxly;
   if (ttxly === 8) return 'M';
+  if (ttxly === 5) return 'C';
   if (ttxly === 6 || ttxly === 4) return 'K';
+  
+  if (invoice._sourceApi === 'sco-query') return 'M';
+
   return 'K'; // Default
 }
 
@@ -142,23 +149,40 @@ export class DownloaderService {
 
     let allInvoices: any[] = [];
 
-    // 1. Query standard invoices
-    try {
-      const queryInvoices = await this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers);
-      allInvoices = allInvoices.concat(queryInvoices);
-    } catch (error) {
-      throw error;
+    // 1. Query standard invoices for each required status:
+    // 5: Đã cấp mã
+    // 6: Cục thuế đã nhận không mã
+    // 4: Không đủ điều kiện cấp mã
+    // 7: Đã kiểm tra định kỳ
+    // 8: Máy tính tiền (từ tab chuẩn)
+    const standardStatuses = [4, 5, 6, 7, 8];
+    for (const status of standardStatuses) {
+      try {
+        const queryInvoices = await this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers, status);
+        allInvoices = allInvoices.concat(queryInvoices);
+      } catch (error: any) {
+        if (error.message && error.message.includes('401')) {
+          throw error;
+        }
+        console.error(`[DownloaderService] Error fetching standard invoices for status ${status}, ignoring:`, error.message);
+      }
     }
 
     // 2. Query cash register invoices (máy tính tiền)
-    try {
-      const scoQueryInvoices = await this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers);
-      allInvoices = allInvoices.concat(scoQueryInvoices);
-    } catch (error: any) {
-      if (error.message && error.message.includes('401')) {
-        throw error;
+    // 5: Đã cấp mã
+    // 6: Cục thuế đã nhận không mã
+    // 8: Máy tính tiền
+    const scoStatuses = [5, 6, 8];
+    for (const status of scoStatuses) {
+      try {
+        const scoQueryInvoices = await this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers, status);
+        allInvoices = allInvoices.concat(scoQueryInvoices);
+      } catch (error: any) {
+        if (error.message && error.message.includes('401')) {
+          throw error;
+        }
+        console.error(`[DownloaderService] Error fetching sco-query invoices for status ${status}, ignoring:`, error.message);
       }
-      console.error('[DownloaderService] Error fetching sco-query invoices, ignoring to return standard invoices:', error.message);
     }
 
     return allInvoices;
@@ -168,16 +192,22 @@ export class DownloaderService {
     baseUrl: string,
     startStr: string,
     endStr: string,
-    headers: any
+    headers: any,
+    status?: number
   ): Promise<any[]> {
     // Step 1: Send query with size=1 to find total matching records
-    const urlCount = `${baseUrl}?sort=tdlap:desc&size=1&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
+    let searchStr = `tdlap=ge=${startStr};tdlap=le=${endStr}`;
+    if (status !== undefined) {
+      searchStr += `;ttxly==${status}`;
+    }
+    const searchParam = encodeURIComponent(searchStr);
+    const urlCount = `${baseUrl}?sort=tdlap:desc&size=1&search=${searchParam}`;
     
     try {
       console.log(`[DownloaderService] Querying count from ${startStr} to ${endStr} at ${baseUrl}...`);
       const response = await axios.get(urlCount, {
         headers,
-        timeout: 20000,
+        timeout: 60000,
         validateStatus: () => true,
       });
 
@@ -205,13 +235,13 @@ export class DownloaderService {
       const allRecords: any[] = [];
 
       for (let page = 0; page < totalPages; page++) {
-        const urlPage = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&page=${page}&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
+        const urlPage = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&page=${page}&search=${searchParam}`;
 
         console.log(`[DownloaderService] Fetching page ${page + 1}/${totalPages} (size=${PAGE_SIZE}) from ${baseUrl}...`);
 
         const responsePage = await axios.get(urlPage, {
           headers,
-          timeout: 30000,
+          timeout: 60000,
           validateStatus: () => true,
         });
 
@@ -278,10 +308,10 @@ export class DownloaderService {
     const mhdon = invoice.mhdon;         // Tax Authority Code (MCCQT/hash)
 
     if (!nbmst || shdon === undefined || !khmshdon || !khhdon) {
-      throw new Error(`Thiếu thông tin hoá đơn (nbmst/shd on/khmshdon/khhdon) để tải ZIP.`);
+      throw new Error(`Thiếu thông tin hoá đơn (nbmst/shdon/khmshdon/khhdon) để tải ZIP.`);
     }
-    const resultCode = mapProcessStatusToCode(invoice.ttxly, invoiceType);
-    const zipFileName = `${nbmst} - ${resultCode} - ${shdon}.zip`;
+    const resultCode = mapProcessStatusToCode(invoice);
+    const zipFileName = `${nbmst}-${shdon}-${resultCode}.zip`;
 
     const zipPath = path.join(outputDir, zipFileName);
 
@@ -305,7 +335,7 @@ export class DownloaderService {
       const response = await axios.get(exportUrl, {
         headers,
         responseType: 'arraybuffer',
-        timeout: 20000,
+        timeout: 60000,
         // Do not throw on non-200 so we can inspect the response body
         validateStatus: () => true,
       });
@@ -408,7 +438,7 @@ export class DownloaderService {
         const response = await axios.get(task.url, {
           headers,
           responseType: 'arraybuffer',
-          timeout: 30000,
+          timeout: 60000,
           // Do not throw on non-200 so we can inspect the response body
           validateStatus: () => true,
         });
@@ -474,7 +504,7 @@ export class DownloaderService {
     try {
       const response = await axios.get(detailUrl, {
         headers,
-        timeout: 15000,
+        timeout: 60000,
         validateStatus: () => true,
       });
 

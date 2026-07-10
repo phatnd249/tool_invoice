@@ -222,6 +222,8 @@ class SchedulerService {
 
     const job = cron.schedule(cronExpression, async () => {
       await this.runDownload(schedule);
+    }, {
+      timezone: 'Asia/Ho_Chi_Minh'
     });
 
     this.jobs.set(id, job);

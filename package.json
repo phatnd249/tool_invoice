@@ -20,5 +20,14 @@
   },
   "devDependencies": {
     "concurrently": "^10.0.3"
+  },
+  "allowScripts": {
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "core-js@3.49.0": true,
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.28.1": true,
+    "prisma@5.22.0": true,
+    "sharp@0.32.6": true
   }
 }

@@ -181,6 +181,9 @@ export default function InvoiceHistory() {
   // Invoice Detail (items) Modal state
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
 
+  // Preview HTML Modal state
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+
   // ── Fetch functions ──
 
   const fetchInvoices = useCallback(async (p: number, s: number, q: string, type: string) => {
@@ -303,86 +306,57 @@ export default function InvoiceHistory() {
   };
 
   const downloadPdf = async (invoiceId: string) => {
-    try {
-      // 1. Fetch HTML
-      const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview?t=${Date.now()}`, {
-        responseType: 'text',
-      });
-      const htmlStr = response.data;
-
-      // 2. Tạo một iframe ẩn để browser render toàn bộ CSS và font của hoá đơn gốc
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'absolute';
-      iframe.style.width = '800px';
-      iframe.style.height = '1200px';
-      iframe.style.left = '-9999px';
-      iframe.style.top = '0';
-      document.body.appendChild(iframe);
-
-      const doc = iframe.contentWindow?.document || iframe.contentDocument;
-      if (doc) {
-        doc.open();
-        doc.write(htmlStr);
-        doc.close();
-      }
-
-      // Đợi 500ms để CSS và Font (nếu có) được browser áp dụng hoàn tất
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // 3. Import html2pdf
-      const html2pdfModule = await import('html2pdf.js');
-      const html2pdf = html2pdfModule.default || html2pdfModule;
-
-      const opt = {
-        margin:       10,
-        filename:     `invoice_${invoiceId.slice(0, 8)}.pdf`,
-        image:        { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
-      };
-
-      // 4. Generate and save PDF from the iframe's body
-      if (doc && doc.body) {
-        // html2canvas only clones the target element (body). 
-        // We must move all styles from <head> to <body> so they are applied in the PDF.
-        const styles = doc.querySelectorAll('style, link[rel="stylesheet"]');
-        styles.forEach(style => doc.body.appendChild(style.cloneNode(true)));
-
-        await html2pdf().set(opt).from(doc.body).save();
-      }
-
-      // 5. Cleanup
-      document.body.removeChild(iframe);
-    } catch (err: any) {
-      console.error('Error downloading PDF:', err);
-      const msg = err.response?.data?.error || 'Không thể tải file PDF.';
-      alert(msg);
-    }
+    // Gọi thẳng API tải PDF tĩnh từ backend thay vì tự vẽ (để tránh lỗi trắng trang do off-screen capture)
+    downloadFile(invoiceId, 'pdf' as any);
   };
 
-  const downloadFile = async (invoiceId: string, type: 'xml' | 'zip') => {
+  const downloadFile = async (invoiceId: string, type: 'xml' | 'zip' | 'pdf') => {
     try {
       const response = await axios.get(
         `${API_BASE_URL}/api/invoices/${invoiceId}/${type}`,
-        { responseType: 'blob' }
+        { 
+          responseType: 'blob'
+        }
       );
 
-      const ext = type === 'xml' ? 'xml' : 'zip';
-      const contentType = type === 'xml' ? 'application/xml' : 'application/zip';
+      const ext = type;
+      let contentType = 'application/pdf';
+      if (type === 'xml') contentType = 'application/xml';
+      else if (type === 'zip') contentType = 'application/zip';
 
       const blob = new Blob([response.data], { type: contentType });
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `invoice_${invoiceId.slice(0, 8)}.${ext}`;
+      
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `invoice_${invoiceId.slice(0, 8)}.${ext}`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (filenameMatch && filenameMatch.length === 2) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
     } catch (err: any) {
       console.error(`Error downloading ${type}:`, err);
-      const msg = err.response?.data?.error || `Không thể tải file ${type}.`;
-      alert(msg);
+      
+      if (err.response && err.response.data && err.response.data instanceof Blob) {
+        const text = await err.response.data.text();
+        try {
+          const json = JSON.parse(text);
+          alert(json.error || `Không thể tải file ${type.toUpperCase()}.`);
+        } catch (e) {
+          alert(`Không thể tải file ${type.toUpperCase()}.`);
+        }
+      } else {
+        alert(err.response?.data?.error || `Không thể tải file ${type.toUpperCase()}.`);
+      }
     }
   };
 
@@ -391,25 +365,10 @@ export default function InvoiceHistory() {
       const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview?t=${Date.now()}`, {
         responseType: 'text',
       });
-      const html = response.data;
-      const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
-      const blobUrl = URL.createObjectURL(blob);
-      const newTab = window.open(blobUrl, '_blank');
-      if (!newTab) {
-        // Popup blocked — fallback to document.write
-        const fallbackTab = window.open('', '_blank');
-        if (fallbackTab) {
-          fallbackTab.document.write(html);
-          fallbackTab.document.close();
-        } else {
-          alert('Trình duyệt đã chặn popup. Vui lòng cho phép popup cho trang này hoặc dùng nút tải PDF thay thế.');
-        }
-      }
-      // Revoke blob URL after enough time for the new tab to load
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      setPreviewHtml(response.data);
     } catch (err: any) {
-      console.error('Error loading preview:', err);
-      const msg = err.response?.data?.error || 'Không thể tải preview hóa đơn.';
+      console.error(`Error loading preview:`, err);
+      const msg = err.response?.data?.error || `Không thể tải bản xem trước hóa đơn.`;
       alert(msg);
     }
   };
@@ -902,7 +861,7 @@ export default function InvoiceHistory() {
       {/* Log Detail Modal */}
       {selectedHistory && (
         <div className="fixed inset-0 bg-card/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-2xl bg-bg-primary border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+          <div className="w-full max-w-3xl bg-bg-primary border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
             <div className="flex justify-between items-center px-6 py-5 bg-card/80 border-b border-border">
               <h2 className="text-md font-bold text-text-primary flex items-center space-x-2">
                 <ShieldAlert className="w-5 h-5 text-accent-default" />
@@ -915,31 +874,98 @@ export default function InvoiceHistory() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 overflow-y-auto space-y-4 flex-1">
-              <div className="grid grid-cols-2 gap-4 bg-card p-4 rounded-2xl border border-border text-xs">
-                <div>
-                  <span className="text-text-muted block mb-0.5">Thời gian quét:</span>
-                  <span className="font-semibold text-text-secondary">{new Date(selectedHistory.downloadDate).toLocaleString('vi-VN')}</span>
+            <div className="p-6 flex-1 overflow-hidden flex flex-col space-y-6 bg-gradient-to-b from-bg-primary to-bg-tertiary/20">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-card p-4 rounded-2xl border border-border flex flex-col shadow-sm">
+                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Thời gian</span>
+                  <span className="font-bold text-text-primary text-sm">{new Date(selectedHistory.downloadDate).toLocaleTimeString('vi-VN')}</span>
+                  <span className="text-text-secondary text-xs">{new Date(selectedHistory.downloadDate).toLocaleDateString('vi-VN')}</span>
                 </div>
-                <div>
-                  <span className="text-text-muted block mb-0.5">Mã số thuế doanh nghiệp:</span>
-                  <span className="font-semibold text-text-secondary select-all">{selectedHistory.taxCode}</span>
+                <div className="bg-card p-4 rounded-2xl border border-border flex flex-col shadow-sm">
+                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Mã Số Thuế</span>
+                  <span className="font-bold text-text-primary text-sm select-all">{selectedHistory.taxCode}</span>
                 </div>
-                <div>
-                  <span className="text-text-muted block mb-0.5">Người thực hiện:</span>
-                  <span className="font-semibold text-text-secondary">{selectedHistory.username || 'Hệ thống (Cron)'}</span>
+                <div className="bg-card p-4 rounded-2xl border border-border flex flex-col shadow-sm">
+                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Người Quét</span>
+                  <span className="font-bold text-text-primary text-sm">{selectedHistory.username || 'Hệ Thống (Cron)'}</span>
                 </div>
-                <div>
-                  <span className="text-text-muted block mb-0.5">Số lượng tải về:</span>
-                  <span className="font-semibold text-success-default">{selectedHistory.countDownloaded} hóa đơn thành công</span>
+                <div className="bg-card p-4 rounded-2xl border border-border flex flex-col shadow-sm">
+                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Thành Công</span>
+                  <span className="font-bold text-success-default text-lg leading-tight">{selectedHistory.countDownloaded} <span className="text-xs font-normal text-text-secondary">Hóa đơn</span></span>
                 </div>
               </div>
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-text-secondary uppercase tracking-wide">Lịch sử chi tiết & Lỗi hệ thống:</span>
-                <pre className="bg-card text-text-secondary border border-border p-4 rounded-2xl text-xs font-mono whitespace-pre-wrap max-h-[300px] overflow-y-auto leading-relaxed">
-                  {selectedHistory.log || 'Không ghi nhận lỗi nào trong phiên tải này.'}
-                </pre>
+
+              {/* Detail Logs */}
+              <div className="flex-1 overflow-hidden flex flex-col bg-card rounded-2xl border border-border shadow-sm">
+                <div className="px-5 py-3 border-b border-border bg-bg-tertiary/50">
+                  <span className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center space-x-2">
+                    <FileText className="w-4 h-4 text-text-muted" />
+                    <span>Lịch sử chi tiết & Lỗi hệ thống</span>
+                  </span>
+                </div>
+                <div className="p-4 overflow-y-auto max-h-[350px]">
+                  {selectedHistory.log ? (
+                    <ul className="space-y-3">
+                      {selectedHistory.log.split('\n').filter(line => line.trim() !== '').map((line, idx) => {
+                        const isError = line.toLowerCase().includes('lỗi') || line.toLowerCase().includes('thất bại') || line.toLowerCase().includes('error');
+                        const isBuy = line.includes('[BUY]');
+                        const isSell = line.includes('[SELL]');
+                        const typeTag = isBuy ? 'Mua vào' : (isSell ? 'Bán ra' : 'Hệ thống');
+                        
+                        return (
+                          <li key={idx} className={`p-3 rounded-xl border flex items-start space-x-3 ${isError ? 'bg-danger-light/30 border-danger-default/20' : 'bg-bg-primary border-border'}`}>
+                            <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${isError ? 'bg-danger-default shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-success-default'}`} />
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted uppercase tracking-wider">{typeTag}</span>
+                              </div>
+                              <span className={`text-sm font-medium ${isError ? 'text-danger-default' : 'text-text-secondary'}`}>
+                                {line.replace(/\[(BUY|SELL)\]\s*/, '')}
+                              </span>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-center text-success-default">
+                      <div className="w-12 h-12 rounded-full bg-success-light flex items-center justify-center mb-3">
+                        <svg className="w-6 h-6 text-success-default" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      </div>
+                      <p className="font-semibold">Tuyệt vời! Không ghi nhận bất kỳ lỗi nào trong phiên tải này.</p>
+                      <p className="text-xs text-text-muted mt-1">Toàn bộ quá trình diễn ra trơn tru.</p>
+                    </div>
+                  )}
+                </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice HTML Preview Modal */}
+      {previewHtml && (
+        <div className="fixed inset-0 bg-card/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="w-full max-w-5xl bg-bg-primary border border-border rounded-3xl shadow-2xl flex flex-col h-[90vh]">
+            <div className="flex justify-between items-center px-6 py-4 border-b border-border">
+              <h2 className="text-lg font-bold text-text-primary flex items-center space-x-2">
+                <Eye className="w-5 h-5 text-success-default" />
+                <span>Xem Trước Hóa Đơn</span>
+              </h2>
+              <button
+                onClick={() => setPreviewHtml(null)}
+                className="text-text-secondary hover:text-text-primary p-2 bg-bg-tertiary hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden bg-white rounded-b-3xl relative">
+               <iframe 
+                 srcDoc={previewHtml}
+                 className="w-full h-full border-none"
+                 title="Invoice Preview"
+               />
             </div>
           </div>
         </div>

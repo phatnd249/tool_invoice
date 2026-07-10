@@ -25,7 +25,10 @@ router.post('/export', InvoiceController.exportInvoices);
 router.get('/:id/xml', InvoiceController.downloadXml);
 
 // Route to download ZIP of a specific invoice
-router.get('/:id/zip', InvoiceController.downloadZip);
+router.get('/:id/zip', InvoiceController.downloadZip as any);
+
+// Route to download generated PDF of a specific invoice
+router.get('/:id/pdf', InvoiceController.downloadPdf as any);
 
 // Route to preview invoice HTML from its ZIP file
 router.get('/:id/preview', InvoiceController.previewInvoice as any);

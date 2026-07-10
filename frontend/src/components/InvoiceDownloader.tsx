@@ -184,10 +184,12 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog, progress, onS
                 <input
                   type="date"
                   required
+                  lang="en-GB"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   disabled={isDownloading}
-                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent disabled:opacity-50"
+                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent disabled:opacity-50 relative"
+                  style={{ colorScheme: 'dark' }}
                 />
               </div>
               <div>
@@ -195,10 +197,12 @@ function CompanyAccordion({ company, isExpanded, onToggle, addLog, progress, onS
                 <input
                   type="date"
                   required
+                  lang="en-GB"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   disabled={isDownloading}
-                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent disabled:opacity-50"
+                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent disabled:opacity-50 relative"
+                  style={{ colorScheme: 'dark' }}
                 />
               </div>
               <div>
