@@ -1,0 +1,39 @@
+HƯỚNG DẪN CÀI ĐẶT VÀ SỬ DỤNG HỆ THỐNG QUẢN LÝ HÓA ĐƠN
+======================================================
+
+Hệ thống đã được đóng gói tự động hóa hoàn toàn bằng Docker. Quý khách chỉ cần làm theo các bước cực kỳ đơn giản sau để khởi chạy:
+
+---
+BƯỚC 1: CHUẨN BỊ MÔI TRƯỜNG
+1. Máy tính/Server cần được cài đặt sẵn phần mềm Docker (Docker Desktop trên Windows, hoặc Docker Engine trên Linux).
+2. Giải nén thư mục này vào một ổ đĩa trống (VD: D:\Tool-Invoice)
+
+---
+BƯỚC 2: CẤU HÌNH API KEY (Vượt Captcha)
+1. Trong thư mục vừa giải nén, tìm file có tên `.env.example`
+2. Đổi tên file đó thành `.env` (Lưu ý: Có dấu chấm ở đầu).
+3. Mở file `.env` bằng Notepad.
+4. Xóa dòng chữ `your-gemini-api-key-here` và dán mã API Key Google Gemini của Quý khách vào đó.
+   (API Key được cấp miễn phí tại: https://aistudio.google.com/app/apikey)
+5. Lưu lại file.
+
+---
+BƯỚC 3: KHỞI ĐỘNG HỆ THỐNG
+1. Mở Terminal hoặc Command Prompt (CMD) tại chính thư mục này.
+2. Gõ lệnh sau và nhấn Enter:
+   docker-compose up -d --build
+3. Đợi vài phút để Docker tự động tải dữ liệu và cài đặt hệ thống ngầm.
+
+---
+BƯỚC 4: TRUY CẬP VÀ SỬ DỤNG
+- Mở trình duyệt web (Chrome, Edge...) và truy cập vào địa chỉ:
+  http://localhost:8080
+
+- Tài khoản Đăng nhập mặc định ban đầu:
+  Tên đăng nhập: admin
+  Mật khẩu: adminpassword
+
+---
+LƯU Ý QUAN TRỌNG:
+- Toàn bộ cơ sở dữ liệu và file PDF hóa đơn tải về sẽ được hệ thống lưu an toàn trong thư mục `data/`. Quý khách tuyệt đối không xóa thư mục này để tránh mất dữ liệu.
+- Hệ thống hỗ trợ lên lịch tải hóa đơn tự động hàng ngày/hàng tuần ngầm.
