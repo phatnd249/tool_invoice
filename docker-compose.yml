@@ -13,3 +13,4 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/data/db/database.db
       - INVOICES_DIR=/app/data/invoices
+      - TZ=Asia/Ho_Chi_Minh

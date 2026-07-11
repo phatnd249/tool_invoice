@@ -78,6 +78,7 @@ ENV DATABASE_URL="file:/app/data/database.db"
 ENV INVOICES_DIR="/app/data/invoices"
 ENV PORT=3000
 ENV NODE_ENV=production
+ENV TZ=Asia/Ho_Chi_Minh
 
 EXPOSE 3000
 
