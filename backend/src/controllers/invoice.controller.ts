@@ -9,6 +9,7 @@ import { withRetry, processWithRateLimit } from '../utils/rate-limiter.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { AuthRequest } from '../middleware/auth.middleware.js';
+import { generatePdfViaElectron } from '../utils/electron-ipc.js';
 
 const downloaderService = new DownloaderService();
 const parserService = new ParserService();
@@ -407,6 +408,7 @@ export class InvoiceController {
 
         // Save to Database if required
         if (saveToDb) {
+          let invoiceId = '';
           await prisma.$transaction(async (tx) => {
             const compositeKey = {
               invoiceNumber_sellerTaxCode_buyerTaxCode: {
@@ -455,6 +457,7 @@ export class InvoiceController {
             });
 
             if (existingInvoice) {
+              invoiceId = existingInvoice.id;
               await tx.invoiceItem.deleteMany({
                 where: { invoiceId: existingInvoice.id },
               });
@@ -481,6 +484,7 @@ export class InvoiceController {
               const newInvoice = await tx.invoice.create({
                 data: dataObj,
               });
+              invoiceId = newInvoice.id;
 
               if (parsed.items && parsed.items.length > 0) {
                 await tx.invoiceItem.createMany({
@@ -498,6 +502,27 @@ export class InvoiceController {
               }
             }
           });
+
+          // Tự động giải nén HTML, cache và chuyển sang PDF
+          if (invoiceId && zipPath && process.send) {
+            try {
+              const html = await previewService.getPreviewHtml(invoiceId);
+              if (html) {
+                const pdfFileName = path.basename(zipPath, '.zip') + '.pdf';
+                const pdfPath = path.join(path.dirname(zipPath), pdfFileName);
+                const cacheHtmlPath = previewService.getCachePath(invoiceId);
+
+                await generatePdfViaElectron(cacheHtmlPath, pdfPath);
+
+                await prisma.invoice.update({
+                  where: { id: invoiceId },
+                  data: { pdfPath }
+                });
+              }
+            } catch (pdfErr: any) {
+              console.error(`[InvoiceController] Failed to automatically generate PDF in downloadInvoices for invoice ${parsed.invoiceNumber}:`, pdfErr.message);
+            }
+          }
         }
       } catch (err: any) {
           typeErrors.push(`[${type}] Inv ${inv.shdon}: Database save error: ${err.message}`);
@@ -1288,6 +1313,7 @@ export class InvoiceController {
                   parsed.zipPath = zipPath;
                   parsed.xmlFile = path.join(path.dirname(zipPath), parsed.xmlFile);
 
+                  let invoiceId = '';
                   await prisma.$transaction(async (tx) => {
                     const compositeKey = {
                       invoiceNumber_sellerTaxCode_buyerTaxCode: {
@@ -1333,6 +1359,7 @@ export class InvoiceController {
 
                     const existing = await tx.invoice.findUnique({ where: compositeKey });
                     if (existing) {
+                      invoiceId = existing.id;
                       await tx.invoiceItem.deleteMany({ where: { invoiceId: existing.id } });
                       await tx.invoice.update({ where: { id: existing.id }, data: dataObj });
                       if (parsed.items && parsed.items.length > 0) {
@@ -1351,6 +1378,7 @@ export class InvoiceController {
                       }
                     } else {
                       const created = await tx.invoice.create({ data: dataObj });
+                      invoiceId = created.id;
                       if (parsed.items && parsed.items.length > 0) {
                         await tx.invoiceItem.createMany({
                           data: parsed.items.map((item: any) => ({
@@ -1370,6 +1398,30 @@ export class InvoiceController {
 
                   totalSuccessCount++;
                   sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đã lưu thành công.`, 'info');
+
+                  // Tự động giải nén HTML, cache và chuyển sang PDF
+                  if (invoiceId && zipPath && process.send) {
+                    try {
+                      const html = await previewService.getPreviewHtml(invoiceId);
+                      if (html) {
+                        const pdfFileName = path.basename(zipPath, '.zip') + '.pdf';
+                        const pdfPath = path.join(path.dirname(zipPath), pdfFileName);
+                        const cacheHtmlPath = previewService.getCachePath(invoiceId);
+
+                        sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đang chuyển đổi sang PDF...`, 'info');
+                        await generatePdfViaElectron(cacheHtmlPath, pdfPath);
+
+                        await prisma.invoice.update({
+                          where: { id: invoiceId },
+                          data: { pdfPath }
+                        });
+                        sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đã chuyển đổi PDF thành công.`, 'info');
+                      }
+                    } catch (pdfErr: any) {
+                      console.error(`[InvoiceController] Failed to automatically generate PDF in downloadInvoicesStream for invoice ${parsed.invoiceNumber}:`, pdfErr.message);
+                      sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: không thể tạo PDF (${pdfErr.message})`, 'warning');
+                    }
+                  }
                 } else {
                   allErrors.push(`[${invoiceType}] Invoice ${inv.shdon}: Không thể giải nén hoặc parse XML.`);
                   sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: không thể parse XML.`, 'error');
@@ -1437,6 +1489,59 @@ export class InvoiceController {
     } catch (error: any) {
       sendEvent('error', { message: `Lỗi hệ thống: ${error.message}` });
       res.end();
+    }
+  }
+
+  /**
+   * GET /api/invoices/:id/pdf
+   * Download raw PDF file of invoice
+   */
+  public static async downloadPdf(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
+    try {
+      const invoice = await prisma.invoice.findUnique({
+        where: { id },
+      });
+
+      if (!invoice || !invoice.pdfPath) {
+        res.status(404).json({ error: 'Không tìm thấy file PDF cho hóa đơn này.' });
+        return;
+      }
+
+      // Check staff permissions
+      if (req.user.role !== 'ADMIN') {
+        const assignedCompanies = await prisma.userCompany.findMany({
+          where: { userId: req.user.id },
+          include: {
+            company: {
+              select: { taxCode: true }
+            }
+          }
+        });
+        const allowedMsts = assignedCompanies.map(uc => uc.company.taxCode);
+        const hasAccess = allowedMsts.includes(invoice.sellerTaxCode) || allowedMsts.includes(invoice.buyerTaxCode);
+        if (!hasAccess) {
+          res.status(403).json({ error: 'Bạn không có quyền truy cập hóa đơn này.' });
+          return;
+        }
+      }
+
+      if (!fs.existsSync(invoice.pdfPath)) {
+        res.status(404).json({ error: 'Tệp PDF không tồn tại trên đĩa.' });
+        return;
+      }
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=${path.basename(invoice.pdfPath)}`);
+      res.sendFile(invoice.pdfPath);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Lỗi khi tải tệp PDF', details: error.message });
     }
   }
 }

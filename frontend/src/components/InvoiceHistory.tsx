@@ -302,7 +302,42 @@ export default function InvoiceHistory() {
     }
   };
 
-  const downloadPdf = async (invoiceId: string) => {
+  const downloadPdf = async (invoice: any) => {
+    const invoiceId = invoice.id;
+
+    // Nếu đã có tệp PDF được lưu trên đĩa, tiến hành tải trực tiếp từ backend
+    if (invoice.pdfPath) {
+      try {
+        const response = await axios.get(
+          `${API_BASE_URL}/api/invoices/${invoiceId}/pdf?t=${Date.now()}`,
+          { responseType: 'blob' }
+        );
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        
+        // Tên file xuất ra là [MST Người bán] - [Ký hiệu] - [Số hóa đơn].pdf nếu có
+        // hoặc fallback về format mặc định
+        let fileName = `invoice_${invoiceId.slice(0, 8)}.pdf`;
+        if (invoice.invoiceNumber) {
+          const sellerTax = invoice.sellerTaxCode || 'unknown';
+          const code = invoice.processStatus === 5 ? 'C' : 'K';
+          fileName = `${sellerTax} - ${code} - ${invoice.invoiceNumber}.pdf`;
+        }
+        
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+        return;
+      } catch (err: any) {
+        console.warn('[InvoiceHistory] Tải PDF trực tiếp từ backend thất bại, tự động chuyển sang render client-side:', err.message);
+      }
+    }
+
+    // Cơ chế fallback: Render và tạo PDF trên giao diện (Client-side)
     try {
       // 1. Fetch HTML
       const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview?t=${Date.now()}`, {
@@ -675,7 +710,7 @@ export default function InvoiceHistory() {
                             )}
                             {inv.zipPath ? (
                               <button
-                                onClick={() => downloadPdf(inv.id)}
+                                onClick={() => downloadPdf(inv)}
                                 className="text-danger-default hover:text-danger-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
                                 title="Tải bản thể hiện (PDF)"
                               >

@@ -24,6 +24,13 @@ import masothueRoutes from './routes/masothue.routes.js';
 import scheduleRoutes from './routes/schedule.routes.js';
 import { AuthController } from './controllers/auth.controller.js';
 import { schedulerService } from './services/scheduler.service.js';
+import { handleElectronIpcMessage } from './utils/electron-ipc.js';
+
+if (process.send) {
+  process.on('message', (message: any) => {
+    handleElectronIpcMessage(message);
+  });
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
