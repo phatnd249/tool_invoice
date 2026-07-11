@@ -76,10 +76,8 @@ function prunePrismaEngines() {
 
     for (const file of files) {
       // Keep all query engines for cross-platform compatibility.
-      // Remove only schema-engine & introspection-engine (not needed at runtime).
-      const isUnusedEngine =
-        file.startsWith('schema-engine') ||
-        file.startsWith('introspection-engine');
+      // Remove only introspection-engine (not needed at runtime).
+      const isUnusedEngine = file.startsWith('introspection-engine');
 
       if (isUnusedEngine) {
         const filePath = path.join(enginesDir, file);

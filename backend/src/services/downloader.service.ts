@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import { withRetry } from '../utils/rate-limiter.js';
 
 // ────────────────────────────────────────────────────────────
 // Helper: parse GDT error response into a user-friendly message
@@ -158,7 +159,10 @@ export class DownloaderService {
     const standardStatuses = [4, 5, 6, 7, 8];
     for (const status of standardStatuses) {
       try {
-        const queryInvoices = await this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers, status);
+        const queryInvoices = await withRetry(
+          () => this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers, status),
+          { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
+        );
         allInvoices = allInvoices.concat(queryInvoices);
       } catch (error: any) {
         if (error.message && error.message.includes('401')) {
@@ -175,7 +179,10 @@ export class DownloaderService {
     const scoStatuses = [5, 6, 8];
     for (const status of scoStatuses) {
       try {
-        const scoQueryInvoices = await this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers, status);
+        const scoQueryInvoices = await withRetry(
+          () => this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers, status),
+          { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
+        );
         allInvoices = allInvoices.concat(scoQueryInvoices);
       } catch (error: any) {
         if (error.message && error.message.includes('401')) {
@@ -222,7 +229,9 @@ export class DownloaderService {
         console.error(`[DownloaderService] GDT query count responded with status ${response.status}`);
         console.error(`  URL: ${urlCount}`);
         console.error(`  Response body: ${responseBody}`);
-        throw new Error(`GDT query failed with status ${response.status}`);
+        const err = new Error(`GDT query failed with status ${response.status}`);
+        (err as any).status = response.status;
+        throw err;
       }
       
       const total = response.data?.total || 0;
@@ -252,6 +261,11 @@ export class DownloaderService {
           console.error(`[DownloaderService] GDT query page ${page + 1}/${totalPages} responded with status ${responsePage.status}`);
           console.error(`  URL: ${urlPage}`);
           console.error(`  Response body: ${responseBody}`);
+          if (responsePage.status === 429) {
+            const err = new Error(`GDT query page failed with status 429`);
+            (err as any).status = 429;
+            throw err;
+          }
           // Continue to next page instead of throwing — partial data is better than none
           continue;
         }

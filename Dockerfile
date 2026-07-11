@@ -9,6 +9,7 @@ COPY frontend/package.json frontend/
 
 # Install dependencies for the whole workspace. Puppeteer needs unzip to extract Chrome, Prisma needs openssl
 RUN apt-get update && apt-get install -y unzip openssl && rm -rf /var/lib/apt/lists/*
+ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
 RUN npm install
 
 # Copy source code
@@ -65,6 +66,9 @@ COPY --from=builder /app/backend/prisma ./backend/prisma
 
 # We also need the root node_modules for hoisted dependencies
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.puppeteer-cache /app/.puppeteer-cache
+
+ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
 
 WORKDIR /app/backend
 
