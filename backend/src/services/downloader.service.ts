@@ -70,6 +70,24 @@ function extractResponseBody(data: any): string {
   }
 }
 
+/**
+ * Wrapper for axios.get with automatic retry and exponential backoff for 429 errors.
+ */
+async function axiosGetWithRetry(url: string, config: any, retries: number = 3, delayMs: number = 1000): Promise<any> {
+  for (let i = 0; i < retries; i++) {
+    const response = await axios.get(url, config);
+    if (response.status === 429) {
+      console.warn(`[DownloaderService] Rate limit (429) hit for ${url}. Retrying in ${delayMs}ms... (Attempt ${i + 1}/${retries})`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      delayMs *= 2; // Exponential backoff
+      continue;
+    }
+    return response;
+  }
+  // Last attempt
+  return axios.get(url, config);
+}
+
 export class DownloaderService {
   /**
    * Decode JWT token to get MST (Tax Identification Number)
@@ -212,7 +230,7 @@ export class DownloaderService {
     
     try {
       console.log(`[DownloaderService] Querying count from ${startStr} to ${endStr} at ${baseUrl}...`);
-      const response = await axios.get(urlCount, {
+      const response = await axiosGetWithRetry(urlCount, {
         headers,
         timeout: 60000,
         validateStatus: () => true,
@@ -248,7 +266,7 @@ export class DownloaderService {
 
         console.log(`[DownloaderService] Fetching page ${page + 1}/${totalPages} (size=${PAGE_SIZE}) from ${baseUrl}...`);
 
-        const responsePage = await axios.get(urlPage, {
+        const responsePage = await axiosGetWithRetry(urlPage, {
           headers,
           timeout: 60000,
           validateStatus: () => true,
@@ -346,7 +364,7 @@ export class DownloaderService {
       // Ensure directory exists
       fs.mkdirSync(outputDir, { recursive: true });
 
-      const response = await axios.get(exportUrl, {
+      const response = await axiosGetWithRetry(exportUrl, {
         headers,
         responseType: 'arraybuffer',
         timeout: 60000,
@@ -449,7 +467,7 @@ export class DownloaderService {
       }
 
       try {
-        const response = await axios.get(task.url, {
+        const response = await axiosGetWithRetry(task.url, {
           headers,
           responseType: 'arraybuffer',
           timeout: 60000,
@@ -516,7 +534,7 @@ export class DownloaderService {
     };
 
     try {
-      const response = await axios.get(detailUrl, {
+      const response = await axiosGetWithRetry(detailUrl, {
         headers,
         timeout: 60000,
         validateStatus: () => true,

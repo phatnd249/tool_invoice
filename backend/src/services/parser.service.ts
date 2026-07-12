@@ -44,6 +44,8 @@ export interface ParsedInvoice {
   totalBeforeTax: number;
   taxAmount: number;
   totalAmount: number;
+  discountAmount?: number;
+  feeAmount?: number;
   totalAmountInWords?: string;
 
   pdfPath?: string;
@@ -220,6 +222,8 @@ export class ParserService {
       totalBeforeTax: this.toNumber(this.findKeyRecursive(tToan, 'TgTCThue')),
       taxAmount: this.toNumber(this.findKeyRecursive(tToan, 'TgTThue')),
       totalAmount: this.toNumber(this.findKeyRecursive(tToan, 'TgTTTBSo')),
+      discountAmount: this.toNumber(this.findKeyRecursive(tToan, 'TTCKTmai')),
+      feeAmount: this.toNumber(this.findKeyRecursive(tToan, 'TgTPhi')),
       totalAmountInWords: this.getSafeText(this.findKeyRecursive(tToan, 'TgTTTBChu')) || undefined,
 
       // Invoice status from GDT

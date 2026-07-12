@@ -35,6 +35,44 @@ async function findFreePort(startPort: number): Promise<number> {
   return port;
 }
 
+/**
+ * Chuyển đổi tệp HTML đã cache thành tệp PDF bằng engine Chromium của Electron.
+ */
+async function printHtmlToPdf(htmlPath: string, pdfPath: string): Promise<void> {
+  const tempWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      offscreen: true
+    }
+  });
+
+  try {
+    if (!fs.existsSync(htmlPath)) {
+      throw new Error(`HTML source file not found: ${htmlPath}`);
+    }
+
+    await tempWindow.loadFile(htmlPath);
+    // Đợi 3000ms để CSS, font chữ và hình ảnh base64 được áp dụng xong hoàn toàn
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    const pdfBuffer = await tempWindow.webContents.printToPDF({
+      margins: {
+        top: 10,
+        bottom: 10,
+        left: 10,
+        right: 10
+      },
+      pageSize: 'A4',
+      printBackground: true
+    });
+
+    fs.mkdirSync(path.dirname(pdfPath), { recursive: true });
+    fs.writeFileSync(pdfPath, pdfBuffer);
+  } finally {
+    tempWindow.close();
+  }
+}
+
 function startBackend(port: string) {
   console.log(`[Electron] Starting Express Backend Process on port ${port}...`);
   
@@ -71,7 +109,31 @@ function startBackend(port: string) {
 
   try {
     backendProcess = spawn('node', [backendPath], {
-      env: { ...process.env, PORT: port, INVOICES_DIR: invoicesDir, DATABASE_URL: databaseUrl }
+      env: { ...process.env, PORT: port, INVOICES_DIR: invoicesDir, DATABASE_URL: databaseUrl },
+      stdio: ['inherit', 'inherit', 'inherit', 'ipc']
+    });
+
+    // Lắng nghe yêu cầu chuyển đổi PDF từ tiến trình con backend
+    backendProcess.on('message', async (message: any) => {
+      if (message && message.type === 'GENERATE_PDF_REQUEST') {
+        const { requestId, htmlPath, pdfPath } = message;
+        try {
+          await printHtmlToPdf(htmlPath, pdfPath);
+          backendProcess?.send({
+            type: 'GENERATE_PDF_RESPONSE',
+            requestId,
+            success: true
+          });
+        } catch (err: any) {
+          console.error(`[Electron] Failed to print HTML to PDF for request ${requestId}:`, err.message);
+          backendProcess?.send({
+            type: 'GENERATE_PDF_RESPONSE',
+            requestId,
+            success: false,
+            error: err.message
+          });
+        }
+      }
     });
 
     backendProcess.stdout?.on('data', (data) => {
