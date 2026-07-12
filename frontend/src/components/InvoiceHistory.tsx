@@ -181,9 +181,6 @@ export default function InvoiceHistory() {
   // Invoice Detail (items) Modal state
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
 
-  // Preview HTML Modal state
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-
   // ── Fetch functions ──
 
   const fetchInvoices = useCallback(async (p: number, s: number, q: string, type: string) => {
@@ -365,7 +362,13 @@ export default function InvoiceHistory() {
       const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview?t=${Date.now()}`, {
         responseType: 'text',
       });
-      setPreviewHtml(response.data);
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write(response.data);
+        newWindow.document.close();
+      } else {
+        alert("Trình duyệt đã chặn tab mới. Vui lòng cho phép popup để xem hóa đơn.");
+      }
     } catch (err: any) {
       console.error(`Error loading preview:`, err);
       const msg = err.response?.data?.error || `Không thể tải bản xem trước hóa đơn.`;
@@ -944,32 +947,6 @@ export default function InvoiceHistory() {
         </div>
       )}
 
-      {/* Invoice HTML Preview Modal */}
-      {previewHtml && (
-        <div className="fixed inset-0 bg-card/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="w-full max-w-5xl bg-bg-primary border border-border rounded-3xl shadow-2xl flex flex-col h-[90vh]">
-            <div className="flex justify-between items-center px-6 py-4 border-b border-border">
-              <h2 className="text-lg font-bold text-text-primary flex items-center space-x-2">
-                <Eye className="w-5 h-5 text-success-default" />
-                <span>Xem Trước Hóa Đơn</span>
-              </h2>
-              <button
-                onClick={() => setPreviewHtml(null)}
-                className="text-text-secondary hover:text-text-primary p-2 bg-bg-tertiary hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden bg-white rounded-b-3xl relative">
-               <iframe 
-                 srcDoc={previewHtml}
-                 className="w-full h-full border-none"
-                 title="Invoice Preview"
-               />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
