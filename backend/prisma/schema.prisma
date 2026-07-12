@@ -90,6 +90,8 @@ model Invoice {
   totalBeforeTax     Float
   taxAmount          Float
   totalAmount        Float
+  discountAmount     Float?
+  feeAmount          Float?
   totalAmountInWords String?
 
   type               String        // "BUY" (Mua vào) or "SELL" (Bán ra)

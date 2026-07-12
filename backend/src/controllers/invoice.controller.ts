@@ -11,6 +11,32 @@ import * as fs from 'fs';
 import { AuthRequest } from '../middleware/auth.middleware.js';
 import { generatePdfViaElectron } from '../utils/electron-ipc.js';
 
+function getTthaiString(tthai: number | string | undefined): string {
+  if (tthai === undefined || tthai === null) return 'Không xác định';
+  const map: Record<string, string> = {
+    '1': 'Hóa đơn mới',
+    '2': 'Hóa đơn thay thế',
+    '3': 'Hóa đơn điều chỉnh',
+    '4': 'Hóa đơn đã bị thay thế',
+    '5': 'Hóa đơn đã bị điều chỉnh',
+    '6': 'Hóa đơn đã bị hủy'
+  };
+  return map[String(tthai)] || `TT ${tthai}`;
+}
+
+function getTtxlyString(ttxly: number | string | undefined): string {
+  if (ttxly === undefined || ttxly === null) return 'Không xác định';
+  const map: Record<string, string> = {
+    '0': 'Hóa đơn không đủ điều kiện cấp mã',
+    '4': 'Đang kiểm tra',
+    '5': 'Đã cấp mã hóa đơn',
+    '6': 'Cục Thuế đã nhận không mã',
+    '7': 'Đã kiểm tra định kỳ HĐĐT không có mã',
+    '8': 'Cục Thuế đã nhận hóa đơn có mã khởi tạo từ máy tính tiền'
+  };
+  return map[String(ttxly)] || `KQ ${ttxly}`;
+}
+
 const downloaderService = new DownloaderService();
 const parserService = new ParserService();
 const excelService = new ExcelService();
@@ -385,6 +411,67 @@ export class InvoiceController {
                   where: { id: savedInvoice.id },
                   data: { zipPath: 'VIRTUAL_HTML' }
                 });
+
+                try {
+                  const detailJson = await downloaderService.downloadInvoiceDetail(inv, activeToken);
+                  if (detailJson) {
+                    const updateData: any = {};
+                    if (detailJson.nbten) updateData.sellerName = detailJson.nbten.trim();
+                    if (detailJson.nbdchi) updateData.sellerAddress = detailJson.nbdchi.trim();
+                    if (detailJson.nmten || detailJson.nmuaten) updateData.buyerName = String(detailJson.nmten || detailJson.nmuaten).trim();
+                    if (detailJson.nmdchi || detailJson.nmuadchi) updateData.buyerAddress = String(detailJson.nmdchi || detailJson.nmuadchi).trim();
+                    if (detailJson.htttoan) updateData.paymentMethod = String(detailJson.htttoan).trim();
+                    if (detailJson.dvtte) updateData.currency = String(detailJson.dvtte).trim();
+                    if (detailJson.tgia !== undefined) updateData.exchangeRate = Number(detailJson.tgia) || 1.0;
+                    if (detailJson.tgtcthue !== undefined) updateData.totalBeforeTax = Number(detailJson.tgtcthue) || 0;
+                    if (detailJson.tgtthue !== undefined) updateData.taxAmount = Number(detailJson.tgtthue) || 0;
+                    if (detailJson.tgtttbso !== undefined) updateData.totalAmount = Number(detailJson.tgtttbso) || 0;
+                    if (detailJson.ttcktmai !== undefined) updateData.discountAmount = Number(detailJson.ttcktmai) || null;
+                    if (detailJson.tgtphi !== undefined) updateData.feeAmount = Number(detailJson.tgtphi) || null;
+
+                    await prisma.invoice.update({
+                      where: { id: savedInvoice.id },
+                      data: updateData
+                    });
+
+                    const items = detailJson.hdhhdvu || detailJson.cttkhac || [];
+                    if (items.length > 0) {
+                      await prisma.invoiceItem.deleteMany({ where: { invoiceId: savedInvoice.id } });
+                      await prisma.invoiceItem.createMany({
+                        data: items.map((item: any, idx: number) => ({
+                          invoiceId: savedInvoice.id,
+                          lineNumber: String(idx + 1),
+                          name: String(item.ten || item.thdon || item.tchat || '').trim(),
+                          unit: String(item.dvtinh || '').trim(),
+                          quantity: Number(item.sluong) || 0,
+                          price: Number(item.dgia) || 0,
+                          amount: Number(item.thtien) || 0,
+                          taxRate: String(item.ltsuat || item.tsuat || '').trim(),
+                        }))
+                      });
+                    }
+                    previewService.buildHtmlFromJson(savedInvoice.id, detailJson);
+                    const html = await previewService.getPreviewHtml(savedInvoice.id);
+                    if (html) {
+                      const ttxly = inv.ttxly;
+                      const resultCode = (ttxly === 5) ? 'C' : (ttxly === 8) ? 'M' : 'K';
+                      const pdfFileName = `${inv.nbmst} - ${resultCode} - ${inv.shdon}.pdf`;
+                      const pdfPath = path.join(invoiceTargetDir, pdfFileName);
+                      const cacheHtmlPath = previewService.getCachePath(savedInvoice.id);
+                      
+                      const { puppeteerService } = await import('../services/puppeteer.service.js');
+                      await puppeteerService.generatePdf(cacheHtmlPath, pdfPath);
+                      
+                      await prisma.invoice.update({
+                        where: { id: savedInvoice.id },
+                        data: { pdfPath }
+                      });
+                    }
+                  }
+                } catch (pdfErr: any) {
+                  console.error(`[InvoiceController] Failed to fallback generate PDF in downloadInvoices for ${inv.shdon}:`, pdfErr.message);
+                }
+
                 typeSuccessCount++;
               }
             } catch (dbError: any) {
@@ -442,6 +529,8 @@ export class InvoiceController {
               totalBeforeTax: parsed.totalBeforeTax,
               taxAmount: parsed.taxAmount,
               totalAmount: parsed.totalAmount,
+              discountAmount: parsed.discountAmount ?? null,
+              feeAmount: parsed.feeAmount ?? null,
               totalAmountInWords: parsed.totalAmountInWords,
               invoiceStatus: parsed.invoiceStatus ?? null,
               processStatus: parsed.processStatus ?? null,
@@ -504,7 +593,7 @@ export class InvoiceController {
           });
 
           // Tự động giải nén HTML, cache và chuyển sang PDF
-          if (invoiceId && zipPath && process.send) {
+          if (invoiceId && zipPath) {
             try {
               const html = await previewService.getPreviewHtml(invoiceId);
               if (html) {
@@ -512,7 +601,12 @@ export class InvoiceController {
                 const pdfPath = path.join(path.dirname(zipPath), pdfFileName);
                 const cacheHtmlPath = previewService.getCachePath(invoiceId);
 
-                await generatePdfViaElectron(cacheHtmlPath, pdfPath);
+                if (process.send) {
+                  await generatePdfViaElectron(cacheHtmlPath, pdfPath);
+                } else {
+                  const { puppeteerService } = await import('../services/puppeteer.service.js');
+                  await puppeteerService.generatePdf(cacheHtmlPath, pdfPath);
+                }
 
                 await prisma.invoice.update({
                   where: { id: invoiceId },
@@ -1142,8 +1236,10 @@ export class InvoiceController {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
+    const allLogLines: string[] = [];
     const sendLog = (message: string, type: string = 'info') => {
       sendEvent('log', { time: new Date().toISOString(), message, type });
+      allLogLines.push(`[${type.toUpperCase()}] ${message}`);
     };
 
     try {
@@ -1275,7 +1371,9 @@ export class InvoiceController {
 
           accumulatedCurrent++;
           const invNum = inv.shdon || 'unknown';
-          sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đang xử lý...`);
+          const tthaiStr = getTthaiString(inv.tthai);
+          const ttxlyStr = getTtxlyString(inv.ttxly);
+          sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum} (Tình trạng: ${tthaiStr} - Trạng thái: ${ttxlyStr}): đang xử lý...`);
 
           try {
             const invoiceDate = inv.tdlap ? (isNaN(Date.parse(inv.tdlap)) ? new Date() : new Date(inv.tdlap)) : new Date();
@@ -1301,6 +1399,75 @@ export class InvoiceController {
                   data: { zipPath: 'VIRTUAL_HTML' },
                 });
                 sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: lưu metadata (không có ZIP).`, 'info');
+
+                sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đang tải PDF trực tiếp...`, 'info');
+                try {
+                  const detailJson = await downloaderService.downloadInvoiceDetail(inv, activeToken);
+                  if (detailJson) {
+                    const updateData: any = {};
+                    if (detailJson.nbten) updateData.sellerName = detailJson.nbten.trim();
+                    if (detailJson.nbdchi) updateData.sellerAddress = detailJson.nbdchi.trim();
+                    if (detailJson.nmten || detailJson.nmuaten) updateData.buyerName = String(detailJson.nmten || detailJson.nmuaten).trim();
+                    if (detailJson.nmdchi || detailJson.nmuadchi) updateData.buyerAddress = String(detailJson.nmdchi || detailJson.nmuadchi).trim();
+                    if (detailJson.htttoan) updateData.paymentMethod = String(detailJson.htttoan).trim();
+                    if (detailJson.dvtte) updateData.currency = String(detailJson.dvtte).trim();
+                    if (detailJson.tgia !== undefined) updateData.exchangeRate = Number(detailJson.tgia) || 1.0;
+                    if (detailJson.tgtcthue !== undefined) updateData.totalBeforeTax = Number(detailJson.tgtcthue) || 0;
+                    if (detailJson.tgtthue !== undefined) updateData.taxAmount = Number(detailJson.tgtthue) || 0;
+                    if (detailJson.tgtttbso !== undefined) updateData.totalAmount = Number(detailJson.tgtttbso) || 0;
+                    if (detailJson.ttcktmai !== undefined) updateData.discountAmount = Number(detailJson.ttcktmai) || null;
+                    if (detailJson.tgtphi !== undefined) updateData.feeAmount = Number(detailJson.tgtphi) || null;
+
+                    await prisma.invoice.update({
+                      where: { id: savedInvoice.id },
+                      data: updateData
+                    });
+
+                    const items = detailJson.hdhhdvu || detailJson.cttkhac || [];
+                    if (items.length > 0) {
+                      await prisma.invoiceItem.deleteMany({ where: { invoiceId: savedInvoice.id } });
+                      await prisma.invoiceItem.createMany({
+                        data: items.map((item: any, idx: number) => ({
+                          invoiceId: savedInvoice.id,
+                          lineNumber: String(idx + 1),
+                          name: String(item.ten || item.thdon || item.tchat || '').trim(),
+                          unit: String(item.dvtinh || '').trim(),
+                          quantity: Number(item.sluong) || 0,
+                          price: Number(item.dgia) || 0,
+                          amount: Number(item.thtien) || 0,
+                          taxRate: String(item.ltsuat || item.tsuat || '').trim(),
+                        }))
+                      });
+                    }
+                    previewService.buildHtmlFromJson(savedInvoice.id, detailJson);
+                    const html = await previewService.getPreviewHtml(savedInvoice.id);
+                    if (html) {
+                      const ttxly = inv.ttxly;
+                      const resultCode = (ttxly === 5) ? 'C' : (ttxly === 8) ? 'M' : 'K';
+                      const pdfFileName = `${inv.nbmst} - ${resultCode} - ${inv.shdon}.pdf`;
+                      const pdfPath = path.join(invoiceTargetDir, pdfFileName);
+                      const cacheHtmlPath = previewService.getCachePath(savedInvoice.id);
+                      
+                      sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đang tạo PDF (fallback)...`, 'info');
+                      if (process.send) {
+                        await generatePdfViaElectron(cacheHtmlPath, pdfPath);
+                      } else {
+                        const { puppeteerService } = await import('../services/puppeteer.service.js');
+                        await puppeteerService.generatePdf(cacheHtmlPath, pdfPath);
+                      }
+                      
+                      await prisma.invoice.update({
+                        where: { id: savedInvoice.id },
+                        data: { pdfPath }
+                      });
+                      sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đã tải PDF trực tiếp thành công.`, 'info');
+                      totalSuccessCount++;
+                    }
+                  }
+                } catch (pdfErr: any) {
+                  console.error(`[InvoiceController] Failed to fallback generate PDF for ${inv.shdon}:`, pdfErr.message);
+                  sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: không thể tải chi tiết PDF (${pdfErr.message})`, 'warning');
+                }
               } catch (dbErr: any) {
                 allErrors.push(`[${invoiceType}] Invoice ${inv.shdon}: ${dbErr.message}`);
                 sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: ${dbErr.message}`, 'error');
@@ -1347,6 +1514,8 @@ export class InvoiceController {
                       totalBeforeTax: parsed.totalBeforeTax,
                       taxAmount: parsed.taxAmount,
                       totalAmount: parsed.totalAmount,
+                      discountAmount: parsed.discountAmount ?? null,
+                      feeAmount: parsed.feeAmount ?? null,
                       totalAmountInWords: parsed.totalAmountInWords,
                       invoiceStatus: parsed.invoiceStatus ?? null,
                       processStatus: parsed.processStatus ?? null,
@@ -1400,7 +1569,7 @@ export class InvoiceController {
                   sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đã lưu thành công.`, 'info');
 
                   // Tự động giải nén HTML, cache và chuyển sang PDF
-                  if (invoiceId && zipPath && process.send) {
+                  if (invoiceId && zipPath) {
                     try {
                       const html = await previewService.getPreviewHtml(invoiceId);
                       if (html) {
@@ -1409,7 +1578,12 @@ export class InvoiceController {
                         const cacheHtmlPath = previewService.getCachePath(invoiceId);
 
                         sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đang chuyển đổi sang PDF...`, 'info');
-                        await generatePdfViaElectron(cacheHtmlPath, pdfPath);
+                        if (process.send) {
+                          await generatePdfViaElectron(cacheHtmlPath, pdfPath);
+                        } else {
+                          const { puppeteerService } = await import('../services/puppeteer.service.js');
+                          await puppeteerService.generatePdf(cacheHtmlPath, pdfPath);
+                        }
 
                         await prisma.invoice.update({
                           where: { id: invoiceId },
@@ -1477,7 +1651,7 @@ export class InvoiceController {
             taxCode: effectiveUsername || tokenMst,
             invoiceType,
             status: allErrors.length === 0 ? 'SUCCESS' : totalSuccessCount > 0 ? 'PARTIAL' : 'FAILED',
-            log: allErrors.slice(0, 5).join('; '),
+            log: allLogLines.length > 0 ? allLogLines.join('\n') : null,
             countDownloaded: totalSuccessCount,
             userId: req.user.id,
             username: req.user.username,
@@ -1509,8 +1683,8 @@ export class InvoiceController {
         where: { id },
       });
 
-      if (!invoice || !invoice.pdfPath) {
-        res.status(404).json({ error: 'Không tìm thấy file PDF cho hóa đơn này.' });
+      if (!invoice) {
+        res.status(404).json({ error: 'Không tìm thấy hóa đơn này.' });
         return;
       }
 
@@ -1532,14 +1706,44 @@ export class InvoiceController {
         }
       }
 
-      if (!fs.existsSync(invoice.pdfPath)) {
-        res.status(404).json({ error: 'Tệp PDF không tồn tại trên đĩa.' });
-        return;
+      let targetPdfPath = invoice.pdfPath;
+
+      if (!targetPdfPath || !fs.existsSync(targetPdfPath)) {
+        // Dynamically generate the PDF if it's missing
+        try {
+          const html = await previewService.getPreviewHtml(id);
+          if (!html) {
+             res.status(404).json({ error: 'Không thể tạo bản thể hiện HTML.' });
+             return;
+          }
+          const cacheHtmlPath = previewService.getCachePath(id);
+          const pdfFileName = invoice.invoiceNumber 
+            ? `${invoice.sellerTaxCode} - ${invoice.processStatus === 5 ? 'C' : invoice.processStatus === 8 ? 'M' : 'K'} - ${invoice.invoiceNumber}.pdf`
+            : `invoice_${id}.pdf`;
+          
+          targetPdfPath = path.join(path.dirname(cacheHtmlPath), pdfFileName);
+          
+          if (process.send) {
+            await generatePdfViaElectron(cacheHtmlPath, targetPdfPath);
+          } else {
+            const { puppeteerService } = await import('../services/puppeteer.service.js');
+            await puppeteerService.generatePdf(cacheHtmlPath, targetPdfPath);
+          }
+          
+          await prisma.invoice.update({
+            where: { id },
+            data: { pdfPath: targetPdfPath }
+          });
+        } catch (genErr: any) {
+          console.error('[InvoiceController] Dynamic PDF generation failed:', genErr.message);
+          res.status(500).json({ error: 'Không thể tạo PDF động', details: genErr.message });
+          return;
+        }
       }
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=${path.basename(invoice.pdfPath)}`);
-      res.sendFile(invoice.pdfPath);
+      res.setHeader('Content-Disposition', `attachment; filename="${path.basename(targetPdfPath)}"`);
+      res.sendFile(targetPdfPath);
     } catch (error: any) {
       res.status(500).json({ error: 'Lỗi khi tải tệp PDF', details: error.message });
     }
@@ -1586,6 +1790,8 @@ async function saveBasicInvoiceFromGdt(inv: any, type: 'BUY' | 'SELL'): Promise<
     totalBeforeTax: Number(inv.tgtcthue) || 0,
     taxAmount: Number(inv.tgtthue) || 0,
     totalAmount: Number(inv.tgtttbso) || 0,
+    discountAmount: inv.ttcktmai !== undefined && inv.ttcktmai !== null ? Number(inv.ttcktmai) : null,
+    feeAmount: inv.tgtphi !== undefined && inv.tgtphi !== null ? Number(inv.tgtphi) : null,
     invoiceStatus: inv.tthai !== undefined ? Number(inv.tthai) : null,
     processStatus: inv.ttxly !== undefined ? Number(inv.ttxly) : null,
     type,

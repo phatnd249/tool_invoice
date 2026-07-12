@@ -38,6 +38,8 @@ interface Invoice {
   pdfPath?: string | null;
   xmlPath?: string | null;
   zipPath?: string | null;
+  discountAmount?: number | null;
+  feeAmount?: number | null;
   invoiceStatus?: number | null;
   processStatus?: number | null;
   items?: InvoiceItem[];
@@ -305,36 +307,33 @@ export default function InvoiceHistory() {
   const downloadPdf = async (invoice: any) => {
     const invoiceId = invoice.id;
 
-    // Nếu đã có tệp PDF được lưu trên đĩa, tiến hành tải trực tiếp từ backend
-    if (invoice.pdfPath) {
-      try {
-        const response = await axios.get(
-          `${API_BASE_URL}/api/invoices/${invoiceId}/pdf?t=${Date.now()}`,
-          { responseType: 'blob' }
-        );
-        const blob = new Blob([response.data], { type: 'application/pdf' });
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        
-        // Tên file xuất ra là [MST Người bán] - [Ký hiệu] - [Số hóa đơn].pdf nếu có
-        // hoặc fallback về format mặc định
-        let fileName = `invoice_${invoiceId.slice(0, 8)}.pdf`;
-        if (invoice.invoiceNumber) {
-          const sellerTax = invoice.sellerTaxCode || 'unknown';
-          const code = invoice.processStatus === 5 ? 'C' : 'K';
-          fileName = `${sellerTax} - ${code} - ${invoice.invoiceNumber}.pdf`;
-        }
-        
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(downloadUrl);
-        return;
-      } catch (err: any) {
-        console.warn('[InvoiceHistory] Tải PDF trực tiếp từ backend thất bại, tự động chuyển sang render client-side:', err.message);
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/api/invoices/${invoiceId}/pdf?t=${Date.now()}`,
+        { responseType: 'blob' }
+      );
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      
+      // Tên file xuất ra là [MST Người bán] - [Ký hiệu] - [Số hóa đơn].pdf nếu có
+      // hoặc fallback về format mặc định
+      let fileName = `invoice_${invoiceId.slice(0, 8)}.pdf`;
+      if (invoice.invoiceNumber) {
+        const sellerTax = invoice.sellerTaxCode || 'unknown';
+        const code = invoice.processStatus === 5 ? 'C' : invoice.processStatus === 8 ? 'M' : 'K';
+        fileName = `${sellerTax} - ${code} - ${invoice.invoiceNumber}.pdf`;
       }
+      
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      return;
+    } catch (err: any) {
+      console.warn('[InvoiceHistory] Tải PDF trực tiếp từ backend thất bại, tự động chuyển sang render client-side:', err.message);
     }
 
     // Cơ chế fallback: Render và tạo PDF trên giao diện (Client-side)
@@ -347,11 +346,15 @@ export default function InvoiceHistory() {
 
       // 2. Tạo một iframe ẩn để browser render toàn bộ CSS và font của hoá đơn gốc
       const iframe = document.createElement('iframe');
-      iframe.style.position = 'absolute';
+      // Use fixed rendering out of view instead of negative left, which can sometimes clip
+      iframe.style.position = 'fixed';
       iframe.style.width = '800px';
       iframe.style.height = '1200px';
-      iframe.style.left = '-9999px';
       iframe.style.top = '0';
+      iframe.style.left = '0';
+      iframe.style.zIndex = '-9999';
+      iframe.style.opacity = '0';
+      iframe.style.pointerEvents = 'none';
       document.body.appendChild(iframe);
 
       const doc = iframe.contentWindow?.document || iframe.contentDocument;
@@ -372,17 +375,17 @@ export default function InvoiceHistory() {
         margin:       10,
         filename:     `invoice_${invoiceId.slice(0, 8)}.pdf`,
         image:        { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        html2canvas:  { 
+          scale: 2, 
+          useCORS: true, 
+          logging: false,
+          window: iframe.contentWindow // Tell html2canvas to use the iframe's window
+        },
         jsPDF:        { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
       };
 
       // 4. Generate and save PDF from the iframe's body
       if (doc && doc.body) {
-        // html2canvas only clones the target element (body). 
-        // We must move all styles from <head> to <body> so they are applied in the PDF.
-        const styles = doc.querySelectorAll('style, link[rel="stylesheet"]');
-        styles.forEach(style => doc.body.appendChild(style.cloneNode(true)));
-
         await html2pdf().set(opt).from(doc.body).save();
       }
 
@@ -653,8 +656,12 @@ export default function InvoiceHistory() {
                         <td className="p-3 text-right text-xs">
                           {formatNumber(inv.taxAmount)}
                         </td>
-                        <td className="p-3 text-right text-text-muted text-xs">—</td>
-                        <td className="p-3 text-right text-text-muted text-xs">—</td>
+                        <td className="p-3 text-right text-xs">
+                          {inv.discountAmount != null ? formatNumber(inv.discountAmount) : '—'}
+                        </td>
+                        <td className="p-3 text-right text-xs">
+                          {inv.feeAmount != null ? formatNumber(inv.feeAmount) : '—'}
+                        </td>
                         <td className="p-3 text-right font-bold text-success-default text-xs">
                           {formatNumber(inv.totalAmount)}
                         </td>
@@ -708,19 +715,13 @@ export default function InvoiceHistory() {
                                 <FileDown className="w-4 h-4 opacity-30" />
                               </span>
                             )}
-                            {inv.zipPath ? (
-                              <button
-                                onClick={() => downloadPdf(inv)}
-                                className="text-danger-default hover:text-danger-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
-                                title="Tải bản thể hiện (PDF)"
-                              >
-                                <FileText className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có bản thể hiện PDF">
-                                <FileText className="w-4 h-4 opacity-30" />
-                              </span>
-                            )}
+                            <button
+                              onClick={() => downloadPdf(inv)}
+                              className="text-danger-default hover:text-danger-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
+                              title="Tải bản thể hiện (PDF)"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </button>
                             {inv.zipPath === 'VIRTUAL_HTML' ? (
                               <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Chỉ có bản thể hiện HTML, không có file ZIP gốc">
                                 <FileArchive className="w-4 h-4 opacity-30" />

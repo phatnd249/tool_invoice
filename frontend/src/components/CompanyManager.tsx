@@ -62,6 +62,7 @@ export default function CompanyManager() {
   const [refreshingMap, setRefreshingMap] = useState<Record<number, boolean>>({});
   const [syncingMap, setSyncingMap] = useState<Record<number, boolean>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [syncConfirmCompany, setSyncConfirmCompany] = useState<{ id: number, name: string, taxCode: string } | null>(null);
 
   // Edit Modal State
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
@@ -188,7 +189,8 @@ export default function CompanyManager() {
         payload.cvalue = newCaptchaValue.trim();
       }
 
-      await axios.post(`${API_BASE_URL}/api/companies`, payload);
+      const res = await axios.post(`${API_BASE_URL}/api/companies`, payload);
+      const newCompany = res.data;
 
       setAddSuccess('Thêm doanh nghiệp và xác thực thành công!');
       // Reset form
@@ -201,7 +203,14 @@ export default function CompanyManager() {
       setTimeout(() => {
         setIsAddModalOpen(false);
         setAddSuccess('');
-      }, 1500);
+        
+        // Show nice modal
+        setSyncConfirmCompany({
+          id: newCompany.id,
+          name: newCompany.name || payload.taxCode,
+          taxCode: payload.taxCode
+        });
+      }, 500);
     } catch (err: any) {
       const details = err.response?.data?.details || err.response?.data?.error || err.message;
       setAddError(`Xác thực thất bại: ${details}`);
@@ -902,6 +911,47 @@ export default function CompanyManager() {
           max-height: 32px !important;
         }
       `}</style>
+      {/* MODAL: SYNC CONFIRMATION */}
+      {syncConfirmCompany && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl relative overflow-hidden animate-in fade-in zoom-in duration-300">
+            {/* Header background with gradient */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-center">
+              <div className="mx-auto bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 shadow-inner">
+                <CloudDownload className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-1">Đồng bộ thông tin</h3>
+              <p className="text-blue-100 text-sm">Tự động điền dữ liệu doanh nghiệp</p>
+            </div>
+            
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <p className="text-text-primary text-sm leading-relaxed text-center">
+                Bạn có muốn hệ thống tự động tải thông tin chi tiết như <span className="font-semibold text-blue-400">tên đầy đủ, địa chỉ, người đại diện...</span> của mã số thuế <span className="font-bold text-accent">{syncConfirmCompany.taxCode}</span> từ masothue.com không?
+              </p>
+              
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setSyncConfirmCompany(null)}
+                  className="flex-1 px-4 py-2.5 bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary rounded-xl font-medium transition-colors"
+                >
+                  Không, bỏ qua
+                </button>
+                <button
+                  onClick={() => {
+                    handleSyncInfo(syncConfirmCompany.id, syncConfirmCompany.name);
+                    setSyncConfirmCompany(null);
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-medium shadow-lg shadow-blue-500/25 transition-all transform hover:scale-[1.02]"
+                >
+                  Đồng ý cập nhật
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

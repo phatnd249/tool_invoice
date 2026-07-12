@@ -52,8 +52,8 @@ async function printHtmlToPdf(htmlPath: string, pdfPath: string): Promise<void> 
     }
 
     await tempWindow.loadFile(htmlPath);
-    // Đợi 500ms để CSS, font chữ và hình ảnh base64 được áp dụng xong hoàn toàn
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Đợi 3000ms để CSS, font chữ và hình ảnh base64 được áp dụng xong hoàn toàn
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     const pdfBuffer = await tempWindow.webContents.printToPDF({
       margins: {

@@ -158,10 +158,42 @@ export class PreviewService {
             // Replace src="name", href="name", or url("name")
             htmlContent = htmlContent.replace(new RegExp(`src=["']?\\/?${escapedName}["']?`, 'g'), `src="${dataUri}"`);
             htmlContent = htmlContent.replace(new RegExp(`href=["']?\\/?${escapedName}["']?`, 'g'), `href="${dataUri}"`);
+            // Only replace the url without adding !important to avoid !important !important syntax errors
             htmlContent = htmlContent.replace(new RegExp(`url\\(["']?\\/?${escapedName}["']?\\)`, 'g'), `url("${dataUri}")`);
           }
         }
       });
+
+      // Inject the explicit background image from the images directory to ensure it is always present
+      try {
+        // Resolve bgPath by finding the 'images' folder in the root workspace
+        // this.cacheDir is something like tool-invoice/backend/public/preview
+        const bgPath = path.resolve(this.cacheDir, '../../../images/viewinvoice-bg.jpg');
+        
+        if (fs.existsSync(bgPath)) {
+          const bgBase64 = fs.readFileSync(bgPath).toString('base64');
+          const bgDataUri = `data:image/jpeg;base64,${bgBase64}`;
+          const styleInjection = `
+            <style>
+              @media print {
+                .main-page, .bg-container {
+                  background-image: url("${bgDataUri}") !important;
+                  background-color: transparent !important;
+                  border: 3px double rgba(145, 87, 21, 0.69) !important;
+                }
+              }
+              .main-page, .bg-container {
+                background-image: url("${bgDataUri}") !important;
+              }
+            </style>
+          `;
+          htmlContent = htmlContent.replace('</head>', `${styleInjection}</head>`);
+        } else {
+          console.warn('[PreviewService] Background image not found at', bgPath);
+        }
+      } catch (err) {
+        console.warn('[PreviewService] Failed to inject custom background:', err);
+      }
 
       return htmlContent;
     } catch (error: any) {
