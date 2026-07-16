@@ -809,6 +809,109 @@ export class InvoiceController {
   }
 
   /**
+   * POST /api/invoices/export-module7
+   * Accepts list of invoice IDs and exports a Module 7 Excel report
+   */
+  public static async exportModule7(req: AuthRequest, res: Response): Promise<void> {
+    const { invoiceIds } = req.body;
+
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
+    if (!invoiceIds || !Array.isArray(invoiceIds) || invoiceIds.length === 0) {
+      res.status(400).json({ error: 'Missing required parameter: invoiceIds (must be non-empty array)' });
+      return;
+    }
+
+    try {
+      let whereClause: any = { id: { in: invoiceIds } };
+
+      if (req.user.role !== 'ADMIN') {
+        const assignedCompanies = await prisma.userCompany.findMany({
+          where: { userId: req.user.id },
+          include: {
+            company: {
+              select: { taxCode: true }
+            }
+          }
+        });
+        const allowedMsts = assignedCompanies.map(uc => uc.company.taxCode);
+
+        whereClause.AND = [
+          {
+            OR: [
+              { sellerTaxCode: { in: allowedMsts } },
+              { buyerTaxCode: { in: allowedMsts } }
+            ]
+          }
+        ];
+      }
+
+      const invoices = await prisma.invoice.findMany({
+        where: whereClause,
+        include: {
+          items: true,
+        },
+      });
+
+      if (invoices.length === 0) {
+        res.status(404).json({ error: 'No invoices found for the provided IDs' });
+        return;
+      }
+
+      // Convert DB Invoice models to service compatible interface, including the type property
+      const serviceInvoices = invoices.map(inv => ({
+        xmlFile: path.basename(inv.xmlPath || 'invoice.xml'),
+        type: inv.type, // 'BUY' or 'SELL'
+        version: inv.version || undefined,
+        invoiceName: inv.invoiceName || undefined,
+        templateSymbol: inv.templateSymbol,
+        invoiceSymbol: inv.invoiceSymbol,
+        invoiceNumber: inv.invoiceNumber,
+        invoiceDate: inv.invoiceDate,
+        currency: inv.currency,
+        exchangeRate: inv.exchangeRate,
+        paymentMethod: inv.paymentMethod || undefined,
+        gdtProviderTaxCode: inv.gdtProviderTaxCode || undefined,
+        taxAuthorityCode: inv.taxAuthorityCode || undefined,
+        lookupCode: inv.lookupCode || undefined,
+        sellerName: inv.sellerName,
+        sellerTaxCode: inv.sellerTaxCode,
+        sellerAddress: inv.sellerAddress || undefined,
+        sellerPhone: inv.sellerPhone || undefined,
+        buyerName: inv.buyerName,
+        buyerTaxCode: inv.buyerTaxCode,
+        buyerAddress: inv.buyerAddress || undefined,
+        buyerCustomerId: inv.buyerCustomerId || undefined,
+        totalBeforeTax: inv.totalBeforeTax,
+        taxAmount: inv.taxAmount,
+        totalAmount: inv.totalAmount,
+        totalAmountInWords: inv.totalAmountInWords || undefined,
+        items: inv.items.map(item => ({
+          lineNumber: item.lineNumber || undefined,
+          name: item.name,
+          unit: item.unit || undefined,
+          quantity: item.quantity || undefined,
+          price: item.price || undefined,
+          amount: item.amount,
+          taxRate: item.taxRate || undefined,
+        })),
+      }));
+
+      const excelBuffer = await excelService.generateModule7Report(serviceInvoices);
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=BaoCao_TongHop_M7.xlsx');
+      res.send(excelBuffer);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to export Module 7 report to Excel', details: error.message });
+    }
+  }
+
+
+  /**
    * GET /api/invoices/:id/xml
    * Download raw XML file of invoice
    */
