@@ -342,8 +342,10 @@ export class DownloaderService {
     if (!nbmst || shdon === undefined || !khmshdon || !khhdon) {
       throw new Error(`Thiếu thông tin hoá đơn (nbmst/shdon/khmshdon/khhdon) để tải ZIP.`);
     }
+    const safeKhmshdon = String(khmshdon).replace(/[^a-zA-Z0-9]/g, '');
+    const safeKhhdon = String(khhdon).replace(/[^a-zA-Z0-9]/g, '');
     const resultCode = mapProcessStatusToCode(invoice);
-    const zipFileName = `${nbmst}-${shdon}-${resultCode}.zip`;
+    const zipFileName = `${nbmst}-${safeKhmshdon}-${safeKhhdon}-${shdon}-${resultCode}.zip`;
 
     const zipPath = path.join(outputDir, zipFileName);
 

@@ -106,7 +106,7 @@ model Invoice {
 
   items              InvoiceItem[]
 
-  @@unique([invoiceNumber, sellerTaxCode, buyerTaxCode])
+  @@unique([invoiceNumber, invoiceSymbol, templateSymbol, sellerTaxCode, buyerTaxCode])
 }
 
 model InvoiceItem {

@@ -498,8 +498,10 @@ export class InvoiceController {
           let invoiceId = '';
           await prisma.$transaction(async (tx) => {
             const compositeKey = {
-              invoiceNumber_sellerTaxCode_buyerTaxCode: {
+              invoiceNumber_invoiceSymbol_templateSymbol_sellerTaxCode_buyerTaxCode: {
                 invoiceNumber: parsed.invoiceNumber,
+                invoiceSymbol: parsed.invoiceSymbol,
+                templateSymbol: parsed.templateSymbol,
                 sellerTaxCode: parsed.sellerTaxCode,
                 buyerTaxCode: parsed.buyerTaxCode,
               },
@@ -1483,8 +1485,10 @@ export class InvoiceController {
                   let invoiceId = '';
                   await prisma.$transaction(async (tx) => {
                     const compositeKey = {
-                      invoiceNumber_sellerTaxCode_buyerTaxCode: {
+                      invoiceNumber_invoiceSymbol_templateSymbol_sellerTaxCode_buyerTaxCode: {
                         invoiceNumber: parsed.invoiceNumber,
+                        invoiceSymbol: parsed.invoiceSymbol,
+                        templateSymbol: parsed.templateSymbol,
                         sellerTaxCode: parsed.sellerTaxCode,
                         buyerTaxCode: parsed.buyerTaxCode,
                       },
@@ -1802,8 +1806,10 @@ async function saveBasicInvoiceFromGdt(inv: any, type: 'BUY' | 'SELL'): Promise<
   };
 
   const compositeKey = {
-    invoiceNumber_sellerTaxCode_buyerTaxCode: {
+    invoiceNumber_invoiceSymbol_templateSymbol_sellerTaxCode_buyerTaxCode: {
       invoiceNumber,
+      invoiceSymbol: dataObj.invoiceSymbol,
+      templateSymbol: dataObj.templateSymbol,
       sellerTaxCode,
       buyerTaxCode,
     },
