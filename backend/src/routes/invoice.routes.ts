@@ -21,6 +21,9 @@ router.get('/', InvoiceController.getInvoices);
 // Route to export selected invoices to styled Excel sheet
 router.post('/export', InvoiceController.exportInvoices);
 
+// Route to export selected invoices to Module 7 report
+router.post('/export-module7', InvoiceController.exportModule7);
+
 // Route to download XML of a specific invoice
 router.get('/:id/xml', InvoiceController.downloadXml);
 

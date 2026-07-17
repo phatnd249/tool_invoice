@@ -170,6 +170,7 @@ export default function InvoiceHistory() {
   // UI state
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingModule7, setExportingModule7] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Debounce ref
@@ -299,6 +300,35 @@ export default function InvoiceHistory() {
       alert('Xuất Excel thất bại. Vui lòng kiểm tra lại backend.');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const exportModule7 = async () => {
+    if (selectedIds.length === 0 || exportingModule7) return;
+    setExportingModule7(true);
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/invoices/export-module7`,
+        { invoiceIds: selectedIds },
+        { responseType: 'blob' }
+      );
+
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `BaoCao_TongHop_M7_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Error exporting Module 7 report:', err);
+      alert('Xuất Báo Cáo Module 7 thất bại. Vui lòng kiểm tra lại backend.');
+    } finally {
+      setExportingModule7(false);
     }
   };
 
@@ -453,14 +483,25 @@ export default function InvoiceHistory() {
         </div>
 
         {subTab === 'invoices' && (
-          <button
-            onClick={exportSelected}
-            disabled={selectedIds.length === 0 || exporting}
-            className="bg-success-default hover:bg-success-default disabled:bg-bg-tertiary disabled:text-text-muted text-white font-semibold py-2 px-5 rounded-xl transition-all duration-200 flex items-center space-x-2 shrink-0 cursor-pointer shadow-lg shadow-success-default/20"
-          >
-            <FileSpreadsheet className="w-5 h-5" />
-            <span>{exporting ? 'Đang xuất...' : `Xuất Báo Cáo Excel (${selectedIds.length})`}</span>
-          </button>
+          <div className="flex gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+            <button
+              onClick={exportSelected}
+              disabled={selectedIds.length === 0 || exporting}
+              className="bg-success-default hover:bg-success-default disabled:bg-bg-tertiary disabled:text-text-muted text-white font-semibold py-2 px-5 rounded-xl transition-all duration-200 flex items-center space-x-2 cursor-pointer shadow-lg shadow-success-default/20"
+            >
+              <FileSpreadsheet className="w-5 h-5" />
+              <span>{exporting ? 'Đang xuất...' : `Xuất Báo Cáo Excel (${selectedIds.length})`}</span>
+            </button>
+            <button
+              onClick={exportModule7}
+              disabled={selectedIds.length === 0 || exportingModule7}
+              className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-bg-tertiary disabled:text-text-muted text-white font-semibold py-2 px-5 rounded-xl transition-all duration-200 flex items-center space-x-2 cursor-pointer shadow-lg shadow-indigo-600/20"
+              title="Xuất báo cáo tổng hợp bán ra và mua vào theo Module 7"
+            >
+              <FileSpreadsheet className="w-5 h-5" />
+              <span>{exportingModule7 ? 'Đang xuất M7...' : `Báo Cáo Tổng Hợp (M7) (${selectedIds.length})`}</span>
+            </button>
+          </div>
         )}
       </div>
 
