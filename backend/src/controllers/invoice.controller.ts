@@ -24,6 +24,26 @@ function getTthaiString(tthai: number | string | undefined): string {
   return map[String(tthai)] || `TT ${tthai}`;
 }
 
+function getResultCode(inv: any): string {
+  const khhdon = String(inv.khhdon || '').toUpperCase();
+  let baseCode = 'K';
+  if (khhdon.match(/^[1-6]?M/)) baseCode = 'M';
+  else if (khhdon.match(/^[1-6]?C/)) baseCode = 'C';
+  
+  if (baseCode === 'K' && inv.ttxly === 5) baseCode = 'C';
+  if (baseCode === 'K' && inv.ttxly === 8) baseCode = 'M';
+
+  const tthai = inv.tthai;
+  let suffix = 'GOC';
+  if (tthai == 2) suffix = 'TT';
+  else if (tthai == 3) suffix = 'DC';
+  else if (tthai == 4) suffix = 'BTT';
+  else if (tthai == 5) suffix = 'BDC';
+  else if (tthai == 6) suffix = 'HUY';
+
+  return `${baseCode} - ${suffix}`;
+}
+
 function getTtxlyString(ttxly: number | string | undefined): string {
   if (ttxly === undefined || ttxly === null) return 'Không xác định';
   const map: Record<string, string> = {
@@ -351,8 +371,10 @@ export class InvoiceController {
         console.log(`[InvoiceController] Downloading Excel reports for ${dateChunks.length} date chunk(s)...`);
         for (const chunk of dateChunks) {
           try {
+            const typeDir = type === 'SELL' ? 'BanRa' : 'MuaVao';
+            const excelTargetDir = path.join(baseDir, companyFolder || tokenMst, typeDir);
             const excelPaths = await downloaderService.downloadExcelReport(
-              chunk.start, chunk.end, activeToken, type, baseDir
+              chunk.start, chunk.end, activeToken, type, excelTargetDir
             );
             if (excelPaths && excelPaths.length > 0) {
               for (const p of excelPaths) {
@@ -386,7 +408,7 @@ export class InvoiceController {
           }
 
           const sellerTaxCode = inv.nbmst || tokenMst;
-          const invCompanyName = companyFolder || sellerTaxCode;
+          const invCompanyName = companyFolder || tokenMst;
 
           const invoiceTargetDir = resolveTargetDir(baseDir, invCompanyName, type, invoiceDate);
 
@@ -412,10 +434,11 @@ export class InvoiceController {
                   data: { zipPath: 'VIRTUAL_HTML' }
                 });
 
+                let updateData: any = {};
+                let detailItems: any[] = [];
                 try {
                   const detailJson = await downloaderService.downloadInvoiceDetail(inv, activeToken);
                   if (detailJson) {
-                    const updateData: any = {};
                     if (detailJson.nbten) updateData.sellerName = detailJson.nbten.trim();
                     if (detailJson.nbdchi) updateData.sellerAddress = detailJson.nbdchi.trim();
                     if (detailJson.nmten || detailJson.nmuaten) updateData.buyerName = String(detailJson.nmten || detailJson.nmuaten).trim();
@@ -434,11 +457,11 @@ export class InvoiceController {
                       data: updateData
                     });
 
-                    const items = detailJson.hdhhdvu || detailJson.cttkhac || [];
-                    if (items.length > 0) {
+                    detailItems = detailJson.hdhhdvu || detailJson.cttkhac || [];
+                    if (detailItems.length > 0) {
                       await prisma.invoiceItem.deleteMany({ where: { invoiceId: savedInvoice.id } });
                       await prisma.invoiceItem.createMany({
-                        data: items.map((item: any, idx: number) => ({
+                        data: detailItems.map((item: any, idx: number) => ({
                           invoiceId: savedInvoice.id,
                           lineNumber: String(idx + 1),
                           name: String(item.ten || item.thdon || item.tchat || '').trim(),
@@ -453,9 +476,10 @@ export class InvoiceController {
                     previewService.buildHtmlFromJson(savedInvoice.id, detailJson);
                     const html = await previewService.getPreviewHtml(savedInvoice.id);
                     if (html) {
-                      const ttxly = inv.ttxly;
-                      const resultCode = (ttxly === 5) ? 'C' : (ttxly === 8) ? 'M' : 'K';
-                      const pdfFileName = `${inv.nbmst} - ${resultCode} - ${inv.shdon}.pdf`;
+                      const resultCode = getResultCode(inv);
+                      const safeKhmshdon = String(inv.khmshdon || '').replace(/[^a-zA-Z0-9]/g, '');
+                      const safeKhhdon = String(inv.khhdon || '').replace(/[^a-zA-Z0-9]/g, '');
+                      const pdfFileName = `${inv.nbmst}-${safeKhmshdon}-${safeKhhdon}-${inv.shdon}-${resultCode}.pdf`;
                       const pdfPath = path.join(invoiceTargetDir, pdfFileName);
                       const cacheHtmlPath = previewService.getCachePath(savedInvoice.id);
                       
@@ -468,6 +492,44 @@ export class InvoiceController {
                       });
                     }
                   }
+
+                  // Construct ParsedInvoice for the Excel report
+                  const parsedFallback: any = {
+                    invoiceNumber: inv.shdon || '',
+                    invoiceSymbol: inv.khhdon || '',
+                    templateSymbol: inv.khmhlba || '',
+                    invoiceDate: invoiceDate,
+                    sellerTaxCode: inv.nbmst || '',
+                    sellerName: updateData.sellerName || inv.nbten || '',
+                    sellerAddress: updateData.sellerAddress || inv.nbdchi || '',
+                    buyerTaxCode: inv.nmmst || '',
+                    buyerName: updateData.buyerName || inv.nmten || '',
+                    buyerAddress: updateData.buyerAddress || inv.nmdchi || '',
+                    totalBeforeTax: updateData.totalBeforeTax || inv.tgtcthue || 0,
+                    taxAmount: updateData.taxAmount || inv.tgtthue || 0,
+                    totalAmount: updateData.totalAmount || inv.tgtttbso || 0,
+                    currency: updateData.currency || 'VND',
+                    exchangeRate: updateData.exchangeRate || 1,
+                    invoiceStatus: inv.ttthai,
+                    paymentMethod: updateData.paymentMethod || '',
+                    xmlFile: '',
+                    zipPath: 'VIRTUAL_HTML'
+                  };
+                  
+                  detailItems = detailJson?.hdhhdvu || detailJson?.cttkhac || [];
+                  if (detailItems && detailItems.length > 0) {
+                    parsedFallback.items = detailItems.map((item: any, idx: number) => ({
+                       lineNumber: String(idx + 1),
+                       name: String(item.ten || item.thdon || item.tchat || '').trim(),
+                       unit: String(item.dvtinh || '').trim(),
+                       quantity: Number(item.sluong) || 0,
+                       price: Number(item.dgia) || 0,
+                       amount: Number(item.thtien) || 0,
+                       taxRate: String(item.ltsuat || item.tsuat || '').trim(),
+                    }));
+                  }
+                  typeParsedList.push(parsedFallback);
+
                 } catch (pdfErr: any) {
                   console.error(`[InvoiceController] Failed to fallback generate PDF in downloadInvoices for ${inv.shdon}:`, pdfErr.message);
                 }
@@ -490,7 +552,7 @@ export class InvoiceController {
         parsed.zipPath = zipPath;
         parsed.xmlFile = path.join(invoiceTargetDir, parsed.xmlFile);
 
-        
+        typeParsedList.push(parsed);
         typeSuccessCount++;
 
         // Save to Database if required
@@ -653,6 +715,24 @@ export class InvoiceController {
         } catch (statErr) {
           console.error('[InvoiceController] Failed to update company stats:', statErr);
         }
+      }
+    }
+
+    if (allParsedList.length > 0) {
+      try {
+        console.log('[InvoiceController] Đang tự động tạo file Excel Báo Cáo Tổng Hợp...');
+        const excelBuffer = await excelService.generateInvoiceReport(allParsedList);
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        const timeStr = `${now.getHours()}h${now.getMinutes()}m${now.getSeconds()}s`;
+        const reportFileName = `BaoCao_HoaDon_${dateStr}_${timeStr}.xlsx`;
+        const companyTargetDir = path.join(baseDir, companyFolder || tokenMst);
+        fs.mkdirSync(companyTargetDir, { recursive: true });
+        const reportPath = path.join(companyTargetDir, reportFileName);
+        fs.writeFileSync(reportPath, excelBuffer);
+        console.log(`[InvoiceController] Đã lưu file báo cáo Excel: ${reportPath}`);
+      } catch (excelErr: any) {
+        console.error('[InvoiceController] Failed to auto-generate Excel report:', excelErr.message);
       }
     }
 
@@ -1419,6 +1499,7 @@ export class InvoiceController {
       const dateChunks = downloaderService.splitDateRange(start, end);
       let totalSuccessCount = 0;
       const allErrors: string[] = [];
+      const allParsedList: ParsedInvoice[] = [];
 
       // ── Step 1: Query ALL types upfront to get grand total ──
       interface TypeInvoiceList { type: string; invoices: any[] }
@@ -1483,7 +1564,7 @@ export class InvoiceController {
           try {
             const invoiceDate = inv.tdlap ? (isNaN(Date.parse(inv.tdlap)) ? new Date() : new Date(inv.tdlap)) : new Date();
             const sellerTaxCode = inv.nbmst || tokenMst;
-            const invCompanyName = companyFolder || sellerTaxCode;
+            const invCompanyName = companyFolder || tokenMst;
             const invoiceTargetDir = resolveTargetDir(baseDir, invCompanyName, invoiceType, invoiceDate);
 
             let zipPath: string | null = null;
@@ -1506,10 +1587,11 @@ export class InvoiceController {
                 sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: lưu metadata (không có ZIP).`, 'info');
 
                 sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đang tải PDF trực tiếp...`, 'info');
+                let updateData: any = {};
+                let detailItems: any[] = [];
                 try {
                   const detailJson = await downloaderService.downloadInvoiceDetail(inv, activeToken);
                   if (detailJson) {
-                    const updateData: any = {};
                     if (detailJson.nbten) updateData.sellerName = detailJson.nbten.trim();
                     if (detailJson.nbdchi) updateData.sellerAddress = detailJson.nbdchi.trim();
                     if (detailJson.nmten || detailJson.nmuaten) updateData.buyerName = String(detailJson.nmten || detailJson.nmuaten).trim();
@@ -1528,11 +1610,11 @@ export class InvoiceController {
                       data: updateData
                     });
 
-                    const items = detailJson.hdhhdvu || detailJson.cttkhac || [];
-                    if (items.length > 0) {
+                    detailItems = detailJson.hdhhdvu || detailJson.cttkhac || [];
+                    if (detailItems.length > 0) {
                       await prisma.invoiceItem.deleteMany({ where: { invoiceId: savedInvoice.id } });
                       await prisma.invoiceItem.createMany({
-                        data: items.map((item: any, idx: number) => ({
+                        data: detailItems.map((item: any, idx: number) => ({
                           invoiceId: savedInvoice.id,
                           lineNumber: String(idx + 1),
                           name: String(item.ten || item.thdon || item.tchat || '').trim(),
@@ -1547,9 +1629,10 @@ export class InvoiceController {
                     previewService.buildHtmlFromJson(savedInvoice.id, detailJson);
                     const html = await previewService.getPreviewHtml(savedInvoice.id);
                     if (html) {
-                      const ttxly = inv.ttxly;
-                      const resultCode = (ttxly === 5) ? 'C' : (ttxly === 8) ? 'M' : 'K';
-                      const pdfFileName = `${inv.nbmst} - ${resultCode} - ${inv.shdon}.pdf`;
+                      const resultCode = getResultCode(inv);
+                      const safeKhmshdon = String(inv.khmshdon || '').replace(/[^a-zA-Z0-9]/g, '');
+                      const safeKhhdon = String(inv.khhdon || '').replace(/[^a-zA-Z0-9]/g, '');
+                      const pdfFileName = `${inv.nbmst}-${safeKhmshdon}-${safeKhhdon}-${inv.shdon}-${resultCode}.pdf`;
                       const pdfPath = path.join(invoiceTargetDir, pdfFileName);
                       const cacheHtmlPath = previewService.getCachePath(savedInvoice.id);
                       
@@ -1566,12 +1649,52 @@ export class InvoiceController {
                         data: { pdfPath }
                       });
                       sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đã tải PDF trực tiếp thành công.`, 'info');
-                      totalSuccessCount++;
                     }
                   }
+
+                  // Always consider it a success if we got here (saved to DB and got details)
+                  totalSuccessCount++;
+                  
+                  // Construct ParsedInvoice for the Excel report
+                  const parsedFallback: any = {
+                    invoiceNumber: inv.shdon || '',
+                    invoiceSymbol: inv.khhdon || '',
+                    templateSymbol: inv.khmhlba || '',
+                    invoiceDate: invoiceDate,
+                    sellerTaxCode: inv.nbmst || '',
+                    sellerName: updateData.sellerName || inv.nbten || '',
+                    sellerAddress: updateData.sellerAddress || inv.nbdchi || '',
+                    buyerTaxCode: inv.nmmst || '',
+                    buyerName: updateData.buyerName || inv.nmten || '',
+                    buyerAddress: updateData.buyerAddress || inv.nmdchi || '',
+                    totalBeforeTax: updateData.totalBeforeTax || inv.tgtcthue || 0,
+                    taxAmount: updateData.taxAmount || inv.tgtthue || 0,
+                    totalAmount: updateData.totalAmount || inv.tgtttbso || 0,
+                    currency: updateData.currency || 'VND',
+                    exchangeRate: updateData.exchangeRate || 1,
+                    invoiceStatus: inv.ttthai,
+                    paymentMethod: updateData.paymentMethod || '',
+                    xmlFile: '',
+                    zipPath: 'VIRTUAL_HTML'
+                  };
+                  
+                  detailItems = detailJson?.hdhhdvu || detailJson?.cttkhac || [];
+                  if (detailItems && detailItems.length > 0) {
+                    parsedFallback.items = detailItems.map((item: any, idx: number) => ({
+                       lineNumber: String(idx + 1),
+                       name: String(item.ten || item.thdon || item.tchat || '').trim(),
+                       unit: String(item.dvtinh || '').trim(),
+                       quantity: Number(item.sluong) || 0,
+                       price: Number(item.dgia) || 0,
+                       amount: Number(item.thtien) || 0,
+                       taxRate: String(item.ltsuat || item.tsuat || '').trim(),
+                    }));
+                  }
+                  allParsedList.push(parsedFallback);
+
                 } catch (pdfErr: any) {
                   console.error(`[InvoiceController] Failed to fallback generate PDF for ${inv.shdon}:`, pdfErr.message);
-                  sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: không thể tải chi tiết PDF (${pdfErr.message})`, 'warning');
+                  sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: không thể tạo chi tiết bản thể hiện (${pdfErr.message})`, 'warning');
                 }
               } catch (dbErr: any) {
                 allErrors.push(`[${invoiceType}] Invoice ${inv.shdon}: ${dbErr.message}`);
@@ -1672,6 +1795,7 @@ export class InvoiceController {
                     }
                   });
 
+                  allParsedList.push(parsed);
                   totalSuccessCount++;
                   sendLog(`[${accumulatedCurrent}/${grandTotal}] Hoá đơn ${invNum}: đã lưu thành công.`, 'info');
 
@@ -1740,6 +1864,34 @@ export class InvoiceController {
         sendLog('Kết nối bị ngắt bởi người dùng.', 'warning');
         res.end();
         return;
+      }
+
+      if (allParsedList.length > 0) {
+        try {
+          sendLog('Đang tự động tạo file Excel Báo Cáo Tổng Hợp...', 'info');
+          const excelBuffer = await excelService.generateInvoiceReport(allParsedList);
+          const now = new Date();
+          const dateStr = now.toISOString().slice(0, 10);
+          const timeStr = `${now.getHours()}h${now.getMinutes()}m${now.getSeconds()}s`;
+          const reportFileName = `BaoCao_HoaDon_${dateStr}_${timeStr}.xlsx`;
+          
+          // Send to frontend for automatic download
+          const base64Data = excelBuffer.toString('base64');
+          sendEvent('excel_report', {
+            filename: reportFileName,
+            data: base64Data
+          });
+          
+          // Also save to disk on backend
+          const companyTargetDir = path.join(baseDir, companyFolder || tokenMst);
+          fs.mkdirSync(companyTargetDir, { recursive: true });
+          const reportPath = path.join(companyTargetDir, reportFileName);
+          fs.writeFileSync(reportPath, excelBuffer);
+          sendLog(`Đã lưu file báo cáo Excel: ${reportFileName}`, 'success');
+        } catch (excelErr: any) {
+          console.error('[InvoiceController] Failed to auto-generate Excel report:', excelErr.message);
+          sendLog(`Lỗi khi tạo file báo cáo Excel: ${excelErr.message}`, 'warning');
+        }
       }
 
       sendEvent('done', {
@@ -1824,8 +1976,10 @@ export class InvoiceController {
              return;
           }
           const cacheHtmlPath = previewService.getCachePath(id);
+          const safeKhmshdon = String(invoice.templateSymbol || '').replace(/[^a-zA-Z0-9]/g, '');
+          const safeKhhdon = String(invoice.invoiceSymbol || '').replace(/[^a-zA-Z0-9]/g, '');
           const pdfFileName = invoice.invoiceNumber 
-            ? `${invoice.sellerTaxCode} - ${invoice.processStatus === 5 ? 'C' : invoice.processStatus === 8 ? 'M' : 'K'} - ${invoice.invoiceNumber}.pdf`
+            ? `${invoice.sellerTaxCode}-${safeKhmshdon}-${safeKhhdon}-${invoice.invoiceNumber}-${getResultCode({ khhdon: invoice.invoiceSymbol, ttxly: invoice.processStatus, tthai: invoice.invoiceStatus })}.pdf`
             : `invoice_${id}.pdf`;
           
           targetPdfPath = path.join(path.dirname(cacheHtmlPath), pdfFileName);

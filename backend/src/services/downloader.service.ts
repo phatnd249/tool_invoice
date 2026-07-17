@@ -42,18 +42,25 @@ function formatGdtError(responseBody: string, invoiceLabel: string, status: numb
  */
 function mapProcessStatusToCode(invoice: any): string {
   const khhdon = String(invoice.khhdon || '').toUpperCase();
-  if (khhdon.match(/^[1-6]?M/)) return 'M';
-  if (khhdon.match(/^[1-6]?C/)) return 'C';
-  if (khhdon.match(/^[1-6]?K/)) return 'K';
-
-  const ttxly = invoice.ttxly;
-  if (ttxly === 8) return 'M';
-  if (ttxly === 5) return 'C';
-  if (ttxly === 6 || ttxly === 4) return 'K';
+  let baseCode = 'K';
+  if (khhdon.match(/^[1-6]?M/)) baseCode = 'M';
+  else if (khhdon.match(/^[1-6]?C/)) baseCode = 'C';
   
-  if (invoice._sourceApi === 'sco-query') return 'M';
+  // Also check ttxly as fallback
+  if (baseCode === 'K' && invoice.ttxly === 5) baseCode = 'C';
+  if (baseCode === 'K' && invoice.ttxly === 8) baseCode = 'M';
 
-  return 'K'; // Default
+  const tthai = invoice.tthai;
+  let suffix = 'GOC';
+  if (tthai == 2) suffix = 'TT';
+  else if (tthai == 3) suffix = 'DC';
+  else if (tthai == 4) suffix = 'BTT';
+  else if (tthai == 5) suffix = 'BDC';
+  else if (tthai == 6) suffix = 'HUY';
+
+  return `${baseCode} - ${suffix}`;
+
+
 }
 
 /**

@@ -341,7 +341,7 @@ export default function InvoiceHistory() {
     try {
       const response = await axios.get(
         `${API_BASE_URL}/api/invoices/${invoiceId}/${type}`,
-        { 
+        {
           responseType: 'blob'
         }
       );
@@ -355,7 +355,7 @@ export default function InvoiceHistory() {
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      
+
       const contentDisposition = response.headers['content-disposition'];
       let filename = `invoice_${invoiceId.slice(0, 8)}.${ext}`;
       if (contentDisposition) {
@@ -364,7 +364,7 @@ export default function InvoiceHistory() {
           filename = filenameMatch[1];
         }
       }
-      
+
       link.download = filename;
       document.body.appendChild(link);
       link.click();
@@ -372,7 +372,7 @@ export default function InvoiceHistory() {
       window.URL.revokeObjectURL(downloadUrl);
     } catch (err: any) {
       console.error(`Error downloading ${type}:`, err);
-      
+
       if (err.response && err.response.data && err.response.data instanceof Blob) {
         const text = await err.response.data.text();
         try {
@@ -413,8 +413,8 @@ export default function InvoiceHistory() {
         <button
           onClick={() => setSubTab('invoices')}
           className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all duration-200 cursor-pointer ${subTab === 'invoices'
-              ? 'border-accent-default text-text-primary font-bold'
-              : 'border-transparent text-text-secondary hover:text-text-primary'
+            ? 'border-accent-default text-text-primary font-bold'
+            : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
         >
           Hóa Đơn Đã Lưu
@@ -422,8 +422,8 @@ export default function InvoiceHistory() {
         <button
           onClick={() => setSubTab('logs')}
           className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all duration-200 cursor-pointer ${subTab === 'logs'
-              ? 'border-accent-default text-text-primary font-bold'
-              : 'border-transparent text-text-secondary hover:text-text-primary'
+            ? 'border-accent-default text-text-primary font-bold'
+            : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
         >
           Nhật Ký Tải Hệ Thống (Audit Logs)
@@ -777,8 +777,8 @@ export default function InvoiceHistory() {
                         </td>
                         <td className="p-4 text-center">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${h.status === 'SUCCESS'
-                              ? 'bg-success-light text-success-default border-success-default/20'
-                              : (h.status === 'PARTIAL' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-danger-light text-danger-default border-danger-default/20')
+                            ? 'bg-success-light text-success-default border-success-default/20'
+                            : (h.status === 'PARTIAL' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-danger-light text-danger-default border-danger-default/20')
                             }`}>
                             {h.status === 'SUCCESS' ? 'Thành công' : (h.status === 'PARTIAL' ? 'Một phần' : 'Thất bại')}
                           </span>
@@ -956,7 +956,7 @@ export default function InvoiceHistory() {
                         const isBuy = line.includes('[BUY]');
                         const isSell = line.includes('[SELL]');
                         const typeTag = isBuy ? 'Mua vào' : (isSell ? 'Bán ra' : 'Hệ thống');
-                        
+
                         return (
                           <li key={idx} className={`p-3 rounded-xl border flex items-start space-x-3 ${isError ? 'bg-danger-light/30 border-danger-default/20' : 'bg-bg-primary border-border'}`}>
                             <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${isError ? 'bg-danger-default shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-success-default'}`} />
