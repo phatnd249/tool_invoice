@@ -15,6 +15,7 @@ import {
   Sun,
   Moon,
   Loader2,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { useTheme } from './context/ThemeContext';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ import {
   SidebarInset,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Sheet,
   SheetContent,
@@ -280,30 +282,60 @@ export default function App() {
             </ShadcnSidebarContent>
 
             <SidebarFooter className="border-t border-sidebar-border p-2">
-              <div className="flex items-center gap-3 p-2 overflow-hidden">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="text-xs">
-                    {user.username.substring(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                  <span className="truncate font-medium">{user.username}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {user.role === 'ADMIN' ? 'Admin' : 'Staff'}
-                  </span>
-                </div>
-              </div>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    variant="default"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    tooltip="Đăng Xuất"
-                    onClick={() => handleLogout()}
-                  >
-                    <LogOut className="h-4 w-4 shrink-0" />
-                    <span className="group-data-[collapsible=icon]:hidden">Đăng Xuất</span>
-                  </SidebarMenuButton>
+                  <Popover>
+                    <PopoverTrigger
+                      render={
+                        <SidebarMenuButton
+                          size="lg"
+                          className="w-full data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground flex items-center gap-3 p-2 rounded-lg transition-colors duration-200"
+                        >
+                          <Avatar className="h-8 w-8 rounded-lg shrink-0 border border-border/40">
+                            <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-medium text-xs">
+                              {user.username.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                            <span className="truncate font-semibold">{user.username}</span>
+                            <span className="truncate text-xs text-muted-foreground">
+                              {user.role === 'ADMIN' ? 'Quản trị viên' : 'Nhân viên'}
+                            </span>
+                          </div>
+                          <ChevronsUpDown className="ml-auto size-4 shrink-0 opacity-50 group-data-[collapsible=icon]:hidden" />
+                        </SidebarMenuButton>
+                      }
+                    />
+                    <PopoverContent
+                      className="w-56 rounded-lg p-2 shadow-lg border border-border/50 bg-popover text-popover-foreground"
+                      side="right"
+                      align="end"
+                      sideOffset={8}
+                    >
+                      <div className="flex items-center gap-2 px-2 py-1.5 text-left text-sm">
+                        <Avatar className="h-8 w-8 rounded-lg border border-border/40">
+                          <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-medium text-xs">
+                            {user.username.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="grid flex-1 text-left text-sm leading-tight">
+                          <span className="truncate font-semibold">{user.username}</span>
+                          <span className="truncate text-xs text-muted-foreground">
+                            {user.role === 'ADMIN' ? 'Quản trị viên' : 'Nhân viên'}
+                          </span>
+                        </div>
+                      </div>
+                      <Separator className="my-1.5" />
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer text-sm font-medium h-9 px-2 rounded-md"
+                        onClick={() => handleLogout()}
+                      >
+                        <LogOut className="mr-2 h-4 w-4 shrink-0" />
+                        Đăng Xuất
+                      </Button>
+                    </PopoverContent>
+                  </Popover>
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarFooter>
