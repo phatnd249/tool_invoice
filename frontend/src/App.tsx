@@ -278,7 +278,7 @@ export default function App() {
       <Toaster richColors />
 
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col w-64 h-screen sticky top-0 border-r bg-sidebar text-sidebar-foreground overflow-y-auto shrink-0">
+      <aside className="hidden lg:flex lg:flex-col w-64 h-screen sticky top-0 border-r bg-primary text-primary-foreground overflow-y-auto shrink-0">
         <SidebarContent />
       </aside>
 
@@ -289,7 +289,7 @@ export default function App() {
             <Menu className="h-5 w-5" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-64">
+        <SheetContent side="left" className="p-0 w-64 bg-primary text-primary-foreground">
           <SidebarContent />
         </SheetContent>
       </Sheet>
