@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { FileDown, FileArchive, FileSpreadsheet, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw, Filter, List, Search } from 'lucide-react';
+import { FileDown, FileArchive, FileSpreadsheet, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw, Filter, List, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -137,6 +137,10 @@ export default function InvoiceHistory() {
   const [filterStatus, setFilterStatus] = useState('');
   const [searchText, setSearchText] = useState('');
 
+  // Sort state
+  const [sortField, setSortField] = useState('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportingModule7, setExportingModule7] = useState(false);
@@ -149,10 +153,12 @@ export default function InvoiceHistory() {
 
   // ── Fetch ──
 
-  const fetchInvoices = useCallback(async (p: number, s: number, q: string, type: string) => {
+  const fetchInvoices = useCallback(async (p: number, s: number, q: string, type: string, sf: string, sd: 'asc' | 'desc') => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(p), size: String(s), ...(q && { search: q }), ...(type && { type }) });
+      if (sf) params.set('sortBy', sf);
+      params.set('sortDir', sd);
       const response = await axios.get<PaginatedResponse<Invoice>>(`${API_BASE_URL}/api/invoices?${params}`);
       setInvoices(response.data.data);
       setTotal(response.data.total);
@@ -165,10 +171,12 @@ export default function InvoiceHistory() {
     }
   }, []);
 
-  const fetchHistories = useCallback(async (p: number, s: number, q: string, status: string) => {
+  const fetchHistories = useCallback(async (p: number, s: number, q: string, status: string, sf: string, sd: 'asc' | 'desc') => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(p), size: String(s), ...(q && { search: q }), ...(status && { status }) });
+      if (sf) params.set('sortBy', sf);
+      params.set('sortDir', sd);
       const response = await axios.get<PaginatedResponse<DownloadHistory>>(`${API_BASE_URL}/api/invoices/download-history?${params}`);
       setHistories(response.data.data);
       setTotal(response.data.total);
@@ -181,9 +189,9 @@ export default function InvoiceHistory() {
   }, []);
 
   useEffect(() => {
-    if (subTab === 'invoices') fetchInvoices(page, size, searchText, filterType);
-    else fetchHistories(page, size, searchText, filterStatus);
-  }, [page, size, subTab, filterType, filterStatus]); // eslint-disable-line
+    if (subTab === 'invoices') fetchInvoices(page, size, searchText, filterType, sortField, sortDir);
+    else fetchHistories(page, size, searchText, filterStatus, sortField, sortDir);
+  }, [page, size, subTab, filterType, filterStatus, sortField, sortDir]); // eslint-disable-line
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -191,7 +199,25 @@ export default function InvoiceHistory() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [searchText]);
 
-  useEffect(() => { setPage(0); }, [filterType, filterStatus]);
+  useEffect(() => { setPage(0); }, [filterType, filterStatus, sortField, sortDir]);
+
+  // ── Sort handler ──
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const renderSortIcon = (field: string) => {
+    if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 inline opacity-40" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="ml-1 h-3 w-3 inline text-primary" />
+      : <ArrowDown className="ml-1 h-3 w-3 inline text-primary" />;
+  };
 
   // ── Handlers ──
 
@@ -342,8 +368,8 @@ export default function InvoiceHistory() {
             </div>
 
             <Button variant="outline" size="icon" onClick={() => {
-              if (subTab === 'invoices') fetchInvoices(page, size, searchText, filterType);
-              else fetchHistories(page, size, searchText, filterStatus);
+              if (subTab === 'invoices') fetchInvoices(page, size, searchText, filterType, sortField, sortDir);
+              else fetchHistories(page, size, searchText, filterStatus, sortField, sortDir);
             }}>
               <RotateCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
@@ -374,18 +400,50 @@ export default function InvoiceHistory() {
                     <input type="checkbox" checked={invoices.length > 0 && selectedIds.length === invoices.length} onChange={handleSelectAll} className="rounded" />
                   </TableHead>
                   <TableHead className="w-10 text-center">STT</TableHead>
-                  <TableHead>Mẫu số</TableHead>
-                  <TableHead>KH HĐ</TableHead>
-                  <TableHead>Số HĐ</TableHead>
-                  <TableHead>Ngày</TableHead>
-                  {filterType !== 'SELL' && <TableHead>MST bán</TableHead>}
-                  {filterType !== 'SELL' && <TableHead>Tên người bán</TableHead>}
-                  {filterType !== 'BUY' && <TableHead>MST mua</TableHead>}
-                  {filterType !== 'BUY' && <TableHead>Tên người mua</TableHead>}
-                  <TableHead className="text-right">Tiền</TableHead>
-                  <TableHead className="text-right">Thuế</TableHead>
-                  <TableHead className="text-right">Tổng</TableHead>
-                  <TableHead className="text-center">Trạng thái</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('templateSymbol')}>
+                    <span className="inline-flex items-center">Mẫu số{renderSortIcon('templateSymbol')}</span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('invoiceSymbol')}>
+                    <span className="inline-flex items-center">KH HĐ{renderSortIcon('invoiceSymbol')}</span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('invoiceNumber')}>
+                    <span className="inline-flex items-center">Số HĐ{renderSortIcon('invoiceNumber')}</span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('invoiceDate')}>
+                    <span className="inline-flex items-center">Ngày{renderSortIcon('invoiceDate')}</span>
+                  </TableHead>
+                  {filterType !== 'SELL' && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('sellerTaxCode')}>
+                      <span className="inline-flex items-center">MST bán{renderSortIcon('sellerTaxCode')}</span>
+                    </TableHead>
+                  )}
+                  {filterType !== 'SELL' && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('sellerName')}>
+                      <span className="inline-flex items-center">Tên người bán{renderSortIcon('sellerName')}</span>
+                    </TableHead>
+                  )}
+                  {filterType !== 'BUY' && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('buyerTaxCode')}>
+                      <span className="inline-flex items-center">MST mua{renderSortIcon('buyerTaxCode')}</span>
+                    </TableHead>
+                  )}
+                  {filterType !== 'BUY' && (
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort('buyerName')}>
+                      <span className="inline-flex items-center">Tên người mua{renderSortIcon('buyerName')}</span>
+                    </TableHead>
+                  )}
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('totalBeforeTax')}>
+                    <span className="inline-flex items-center justify-end">Tiền{renderSortIcon('totalBeforeTax')}</span>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('taxAmount')}>
+                    <span className="inline-flex items-center justify-end">Thuế{renderSortIcon('taxAmount')}</span>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('totalAmount')}>
+                    <span className="inline-flex items-center justify-end">Tổng{renderSortIcon('totalAmount')}</span>
+                  </TableHead>
+                  <TableHead className="text-center cursor-pointer select-none" onClick={() => handleSort('invoiceStatus')}>
+                    <span className="inline-flex items-center justify-center">Trạng thái{renderSortIcon('invoiceStatus')}</span>
+                  </TableHead>
                   <TableHead className="text-center">Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
@@ -464,12 +522,24 @@ export default function InvoiceHistory() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Thời Gian</TableHead>
-                  <TableHead>MST</TableHead>
-                  <TableHead>Loại Quét</TableHead>
-                  <TableHead>Người Quét</TableHead>
-                  <TableHead className="text-center">Trạng Thái</TableHead>
-                  <TableHead className="text-center">Số Lượng</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('downloadDate')}>
+                    <span className="inline-flex items-center">Thời Gian{renderSortIcon('downloadDate')}</span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('taxCode')}>
+                    <span className="inline-flex items-center">MST{renderSortIcon('taxCode')}</span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('invoiceType')}>
+                    <span className="inline-flex items-center">Loại Quét{renderSortIcon('invoiceType')}</span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort('username')}>
+                    <span className="inline-flex items-center">Người Quét{renderSortIcon('username')}</span>
+                  </TableHead>
+                  <TableHead className="text-center cursor-pointer select-none" onClick={() => handleSort('status')}>
+                    <span className="inline-flex items-center justify-center">Trạng Thái{renderSortIcon('status')}</span>
+                  </TableHead>
+                  <TableHead className="text-center cursor-pointer select-none" onClick={() => handleSort('countDownloaded')}>
+                    <span className="inline-flex items-center justify-center">Số Lượng{renderSortIcon('countDownloaded')}</span>
+                  </TableHead>
                   <TableHead className="text-center">Nhật Ký</TableHead>
                 </TableRow>
               </TableHeader>

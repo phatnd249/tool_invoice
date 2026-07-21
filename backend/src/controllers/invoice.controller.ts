@@ -176,9 +176,20 @@ export class InvoiceController {
     res.end();
   }
 
+  // Whitelist các field cho phép sort (tránh injection)
+  private static readonly INVOICE_SORT_FIELDS = new Set([
+    'invoiceNumber', 'invoiceDate', 'templateSymbol', 'invoiceSymbol',
+    'sellerName', 'sellerTaxCode', 'buyerName', 'buyerTaxCode',
+    'totalBeforeTax', 'taxAmount', 'totalAmount', 'invoiceStatus',
+  ]);
+
+  private static readonly HISTORY_SORT_FIELDS = new Set([
+    'downloadDate', 'taxCode', 'invoiceType', 'status', 'countDownloaded', 'username',
+  ]);
+
   /**
    * GET /api/invoices
-   * Retrieve list of saved invoices with filters
+   * Retrieve list of saved invoices with filters and sorting
    */
   public static async getInvoices(req: AuthRequest, res: Response): Promise<void> {
     const {
@@ -190,6 +201,8 @@ export class InvoiceController {
       page: pageParam,
       size: sizeParam,
       search,
+      sortBy,
+      sortDir,
     } = req.query;
 
     if (!req.user) {
@@ -246,12 +259,19 @@ export class InvoiceController {
       }
     }
 
+    // Build orderBy từ sort params
+    const orderField = InvoiceController.INVOICE_SORT_FIELDS.has(String(sortBy))
+      ? String(sortBy)
+      : 'invoiceDate';
+    const orderDir = sortDir === 'asc' ? 'asc' : 'desc';
+    const orderBy = { [orderField]: orderDir };
+
     try {
       const total = hasPagination ? await prisma.invoice.count({ where: whereClause }) : 0;
       const invoices = await prisma.invoice.findMany({
         where: whereClause,
         include: { items: true },
-        orderBy: { invoiceDate: 'desc' },
+        orderBy,
         ...(hasPagination ? { skip: page * size, take: size } : {}),
       });
 
@@ -582,7 +602,7 @@ export class InvoiceController {
    * Retrieve audit logs and download stats history
    */
   public static async getDownloadHistory(req: AuthRequest, res: Response): Promise<void> {
-    const { page: pageParam, size: sizeParam, search, status } = req.query;
+    const { page: pageParam, size: sizeParam, search, status, sortBy, sortDir } = req.query;
     if (!req.user) { res.status(401).json({ error: 'Yêu cầu xác thực.' }); return; }
 
     const hasPagination = pageParam !== undefined && sizeParam !== undefined;
@@ -610,10 +630,17 @@ export class InvoiceController {
         }
       }
 
+      // Build orderBy cho download history
+      const orderField = InvoiceController.HISTORY_SORT_FIELDS.has(String(sortBy))
+        ? String(sortBy)
+        : 'downloadDate';
+      const orderDir = sortDir === 'asc' ? 'asc' : 'desc';
+      const orderBy = { [orderField]: orderDir };
+
       const total = hasPagination ? await prisma.downloadHistory.count({ where: whereClause }) : 0;
       const histories = await prisma.downloadHistory.findMany({
         where: whereClause,
-        orderBy: { downloadDate: 'desc' },
+        orderBy,
         ...(hasPagination ? { skip: page * size, take: size } : {}),
       });
 
