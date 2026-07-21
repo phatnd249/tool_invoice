@@ -239,7 +239,7 @@ export default function App() {
 
           {/* Shadcn App Sidebar */}
           <Sidebar collapsible="icon">
-            <SidebarHeader className="border-b border-sidebar-border py-2">
+            <SidebarHeader className="h-16 border-b border-sidebar-border py-2 flex justify-center">
               <div className="flex items-center gap-3 px-3 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center overflow-hidden transition-all duration-200">
                 <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/95 text-primary-foreground shadow-sm shadow-primary/20 shrink-0">
                   <FileText className="h-4 w-4 shrink-0" />
@@ -348,7 +348,7 @@ export default function App() {
             <header className="h-16 border-b bg-background/80 backdrop-blur-sm flex items-center justify-between px-4 lg:px-8 shrink-0">
               <div className="flex items-center gap-3">
                 <SidebarTrigger />
-                <h1 className="text-xl font-bold">{getPageTitle()}</h1>
+                <h1 className="text-lg font-bold">{getPageTitle()}</h1>
               </div>
           <div className="flex items-center gap-3">
             <Button
