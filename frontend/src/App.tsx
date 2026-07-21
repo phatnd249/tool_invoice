@@ -5,7 +5,6 @@ import {
   CloudDownload,
   History,
   CalendarDays,
-  Menu,
   Key,
   Building2,
   Users,
@@ -22,12 +21,19 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from '@/components/ui/sidebar';
 import {
   Dialog,
   DialogContent,
@@ -70,7 +76,6 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<Tab>('download');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [authError, setAuthError] = useState('');
 
   // Feedback states
@@ -212,205 +217,184 @@ export default function App() {
     },
   ];
 
-  const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 px-6 py-4">
-        <FileText className="h-6 w-6 text-primary shrink-0" />
-        <span className="text-lg font-bold">Invoice Pro</span>
-      </div>
-      <Separator />
-      <nav className="flex-1 p-4 space-y-1">
-        {sidebarGroups.map(group => {
-          const visibleItems = group.adminOnly && !isAdmin ? [] : group.items;
-          if (visibleItems.length === 0) return null;
-          return (
-            <div key={group.label} className="mb-3">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-1.5">
-                {group.label}
-              </p>
-              {visibleItems.map(item => (
-                <Button
-                  key={item.id}
-                  variant={activeTab === item.id ? 'secondary' : 'ghost'}
-                  className="w-full justify-start gap-3 mb-0.5"
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setSidebarOpen(false);
-                  }}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Button>
-              ))}
-            </div>
-          );
-        })}
-      </nav>
-      <Separator />
-      <div className="p-4 space-y-2">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs">
-              {user.username.substring(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{user.username}</p>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-              {user.role === 'ADMIN' ? 'Admin' : 'Staff'}
-            </Badge>
-          </div>
-        </div>
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"
-          onClick={() => handleLogout()}
-        >
-          <LogOut className="h-4 w-4" />
-          Đăng Xuất
-        </Button>
-      </div>
-    </div>
-  );
-
   return (
-    <div className="min-h-screen flex w-full bg-background text-foreground">
-      <Toaster richColors />
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full bg-background text-foreground">
+        <Toaster richColors />
 
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col w-64 h-screen sticky top-0 border-r bg-primary text-primary-foreground overflow-y-auto shrink-0">
-        <SidebarContent />
-      </aside>
+        {/* Shadcn Sidebar */}
+        <Sidebar>
+          <SidebarHeader className="h-16 border-b px-4 py-4 flex flex-row items-center gap-3">
+            <FileText className="h-6 w-6 text-primary shrink-0" />
+            <span className="text-lg font-bold">Invoice Pro</span>
+          </SidebarHeader>
 
-      {/* Mobile Sidebar (Sheet) */}
-      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="lg:hidden">
-            <Menu className="h-5 w-5" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-64 bg-primary text-primary-foreground">
-          <SidebarContent />
-        </SheetContent>
-      </Sheet>
+          <SidebarContent className="p-2">
+            {sidebarGroups.map(group => {
+              const visibleItems = group.adminOnly && !isAdmin ? [] : group.items;
+              if (visibleItems.length === 0) return null;
+              return (
+                <SidebarGroup key={group.label}>
+                  <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {visibleItems.map(item => (
+                        <SidebarMenuItem key={item.id}>
+                          <SidebarMenuButton
+                            isActive={activeTab === item.id}
+                            onClick={() => setActiveTab(item.id)}
+                            tooltip={item.label}
+                          >
+                            <item.icon className="h-4 w-4" />
+                            <span>{item.label}</span>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              );
+            })}
+          </SidebarContent>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="h-16 border-b bg-background/80 backdrop-blur-sm flex items-center justify-between px-4 lg:px-8 shrink-0">
-          <div className="flex items-center gap-3">
-            {/* Mobile menu trigger */}
-            <div className="lg:hidden">
-              <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
-                <Menu className="h-5 w-5" />
-              </Button>
-            </div>
-            <h1 className="text-xl font-bold">{getPageTitle()}</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              title={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
-            >
-              {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setFeedbackModalOpen(true);
-                setFeedbackContent('');
-                setFeedbackError('');
-                setFeedbackSuccess(false);
-              }}
-              className="gap-1.5"
-            >
-              <MessageSquare className="h-4 w-4" />
-              Góp ý
-            </Button>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-xs text-muted-foreground hidden sm:inline">Hệ thống đang hoạt động</span>
-            </div>
-          </div>
-        </header>
-
-        {/* Content View */}
-        <div className="flex-1 overflow-y-auto p-4 lg:p-8">
-          {activeTab === 'download' && <InvoiceDownloader />}
-          {activeTab === 'history' && <InvoiceHistory />}
-          {activeTab === 'schedules' && <SchedulePanel />}
-          {activeTab === 'users' && <UserManagement />}
-          {activeTab === 'feedbacks' && <FeedbackManager />}
-          {activeTab === 'companies' && <CompanyManager />}
-          {activeTab === 'config' && <ConfigPanel />}
-          {activeTab === 'tax-lookup' && <TaxLookup />}
-        </div>
-      </main>
-
-      {/* Feedback Submission Dialog */}
-      <Dialog open={feedbackModalOpen} onOpenChange={setFeedbackModalOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              Gửi Ý Kiến Đóng Góp
-            </DialogTitle>
-            <DialogDescription>
-              Đóng góp ý kiến của bạn để cải thiện ứng dụng.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSendFeedback}>
-            <div className="space-y-4 py-2">
-              {feedbackError && (
-                <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm px-4 py-3 rounded-lg">
-                  {feedbackError}
-                </div>
-              )}
-              {feedbackSuccess && (
-                <div className="bg-green-500/10 border border-green-500/20 text-green-600 text-sm px-4 py-3 rounded-lg">
-                  Cảm ơn đóng góp của bạn. Ý kiến đã được gửi thành công!
-                </div>
-              )}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Nội dung góp ý</label>
-                <textarea
-                  required
-                  rows={4}
-                  value={feedbackContent}
-                  onChange={(e) => setFeedbackContent(e.target.value)}
-                  placeholder="Nhập ý kiến đóng góp, phản hồi hoặc báo lỗi của bạn tại đây..."
-                  className="w-full bg-background border border-input rounded-lg px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none leading-relaxed"
-                />
+          <SidebarFooter className="border-t p-2 space-y-2">
+            <div className="flex items-center gap-3 px-3 py-2">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="text-xs">
+                  {user.username.substring(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+                <p className="text-sm font-medium truncate">{user.username}</p>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                  {user.role === 'ADMIN' ? 'Admin' : 'Staff'}
+                </Badge>
               </div>
             </div>
-            <DialogFooter>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => handleLogout()}
+                  tooltip="Đăng Xuất"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Đăng Xuất</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+        </Sidebar>
+
+        {/* Main Content Area */}
+        <main className="flex-1 flex flex-col min-w-0">
+          {/* Header */}
+          <header className="h-16 border-b bg-background/80 backdrop-blur-sm flex items-center justify-between px-4 lg:px-8 shrink-0">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger />
+              <h1 className="text-lg font-bold">{getPageTitle()}</h1>
+            </div>
+            <div className="flex items-center gap-3">
               <Button
-                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
+              >
+                {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </Button>
+              <Button
                 variant="outline"
-                onClick={() => setFeedbackModalOpen(false)}
+                size="sm"
+                onClick={() => {
+                  setFeedbackModalOpen(true);
+                  setFeedbackContent('');
+                  setFeedbackError('');
+                  setFeedbackSuccess(false);
+                }}
+                className="gap-1.5"
               >
-                Hủy
+                <MessageSquare className="h-4 w-4" />
+                Góp ý
               </Button>
-              <Button
-                type="submit"
-                disabled={submittingFeedback}
-              >
-                {submittingFeedback ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Đang gửi...
-                  </>
-                ) : (
-                  'Gửi Đóng Góp'
+            </div>
+          </header>
+
+          {/* Content View */}
+          <div className="flex-1 overflow-y-auto p-4 lg:p-8">
+            {activeTab === 'download' && <InvoiceDownloader />}
+            {activeTab === 'history' && <InvoiceHistory />}
+            {activeTab === 'schedules' && <SchedulePanel />}
+            {activeTab === 'users' && <UserManagement />}
+            {activeTab === 'feedbacks' && <FeedbackManager />}
+            {activeTab === 'companies' && <CompanyManager />}
+            {activeTab === 'config' && <ConfigPanel />}
+            {activeTab === 'tax-lookup' && <TaxLookup />}
+          </div>
+        </main>
+
+        {/* Feedback Submission Dialog */}
+        <Dialog open={feedbackModalOpen} onOpenChange={setFeedbackModalOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Gửi Ý Kiến Đóng Góp
+              </DialogTitle>
+              <DialogDescription>
+                Đóng góp ý kiến của bạn để cải thiện ứng dụng.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSendFeedback}>
+              <div className="space-y-4 py-2">
+                {feedbackError && (
+                  <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm px-4 py-3 rounded-lg">
+                    {feedbackError}
+                  </div>
                 )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+                {feedbackSuccess && (
+                  <div className="bg-green-500/10 border border-green-500/20 text-green-600 text-sm px-4 py-3 rounded-lg">
+                    Cảm ơn đóng góp của bạn. Ý kiến đã được gửi thành công!
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Nội dung góp ý</label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={feedbackContent}
+                    onChange={(e) => setFeedbackContent(e.target.value)}
+                    placeholder="Nhập ý kiến đóng góp, phản hồi hoặc báo lỗi của bạn tại đây..."
+                    className="w-full bg-background border border-input rounded-lg px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none leading-relaxed"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setFeedbackModalOpen(false)}
+                >
+                  Hủy
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submittingFeedback}
+                >
+                  {submittingFeedback ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Đang gửi...
+                    </>
+                  ) : (
+                    'Gửi Đóng Góp'
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </SidebarProvider>
   );
 }
