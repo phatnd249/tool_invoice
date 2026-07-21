@@ -41,3 +41,5 @@ invoices/
 # Frontend build copied to backend/public/ during production build
 backend/public/
 *.zip
+
+temp/
