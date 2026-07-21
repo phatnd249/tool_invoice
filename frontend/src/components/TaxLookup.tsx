@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
-import { Search, Hash, MapPin, Info, User, Phone, Calendar, Users, Building, AlertCircle, Building2 } from 'lucide-react';
+import { Search, Hash, MapPin, Info, User, Phone, Calendar, Users, Building, Loader2, AlertCircle, Building2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 import { API_BASE_URL } from '../config';
 
 interface TaxInfo {
@@ -47,147 +53,90 @@ export default function TaxLookup() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Header & Search */}
-      <div className="bg-card border border-border rounded-3xl p-6 shadow-xl">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <Card>
+        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-accent-default to-log-cyan bg-clip-text text-transparent flex items-center gap-2">
-              <Search className="w-6 h-6 text-accent-default" />
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-6 w-6" />
               Tra Cứu Mã Số Thuế
-            </h2>
-            <p className="text-text-secondary text-sm mt-1">
+            </CardTitle>
+            <CardDescription>
               Tra cứu thông tin doanh nghiệp nhanh chóng và chính xác từ masothue.com
-            </p>
+            </CardDescription>
           </div>
-
-          <form onSubmit={handleSearch} className="flex w-full md:w-auto relative group">
-            <input
+          <form onSubmit={handleSearch} className="flex w-full md:w-auto">
+            <Input
               type="text"
               value={taxCode}
               onChange={(e) => setTaxCode(e.target.value)}
               placeholder="Nhập mã số thuế..."
-              className="w-full md:w-80 bg-card border border-border rounded-l-2xl px-5 py-3 text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent-default transition-all"
+              className="rounded-r-none w-full md:w-80"
             />
-            <button
+            <Button
               type="submit"
               disabled={loading || !taxCode.trim()}
-              className="bg-accent-default hover:bg-accent-hover-default text-white px-6 py-3 rounded-r-2xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[120px]"
+              className="rounded-l-none min-w-[120px]"
             >
               {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                'Tìm kiếm'
-              )}
-            </button>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Tìm kiếm
+            </Button>
           </form>
-        </div>
-      </div>
+        </CardHeader>
+      </Card>
 
-      {/* Error Message */}
       {error && (
-        <div className="bg-danger-light border border-danger-default/20 rounded-2xl p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-danger-default shrink-0 mt-0.5" />
-          <div className="text-danger-default text-sm">{error}</div>
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Result Display */}
       {taxInfo && (
-        <div className="bg-card rounded-3xl overflow-hidden shadow-2xl border border-border text-text-primary">
-          <div className="p-6 border-b border-border bg-bg-primary/50">
-            <h3 className="text-lg font-bold text-text-primary uppercase tracking-wide flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-accent-default" />
+        <Card>
+          <CardHeader className="bg-muted/30">
+            <CardTitle className="flex items-center gap-2 uppercase tracking-wide">
+              <Building2 className="h-5 w-5" />
               {taxInfo.name}
-            </h3>
-          </div>
-          
-          <div className="divide-y divide-border">
-            <div className="grid grid-cols-1 md:grid-cols-4 hover:bg-bg-primary/50 transition-colors">
-              <div className="p-4 md:p-5 font-semibold text-text-primary flex items-center gap-3">
-                <Hash className="w-4 h-4 text-text-secondary" />
-                Mã số thuế
-              </div>
-              <div className="p-4 md:p-5 md:col-span-3 text-text-secondary font-medium">{taxInfo.taxCode}</div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 hover:bg-bg-primary/50 transition-colors">
-              <div className="p-4 md:p-5 font-semibold text-text-primary flex items-center gap-3">
-                <MapPin className="w-4 h-4 text-text-secondary" />
-                Địa chỉ Thuế
-              </div>
-              <div className="p-4 md:p-5 md:col-span-3 text-text-secondary">{taxInfo.taxAddress}</div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 hover:bg-bg-primary/50 transition-colors">
-              <div className="p-4 md:p-5 font-semibold text-text-primary flex items-center gap-3">
-                <MapPin className="w-4 h-4 text-text-secondary" />
-                Địa chỉ
-              </div>
-              <div className="p-4 md:p-5 md:col-span-3 text-text-secondary">{taxInfo.address}</div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 hover:bg-bg-primary/50 transition-colors">
-              <div className="p-4 md:p-5 font-semibold text-text-primary flex items-center gap-3">
-                <Info className="w-4 h-4 text-text-secondary" />
-                Tình trạng
-              </div>
-              <div className="p-4 md:p-5 md:col-span-3 text-text-secondary">{taxInfo.status}</div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 hover:bg-bg-primary/50 transition-colors">
-              <div className="p-4 md:p-5 font-semibold text-text-primary flex items-start gap-3">
-                <User className="w-4 h-4 text-text-secondary mt-1" />
-                Người đại diện
-              </div>
-              <div className="p-4 md:p-5 md:col-span-3 text-text-secondary">
-                <div className="font-medium text-text-primary">{taxInfo.representative}</div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 divide-y">
+            <InfoRow icon={<Hash className="h-4 w-4" />} label="Mã số thuế" value={taxInfo.taxCode} />
+            <InfoRow icon={<MapPin className="h-4 w-4" />} label="Địa chỉ Thuế" value={taxInfo.taxAddress} />
+            <InfoRow icon={<MapPin className="h-4 w-4" />} label="Địa chỉ" value={taxInfo.address} />
+            <InfoRow icon={<Info className="h-4 w-4" />} label="Tình trạng" value={<Badge variant="outline">{taxInfo.status}</Badge>} />
+            <InfoRow icon={<User className="h-4 w-4" />} label="Người đại diện">
+              <div>
+                <span className="font-medium">{taxInfo.representative}</span>
                 {taxInfo.representativeExtra && (
-                  <div className="text-sm mt-1 text-text-muted italic">
+                  <p className="text-sm text-muted-foreground mt-1 italic">
                     Ngoài ra, {taxInfo.representative} còn đại diện các doanh nghiệp, đơn vị:
-                    <ul className="list-disc ml-5 mt-1 text-accent-default/80 not-italic">
-                      <li>{taxInfo.representativeExtra}</li>
-                    </ul>
-                  </div>
+                  </p>
                 )}
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 hover:bg-bg-primary/50 transition-colors">
-              <div className="p-4 md:p-5 font-semibold text-text-primary flex items-center gap-3">
-                <Phone className="w-4 h-4 text-text-secondary" />
-                Điện thoại
-              </div>
-              <div className="p-4 md:p-5 md:col-span-3 text-text-secondary flex items-center gap-3">
-                <span className="font-medium">{taxInfo.phone}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 hover:bg-bg-primary/50 transition-colors">
-              <div className="p-4 md:p-5 font-semibold text-text-primary flex items-center gap-3">
-                <Calendar className="w-4 h-4 text-text-secondary" />
-                Ngày hoạt động
-              </div>
-              <div className="p-4 md:p-5 md:col-span-3 text-text-secondary">{taxInfo.activeDate}</div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 hover:bg-bg-primary/50 transition-colors">
-              <div className="p-4 md:p-5 font-semibold text-text-primary flex items-center gap-3">
-                <Users className="w-4 h-4 text-text-secondary" />
-                Quản lý bởi
-              </div>
-              <div className="p-4 md:p-5 md:col-span-3 text-text-secondary">{taxInfo.managedBy}</div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 hover:bg-bg-primary/50 transition-colors">
-              <div className="p-4 md:p-5 font-semibold text-text-primary flex items-center gap-3">
-                <Building className="w-4 h-4 text-text-secondary" />
-                Loại hình DN
-              </div>
-              <div className="p-4 md:p-5 md:col-span-3 text-text-secondary">{taxInfo.type}</div>
-            </div>
-          </div>
-        </div>
+            </InfoRow>
+            <InfoRow icon={<Phone className="h-4 w-4" />} label="Điện thoại" value={taxInfo.phone} />
+            <InfoRow icon={<Calendar className="h-4 w-4" />} label="Ngày hoạt động" value={taxInfo.activeDate} />
+            <InfoRow icon={<Users className="h-4 w-4" />} label="Quản lý bởi" value={taxInfo.managedBy} />
+            <InfoRow icon={<Building className="h-4 w-4" />} label="Loại hình DN" value={taxInfo.type} />
+          </CardContent>
+        </Card>
       )}
+    </div>
+  );
+}
+
+function InfoRow({ icon, label, value, children }: { icon: React.ReactNode; label: string; value?: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-4 p-4 md:p-5 hover:bg-muted/30 transition-colors">
+      <div className="font-semibold flex items-center gap-3 mb-1 md:mb-0">
+        <span className="text-muted-foreground">{icon}</span>
+        {label}
+      </div>
+      <div className="md:col-span-3 text-muted-foreground">
+        {value || children}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,38 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { FileDown, FileArchive, FileSpreadsheet, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw, Filter, List } from 'lucide-react';
+import { FileDown, FileArchive, FileSpreadsheet, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw, Filter, List, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
 import { API_BASE_URL } from '../config';
 
 interface InvoiceItem {
@@ -74,15 +106,15 @@ function formatInvoiceNumber(num: string): string {
   return String(num).padStart(8, '0');
 }
 
-function getInvoiceStatusLabel(inv: Invoice): { label: string; color: string } | null {
+function getInvoiceStatusLabel(inv: Invoice): { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' } | null {
   if (inv.invoiceStatus !== undefined && inv.invoiceStatus !== null) {
     switch (inv.invoiceStatus) {
-      case 1: return { label: 'Hoá đơn mới', color: 'bg-emerald-900/50 text-emerald-300' };
-      case 2: return { label: 'Thay thế', color: 'bg-blue-900/50 text-blue-300' };
-      case 3: return { label: 'Điều chỉnh', color: 'bg-amber-900/50 text-amber-300' };
-      case 4: return { label: 'Đã bị thay thế', color: 'bg-orange-900/50 text-orange-300' };
-      case 5: return { label: 'Đã bị điều chỉnh', color: 'bg-orange-900/50 text-orange-300' };
-      case 6: return { label: 'Đã huỷ', color: 'bg-red-900/50 text-red-300' };
+      case 1: return { label: 'Hoá đơn mới', variant: 'default' };
+      case 2: return { label: 'Thay thế', variant: 'secondary' };
+      case 3: return { label: 'Điều chỉnh', variant: 'outline' };
+      case 4: return { label: 'Đã bị thay thế', variant: 'outline' };
+      case 5: return { label: 'Đã bị điều chỉnh', variant: 'outline' };
+      case 6: return { label: 'Đã huỷ', variant: 'destructive' };
     }
   }
   return null;
@@ -90,112 +122,38 @@ function getInvoiceStatusLabel(inv: Invoice): { label: string; color: string } |
 
 const PAGE_SIZES = [10, 20, 50, 100];
 
-function Pagination({
-  page,
-  totalPages,
-  size,
-  total,
-  onPageChange,
-  onSizeChange,
-}: {
-  page: number;
-  totalPages: number;
-  size: number;
-  total: number;
-  onPageChange: (p: number) => void;
-  onSizeChange: (s: number) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 bg-card border-t border-border text-sm">
-      <div className="flex items-center gap-2 text-text-secondary">
-        <span className="hidden sm:inline">Tổng:</span>
-        <span className="font-semibold text-text-primary">{total}</span>
-        <span className="hidden sm:inline">records</span>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <span className="text-text-muted text-xs">Số dòng:</span>
-        <select
-          value={size}
-          onChange={(e) => onSizeChange(Number(e.target.value))}
-          className="bg-bg-primary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent cursor-pointer"
-        >
-          {PAGE_SIZES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => onPageChange(page - 1)}
-          disabled={page <= 0}
-          className="p-1.5 bg-bg-primary hover:bg-bg-tertiary disabled:bg-card disabled:text-text-primary text-text-secondary rounded-lg border border-border transition cursor-pointer disabled:cursor-not-allowed"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-        <span className="text-text-secondary text-xs whitespace-nowrap px-1">
-          Trang <span className="font-semibold text-text-primary">{totalPages > 0 ? page + 1 : 0}</span> / <span className="font-semibold text-text-primary">{totalPages}</span>
-        </span>
-        <button
-          onClick={() => onPageChange(page + 1)}
-          disabled={page >= totalPages - 1}
-          className="p-1.5 bg-bg-primary hover:bg-bg-tertiary disabled:bg-card disabled:text-text-primary text-text-secondary rounded-lg border border-border transition cursor-pointer disabled:cursor-not-allowed"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function InvoiceHistory() {
   const [subTab, setSubTab] = useState<'invoices' | 'logs'>('invoices');
 
-  // Data
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [histories, setHistories] = useState<DownloadHistory[]>([]);
 
-  // Pagination state (server-side)
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(20);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  // Filters
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [searchText, setSearchText] = useState('');
 
-  // UI state
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportingModule7, setExportingModule7] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Debounce ref
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Modals
   const [selectedHistory, setSelectedHistory] = useState<DownloadHistory | null>(null);
-
-  // Invoice Detail (items) Modal state
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
 
-  // ── Fetch functions ──
+  // ── Fetch ──
 
   const fetchInvoices = useCallback(async (p: number, s: number, q: string, type: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        page: String(p),
-        size: String(s),
-        ...(q && { search: q }),
-        ...(type && { type }),
-      });
-      const response = await axios.get<PaginatedResponse<Invoice>>(
-        `${API_BASE_URL}/api/invoices?${params}`
-      );
+      const params = new URLSearchParams({ page: String(p), size: String(s), ...(q && { search: q }), ...(type && { type }) });
+      const response = await axios.get<PaginatedResponse<Invoice>>(`${API_BASE_URL}/api/invoices?${params}`);
       setInvoices(response.data.data);
       setTotal(response.data.total);
       setTotalPages(response.data.totalPages);
@@ -210,784 +168,502 @@ export default function InvoiceHistory() {
   const fetchHistories = useCallback(async (p: number, s: number, q: string, status: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        page: String(p),
-        size: String(s),
-        ...(q && { search: q }),
-        ...(status && { status }),
-      });
-      const response = await axios.get<PaginatedResponse<DownloadHistory>>(
-        `${API_BASE_URL}/api/invoices/download-history?${params}`
-      );
+      const params = new URLSearchParams({ page: String(p), size: String(s), ...(q && { search: q }), ...(status && { status }) });
+      const response = await axios.get<PaginatedResponse<DownloadHistory>>(`${API_BASE_URL}/api/invoices/download-history?${params}`);
       setHistories(response.data.data);
       setTotal(response.data.total);
       setTotalPages(response.data.totalPages);
     } catch (err) {
-      console.error('Error fetching download history:', err);
+      console.error('Error fetching histories:', err);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // ── Effects ──
-
   useEffect(() => {
-    if (subTab === 'invoices') {
-      fetchInvoices(page, size, searchText, filterType);
-    } else {
-      fetchHistories(page, size, searchText, filterStatus);
-    }
-  }, [page, size, subTab, filterType, filterStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (subTab === 'invoices') fetchInvoices(page, size, searchText, filterType);
+    else fetchHistories(page, size, searchText, filterStatus);
+  }, [page, size, subTab, filterType, filterStatus]); // eslint-disable-line
 
-  // Debounced search: reset to page 0 when search text changes
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setPage(0);
-      // The effect above will re-fetch due to page change
-    }, 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [searchText]); // eslint-disable-line react-hooks/exhaustive-deps
+    debounceRef.current = setTimeout(() => setPage(0), 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchText]);
 
-  // When filter changes, reset to page 0
-  useEffect(() => {
-    setPage(0);
-  }, [filterType, filterStatus]);
+  useEffect(() => { setPage(0); }, [filterType, filterStatus]);
 
   // ── Handlers ──
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) {
-      setSelectedIds(invoices.map((i) => i.id));
-    } else {
-      setSelectedIds([]);
-    }
+    if (e.target.checked) setSelectedIds(invoices.map(i => i.id));
+    else setSelectedIds([]);
   };
 
   const handleSelectOne = (id: string, checked: boolean) => {
-    if (checked) {
-      setSelectedIds((prev) => [...prev, id]);
-    } else {
-      setSelectedIds((prev) => prev.filter((item) => item !== id));
-    }
+    if (checked) setSelectedIds(prev => [...prev, id]);
+    else setSelectedIds(prev => prev.filter(item => item !== id));
   };
 
   const exportSelected = async () => {
     if (selectedIds.length === 0 || exporting) return;
     setExporting(true);
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/api/invoices/export`,
-        { invoiceIds: selectedIds },
-        { responseType: 'blob' }
-      );
-
-      const blob = new Blob([response.data], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = `BaoCao_HoaDon_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
+      const response = await axios.post(`${API_BASE_URL}/api/invoices/export`, { invoiceIds: selectedIds }, { responseType: 'blob' });
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `BaoCao_HoaDon_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Error exporting invoices:', err);
-      alert('Xuất Excel thất bại. Vui lòng kiểm tra lại backend.');
-    } finally {
-      setExporting(false);
-    }
+      console.error('Error exporting:', err);
+      toast.error('Xuất Excel thất bại.');
+    } finally { setExporting(false); }
   };
 
   const exportModule7 = async () => {
     if (selectedIds.length === 0 || exportingModule7) return;
     setExportingModule7(true);
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/api/invoices/export-module7`,
-        { invoiceIds: selectedIds },
-        { responseType: 'blob' }
-      );
-
-      const blob = new Blob([response.data], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = `BaoCao_TongHop_M7_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
+      const response = await axios.post(`${API_BASE_URL}/api/invoices/export-module7`, { invoiceIds: selectedIds }, { responseType: 'blob' });
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `BaoCao_TongHop_M7_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Error exporting Module 7 report:', err);
-      alert('Xuất Báo Cáo Module 7 thất bại. Vui lòng kiểm tra lại backend.');
-    } finally {
-      setExportingModule7(false);
-    }
+      console.error('Error exporting M7:', err);
+      toast.error('Xuất Báo Cáo Module 7 thất bại.');
+    } finally { setExportingModule7(false); }
   };
 
   const downloadPdf = async (invoiceId: string) => {
-    // Gọi thẳng API tải PDF tĩnh từ backend thay vì tự vẽ (để tránh lỗi trắng trang do off-screen capture)
-    downloadFile(invoiceId, 'pdf' as any);
+    downloadFile(invoiceId, 'pdf');
   };
 
   const downloadFile = async (invoiceId: string, type: 'xml' | 'zip' | 'pdf') => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/api/invoices/${invoiceId}/${type}`,
-        {
-          responseType: 'blob'
-        }
-      );
-
+      const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/${type}`, { responseType: 'blob' });
       const ext = type;
-      let contentType = 'application/pdf';
-      if (type === 'xml') contentType = 'application/xml';
-      else if (type === 'zip') contentType = 'application/zip';
-
+      const contentType = type === 'xml' ? 'application/xml' : type === 'zip' ? 'application/zip' : 'application/pdf';
       const blob = new Blob([response.data], { type: contentType });
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-
-      const contentDisposition = response.headers['content-disposition'];
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      const cd = response.headers['content-disposition'];
       let filename = `invoice_${invoiceId.slice(0, 8)}.${ext}`;
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (filenameMatch && filenameMatch.length === 2) {
-          filename = filenameMatch[1];
-        }
-      }
-
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
+      if (cd) { const m = cd.match(/filename="?([^"]+)"?/); if (m?.[1]) filename = m[1]; }
+      a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url);
     } catch (err: any) {
-      console.error(`Error downloading ${type}:`, err);
-
-      if (err.response && err.response.data && err.response.data instanceof Blob) {
+      if (err.response?.data instanceof Blob) {
         const text = await err.response.data.text();
-        try {
-          const json = JSON.parse(text);
-          alert(json.error || `Không thể tải file ${type.toUpperCase()}.`);
-        } catch (e) {
-          alert(`Không thể tải file ${type.toUpperCase()}.`);
-        }
+        try { const json = JSON.parse(text); toast.error(json.error || `Không thể tải file ${type.toUpperCase()}.`); }
+        catch { toast.error(`Không thể tải file ${type.toUpperCase()}.`); }
       } else {
-        alert(err.response?.data?.error || `Không thể tải file ${type.toUpperCase()}.`);
+        toast.error(err.response?.data?.error || `Không thể tải file ${type.toUpperCase()}.`);
       }
     }
   };
 
   const openPreview = async (invoiceId: string) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview?t=${Date.now()}`, {
-        responseType: 'text',
-      });
+      const response = await axios.get(`${API_BASE_URL}/api/invoices/${invoiceId}/preview?t=${Date.now()}`, { responseType: 'text' });
       const newWindow = window.open('', '_blank');
-      if (newWindow) {
-        newWindow.document.write(response.data);
-        newWindow.document.close();
-      } else {
-        alert("Trình duyệt đã chặn tab mới. Vui lòng cho phép popup để xem hóa đơn.");
-      }
+      if (newWindow) { newWindow.document.write(response.data); newWindow.document.close(); }
+      else { toast.error('Trình duyệt đã chặn tab mới. Vui lòng cho phép popup.'); }
     } catch (err: any) {
-      console.error(`Error loading preview:`, err);
-      const msg = err.response?.data?.error || `Không thể tải bản xem trước hóa đơn.`;
-      alert(msg);
+      toast.error(err.response?.data?.error || 'Không thể tải bản xem trước.');
+    }
+  };
+
+  const statusBadge = (status: string) => {
+    switch (status) {
+      case 'SUCCESS': return <Badge className="bg-green-500/10 text-green-600 border-green-300 hover:bg-green-500/10">Thành công</Badge>;
+      case 'PARTIAL': return <Badge variant="secondary">Một phần</Badge>;
+      case 'FAILED': return <Badge variant="destructive">Thất bại</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const invoiceTypeBadge = (type: string) => {
+    switch (type) {
+      case 'SELL': return <Badge>Bán ra</Badge>;
+      case 'BUY': return <Badge variant="secondary">Mua vào</Badge>;
+      default: return <Badge variant="outline">{type}</Badge>;
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Sub-tab navigation */}
-      <div className="flex space-x-2 border-b border-border pb-px">
-        <button
-          onClick={() => setSubTab('invoices')}
-          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all duration-200 cursor-pointer ${subTab === 'invoices'
-            ? 'border-accent-default text-text-primary font-bold'
-            : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-        >
-          Hóa Đơn Đã Lưu
-        </button>
-        <button
-          onClick={() => setSubTab('logs')}
-          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all duration-200 cursor-pointer ${subTab === 'logs'
-            ? 'border-accent-default text-text-primary font-bold'
-            : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-        >
-          Nhật Ký Tải Hệ Thống (Audit Logs)
-        </button>
-      </div>
+      {/* Tabs */}
+      <Tabs value={subTab} onValueChange={(v) => setSubTab(v as any)}>
+        <TabsList>
+          <TabsTrigger value="invoices">Hóa Đơn Đã Lưu</TabsTrigger>
+          <TabsTrigger value="logs">Nhật Ký Tải Hệ Thống</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-      {/* Filters & Actions Card */}
-      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-4">
-          {subTab === 'invoices' ? (
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="bg-bg-primary border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent cursor-pointer"
-            >
-              <option value="">Tất cả hóa đơn</option>
-              <option value="SELL">Bán ra (SELL)</option>
-              <option value="BUY">Mua vào (BUY)</option>
-            </select>
-          ) : (
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="bg-bg-primary border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent cursor-pointer"
-            >
-              <option value="">Tất cả trạng thái</option>
-              <option value="SUCCESS">Thành công</option>
-              <option value="PARTIAL">Một phần</option>
-              <option value="FAILED">Thất bại</option>
-            </select>
-          )}
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4 md:p-6">
+          <div className="flex flex-wrap items-center gap-3">
+            {subTab === 'invoices' ? (
+              <Select value={filterType} onValueChange={v => setFilterType(v)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Tất cả hóa đơn" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Tất cả hóa đơn</SelectItem>
+                  <SelectItem value="SELL">Bán ra (SELL)</SelectItem>
+                  <SelectItem value="BUY">Mua vào (BUY)</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select value={filterStatus} onValueChange={v => setFilterStatus(v)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Tất cả trạng thái" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Tất cả trạng thái</SelectItem>
+                  <SelectItem value="SUCCESS">Thành công</SelectItem>
+                  <SelectItem value="PARTIAL">Một phần</SelectItem>
+                  <SelectItem value="FAILED">Thất bại</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
 
-          <div className="relative">
-            <Filter className="w-4 h-4 text-text-secondary absolute left-3.5 top-3" />
-            <input
-              type="text"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="bg-bg-primary border border-border rounded-xl pl-10 pr-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent w-64"
-              placeholder={subTab === 'invoices' ? "Số HĐ, tên doanh nghiệp..." : "Tìm theo MST, người tải..."}
-            />
+            <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                className="pl-9"
+                placeholder={subTab === 'invoices' ? 'Số HĐ, tên doanh nghiệp...' : 'Tìm theo MST, người tải...'}
+              />
+            </div>
+
+            <Button variant="outline" size="icon" onClick={() => {
+              if (subTab === 'invoices') fetchInvoices(page, size, searchText, filterType);
+              else fetchHistories(page, size, searchText, filterStatus);
+            }}>
+              <RotateCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+
+            {subTab === 'invoices' && (
+              <>
+                <Button onClick={exportSelected} disabled={selectedIds.length === 0 || exporting} className="gap-1.5">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  {exporting ? 'Đang xuất...' : `Xuất Excel (${selectedIds.length})`}
+                </Button>
+                <Button onClick={exportModule7} disabled={selectedIds.length === 0 || exportingModule7} variant="secondary" className="gap-1.5">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  {exportingModule7 ? 'Đang xuất M7...' : `Báo Cáo M7 (${selectedIds.length})`}
+                </Button>
+              </>
+            )}
           </div>
-
-          <button
-            onClick={() => {
-              if (subTab === 'invoices') {
-                fetchInvoices(page, size, searchText, filterType);
-              } else {
-                fetchHistories(page, size, searchText, filterStatus);
-              }
-            }}
-            className="p-2 bg-bg-primary hover:bg-bg-tertiary text-text-secondary hover:text-text-primary rounded-xl border border-slate-750 transition cursor-pointer"
-            title="Làm mới danh sách"
-          >
-            <RotateCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-
-        {subTab === 'invoices' && (
-          <div className="flex gap-2 shrink-0 flex-wrap sm:flex-nowrap">
-            <button
-              onClick={exportSelected}
-              disabled={selectedIds.length === 0 || exporting}
-              className="bg-success-default hover:bg-success-default disabled:bg-bg-tertiary disabled:text-text-muted text-white font-semibold py-2 px-5 rounded-xl transition-all duration-200 flex items-center space-x-2 cursor-pointer shadow-lg shadow-success-default/20"
-            >
-              <FileSpreadsheet className="w-5 h-5" />
-              <span>{exporting ? 'Đang xuất...' : `Xuất Báo Cáo Excel (${selectedIds.length})`}</span>
-            </button>
-            <button
-              onClick={exportModule7}
-              disabled={selectedIds.length === 0 || exportingModule7}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-bg-tertiary disabled:text-text-muted text-white font-semibold py-2 px-5 rounded-xl transition-all duration-200 flex items-center space-x-2 cursor-pointer shadow-lg shadow-indigo-600/20"
-              title="Xuất báo cáo tổng hợp bán ra và mua vào theo Module 7"
-            >
-              <FileSpreadsheet className="w-5 h-5" />
-              <span>{exportingModule7 ? 'Đang xuất M7...' : `Báo Cáo Tổng Hợp (M7) (${selectedIds.length})`}</span>
-            </button>
-          </div>
-        )}
-      </div>
+        </CardContent>
+      </Card>
 
       {subTab === 'invoices' ? (
-        /* ── Invoices Table ── */
-        <div className="bg-card rounded-2xl border border-border shadow-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead className="bg-bg-primary/50 border-b border-border text-text-secondary font-semibold uppercase text-xs">
-                <tr>
-                  <th className="p-3 w-10 text-center">
-                    <input
-                      type="checkbox"
-                      checked={invoices.length > 0 && selectedIds.length === invoices.length}
-                      onChange={handleSelectAll}
-                      className="w-4 h-4 rounded border-border text-accent-default focus:ring-accent-default bg-bg-primary"
-                    />
-                  </th>
-                  <th className="p-3 w-10 text-center">STT</th>
-                  <th className="p-3">Ký hiệu mẫu số</th>
-                  <th className="p-3">Ký hiệu HĐ</th>
-                  <th className="p-3">Số HĐ</th>
-                  <th className="p-3">Ngày lập</th>
-                  {filterType !== 'SELL' && (
-                    <>
-                      <th className="p-3">MST người bán</th>
-                      <th className="p-3">Tên người bán</th>
-                    </>
-                  )}
-                  {filterType !== 'BUY' && (
-                    <>
-                      <th className="p-3">MST người mua</th>
-                      <th className="p-3">Tên người mua</th>
-                      <th className="p-3">Địa chỉ người mua</th>
-                    </>
-                  )}
-                  <th className="p-3 text-right">Tiền trước thuế</th>
-                  <th className="p-3 text-right">Tiền thuế</th>
-                  <th className="p-3 text-right">Chiết khấu</th>
-                  <th className="p-3 text-right">Phí</th>
-                  <th className="p-3 text-right">Tổng thanh toán</th>
-                  <th className="p-3 text-center">ĐVT</th>
-                  <th className="p-3 text-right">Tỷ giá</th>
-                  <th className="p-3 text-center">Trạng thái</th>
-                  <th className="p-3 text-center">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50 text-text-muted">
+        <Card>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10 text-center">
+                    <input type="checkbox" checked={invoices.length > 0 && selectedIds.length === invoices.length} onChange={handleSelectAll} className="rounded" />
+                  </TableHead>
+                  <TableHead className="w-10 text-center">STT</TableHead>
+                  <TableHead>Mẫu số</TableHead>
+                  <TableHead>KH HĐ</TableHead>
+                  <TableHead>Số HĐ</TableHead>
+                  <TableHead>Ngày</TableHead>
+                  {filterType !== 'SELL' && <TableHead>MST bán</TableHead>}
+                  {filterType !== 'SELL' && <TableHead>Tên người bán</TableHead>}
+                  {filterType !== 'BUY' && <TableHead>MST mua</TableHead>}
+                  {filterType !== 'BUY' && <TableHead>Tên người mua</TableHead>}
+                  <TableHead className="text-right">Tiền</TableHead>
+                  <TableHead className="text-right">Thuế</TableHead>
+                  <TableHead className="text-right">Tổng</TableHead>
+                  <TableHead className="text-center">Trạng thái</TableHead>
+                  <TableHead className="text-center">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={21} className="p-12 text-center text-text-muted">
-                      <div className="flex flex-col items-center justify-center space-y-2">
-                        <Loader2 className="w-8 h-8 text-accent-default animate-spin" />
-                        <span>Đang tải danh sách hóa đơn từ Database...</span>
-                      </div>
-                    </td>
-                  </tr>
+                  <TableRow><TableCell colSpan={20} className="text-center py-12 text-muted-foreground"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
                 ) : invoices.length === 0 ? (
-                  <tr>
-                    <td colSpan={21} className="p-8 text-center text-text-muted">
-                      Không có hóa đơn nào trong cơ sở dữ liệu.
-                    </td>
-                  </tr>
+                  <TableRow><TableCell colSpan={20} className="text-center py-8 text-muted-foreground">Không có hóa đơn nào.</TableCell></TableRow>
                 ) : (
-                  invoices.map((inv, idx) => {
-                    return (
-                      <tr key={inv.id} className="hover:bg-bg-primary/30 transition-all border-b border-border/30">
-                        <td className="p-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(inv.id)}
-                            onChange={(e) => handleSelectOne(inv.id, e.target.checked)}
-                            className="w-4 h-4 rounded border-border text-accent-default focus:ring-accent-default bg-bg-primary"
-                          />
-                        </td>
-                        <td className="p-3 text-center text-text-muted text-xs">
-                          {idx + 1 + page * size}
-                        </td>
-                        <td className="p-3 font-mono text-xs text-text-secondary">
-                          {inv.templateSymbol || '—'}
-                        </td>
-                        <td className="p-3 font-mono text-xs text-text-secondary">
-                          {inv.invoiceSymbol || '—'}
-                        </td>
-                        <td className="p-3 font-semibold text-text-primary font-mono text-xs">
-                          {formatInvoiceNumber(inv.invoiceNumber)}
-                        </td>
-                        <td className="p-3 text-text-secondary text-xs whitespace-nowrap">
-                          {formatDate(inv.invoiceDate)}
-                        </td>
-                        {filterType !== 'SELL' && (
-                          <>
-                            <td className="p-3 font-mono text-xs">
-                              {inv.sellerTaxCode}
-                            </td>
-                            <td className="p-3 max-w-[160px] truncate text-xs" title={inv.sellerName}>
-                              <span className="font-medium text-text-primary">{inv.sellerName}</span>
-                            </td>
-                          </>
-                        )}
-                        {filterType !== 'BUY' && (
-                          <>
-                            <td className="p-3 font-mono text-xs">
-                              {inv.buyerTaxCode}
-                            </td>
-                            <td className="p-3 max-w-[160px] truncate text-xs" title={inv.buyerName}>
-                              <span className="font-medium text-text-primary">{inv.buyerName}</span>
-                            </td>
-                            <td className="p-3 max-w-[160px] truncate text-text-muted text-xs" title={inv.buyerAddress || ''}>
-                              {inv.buyerAddress || '—'}
-                            </td>
-                          </>
-                        )}
-                        <td className="p-3 text-right text-xs">
-                          {formatNumber(inv.totalBeforeTax)}
-                        </td>
-                        <td className="p-3 text-right text-xs">
-                          {formatNumber(inv.taxAmount)}
-                        </td>
-                        <td className="p-3 text-right text-text-muted text-xs">—</td>
-                        <td className="p-3 text-right text-text-muted text-xs">—</td>
-                        <td className="p-3 text-right font-bold text-success-default text-xs">
-                          {formatNumber(inv.totalAmount)}
-                        </td>
-                        <td className="p-3 text-center text-xs">
-                          {inv.currency || 'VND'}
-                        </td>
-                        <td className="p-3 text-right text-xs">
-                          {inv.exchangeRate && inv.exchangeRate !== 1 ? inv.exchangeRate : '—'}
-                        </td>
-                        <td className="p-3 text-center">
-                          {(getInvoiceStatusLabel(inv) as any) ? (
-                            <span className={`px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${(getInvoiceStatusLabel(inv) as any).color}`}>
-                              {(getInvoiceStatusLabel(inv) as any).label}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-text-muted">—</span>
-                          )}
-                        </td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center space-x-1">
-                            <button
-                              onClick={() => setDetailInvoice(inv)}
-                              className="text-accent-default hover:text-accent-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
-                              title="Xem chi tiết sản phẩm"
-                            >
-                              <List className="w-4 h-4" />
-                            </button>
-                            {inv.zipPath ? (
-                              <button
-                                onClick={() => openPreview(inv.id)}
-                                className="text-success-default hover:text-success-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
-                                title="Xem trước hóa đơn (HTML)"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc để preview">
-                                <Eye className="w-4 h-4 opacity-30" />
-                              </span>
-                            )}
-                            {inv.xmlPath ? (
-                              <button
-                                onClick={() => downloadFile(inv.id, 'xml')}
-                                className="text-accent-default hover:text-accent-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
-                                title="Tải file XML gốc"
-                              >
-                                <FileDown className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có file XML gốc">
-                                <FileDown className="w-4 h-4 opacity-30" />
-                              </span>
-                            )}
-                            {inv.zipPath ? (
-                              <button
-                                onClick={() => downloadPdf(inv.id)}
-                                className="text-danger-default hover:text-danger-default transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
-                                title="Tải bản thể hiện (PDF)"
-                              >
-                                <FileText className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có bản thể hiện PDF">
-                                <FileText className="w-4 h-4 opacity-30" />
-                              </span>
-                            )}
-                            {inv.zipPath === 'VIRTUAL_HTML' ? (
-                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Chỉ có bản thể hiện HTML, không có file ZIP gốc">
-                                <FileArchive className="w-4 h-4 opacity-30" />
-                              </span>
-                            ) : inv.zipPath ? (
-                              <button
-                                onClick={() => downloadFile(inv.id, 'zip')}
-                                className="text-amber-400 hover:text-amber-300 transition duration-150 inline-flex p-1.5 hover:bg-bg-tertiary rounded-lg cursor-pointer"
-                                title="Tải tệp nén ZIP gốc"
-                              >
-                                <FileArchive className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <span className="text-text-primary inline-flex p-1.5 cursor-not-allowed" title="Không có file ZIP gốc">
-                                <FileArchive className="w-4 h-4 opacity-30" />
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                  invoices.map((inv, idx) => (
+                    <TableRow key={inv.id}>
+                      <TableCell className="text-center">
+                        <input type="checkbox" checked={selectedIds.includes(inv.id)} onChange={(e) => handleSelectOne(inv.id, e.target.checked)} className="rounded" />
+                      </TableCell>
+                      <TableCell className="text-center text-xs text-muted-foreground">{idx + 1 + page * size}</TableCell>
+                      <TableCell className="font-mono text-xs">{inv.templateSymbol || '—'}</TableCell>
+                      <TableCell className="font-mono text-xs">{inv.invoiceSymbol || '—'}</TableCell>
+                      <TableCell className="font-mono font-semibold text-xs">{formatInvoiceNumber(inv.invoiceNumber)}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">{formatDate(inv.invoiceDate)}</TableCell>
+                      {filterType !== 'SELL' && (
+                        <TableCell className="font-mono text-xs">{inv.sellerTaxCode}</TableCell>
+                      )}
+                      {filterType !== 'SELL' && (
+                        <TableCell className="max-w-[120px] truncate text-xs" title={inv.sellerName}>{inv.sellerName}</TableCell>
+                      )}
+                      {filterType !== 'BUY' && (
+                        <TableCell className="font-mono text-xs">{inv.buyerTaxCode}</TableCell>
+                      )}
+                      {filterType !== 'BUY' && (
+                        <TableCell className="max-w-[120px] truncate text-xs" title={inv.buyerName}>{inv.buyerName}</TableCell>
+                      )}
+                      <TableCell className="text-right text-xs">{formatNumber(inv.totalBeforeTax)}</TableCell>
+                      <TableCell className="text-right text-xs">{formatNumber(inv.taxAmount)}</TableCell>
+                      <TableCell className="text-right font-bold text-xs">{formatNumber(inv.totalAmount)}</TableCell>
+                      <TableCell className="text-center">
+                        {getInvoiceStatusLabel(inv) ? (
+                          <Badge variant={getInvoiceStatusLabel(inv)!.variant}>{getInvoiceStatusLabel(inv)!.label}</Badge>
+                        ) : <Badge variant="outline">—</Badge>}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDetailInvoice(inv)} title="Chi tiết">
+                            <List className="h-3.5 w-3.5" />
+                          </Button>
+                          {inv.zipPath ? (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openPreview(inv.id)} title="Xem trước">
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : <Eye className="h-3.5 w-3.5 opacity-30 mx-1" />}
+                          {inv.xmlPath ? (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => downloadFile(inv.id, 'xml')} title="Tải XML">
+                              <FileDown className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : <FileDown className="h-3.5 w-3.5 opacity-30 mx-1" />}
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => downloadPdf(inv.id)} title="Tải PDF" disabled={!inv.zipPath}>
+                            <FileText className="h-3.5 w-3.5" />
+                          </Button>
+                          {inv.zipPath && inv.zipPath !== 'VIRTUAL_HTML' ? (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-500 hover:text-amber-600" onClick={() => downloadFile(inv.id, 'zip')} title="Tải ZIP">
+                              <FileArchive className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : <FileArchive className="h-3.5 w-3.5 opacity-30 mx-1" />}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            size={size}
-            total={total}
-            onPageChange={setPage}
-            onSizeChange={(s) => { setSize(s); setPage(0); }}
-          />
-        </div>
+          <PaginationBar page={page} totalPages={totalPages} size={size} total={total} onPageChange={setPage} onSizeChange={(s) => { setSize(s); setPage(0); }} />
+        </Card>
       ) : (
-        /* ── Download History Table ── */
-        <div className="bg-card rounded-2xl border border-border shadow-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead className="bg-bg-primary/50 border-b border-border text-text-secondary font-semibold uppercase text-xs">
-                <tr>
-                  <th className="p-4">Thời Gian</th>
-                  <th className="p-4">Doanh Nghiệp (MST)</th>
-                  <th className="p-4">Loại Quét</th>
-                  <th className="p-4">Người Quét</th>
-                  <th className="p-4 text-center">Trạng Thái</th>
-                  <th className="p-4 text-center">Số Lượng</th>
-                  <th className="p-4 text-center">Nhật Ký</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50 text-text-muted">
+        <Card>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Thời Gian</TableHead>
+                  <TableHead>MST</TableHead>
+                  <TableHead>Loại Quét</TableHead>
+                  <TableHead>Người Quét</TableHead>
+                  <TableHead className="text-center">Trạng Thái</TableHead>
+                  <TableHead className="text-center">Số Lượng</TableHead>
+                  <TableHead className="text-center">Nhật Ký</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {loading && histories.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-12 text-center text-text-muted">
-                      <div className="flex flex-col items-center justify-center space-y-2">
-                        <Loader2 className="w-8 h-8 text-accent-default animate-spin" />
-                        <span>Đang tải nhật ký từ Database...</span>
-                      </div>
-                    </td>
-                  </tr>
+                  <TableRow><TableCell colSpan={7} className="text-center py-12"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
                 ) : histories.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-text-muted">
-                      Không tìm thấy lịch sử tải nào.
-                    </td>
-                  </tr>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Không tìm thấy lịch sử tải nào.</TableCell></TableRow>
                 ) : (
-                  histories.map((h) => {
-                    const timeStr = new Date(h.downloadDate).toLocaleString('vi-VN');
-                    return (
-                      <tr key={h.id} className="hover:bg-bg-primary/30 transition border-b border-border/30">
-                        <td className="p-4 text-text-secondary">{timeStr}</td>
-                        <td className="p-4 font-mono font-semibold text-text-primary select-all">{h.taxCode}</td>
-                        <td className="p-4 text-xs font-semibold text-text-muted">
-                          {h.invoiceType === 'SELL' ? 'Bán ra (SELL)' : (h.invoiceType === 'BUY' ? 'Mua vào (BUY)' : h.invoiceType)}
-                        </td>
-                        <td className="p-4">
-                          {h.username ? (
-                            <span className="font-semibold text-text-primary text-xs bg-bg-primary px-2.5 py-1 border border-border rounded-lg">
-                              {h.username}
-                            </span>
-                          ) : (
-                            <span className="text-text-muted italic text-xs">Hệ thống (Cron)</span>
-                          )}
-                        </td>
-                        <td className="p-4 text-center">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${h.status === 'SUCCESS'
-                            ? 'bg-success-light text-success-default border-success-default/20'
-                            : (h.status === 'PARTIAL' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-danger-light text-danger-default border-danger-default/20')
-                            }`}>
-                            {h.status === 'SUCCESS' ? 'Thành công' : (h.status === 'PARTIAL' ? 'Một phần' : 'Thất bại')}
-                          </span>
-                        </td>
-                        <td className="p-4 text-center font-bold text-text-primary">{h.countDownloaded} HĐ</td>
-                        <td className="p-4 text-center">
-                          <button
-                            onClick={() => setSelectedHistory(h)}
-                            className="p-1.5 bg-bg-primary border border-border hover:bg-bg-tertiary text-accent-default hover:text-accent-default rounded-lg cursor-pointer transition flex items-center justify-center mx-auto"
-                            title="Xem nhật ký chi tiết"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                  histories.map(h => (
+                    <TableRow key={h.id}>
+                      <TableCell className="text-xs">{new Date(h.downloadDate).toLocaleString('vi-VN')}</TableCell>
+                      <TableCell className="font-mono font-semibold select-all">{h.taxCode}</TableCell>
+                      <TableCell className="text-xs">{h.invoiceType === 'SELL' ? 'Bán ra' : h.invoiceType === 'BUY' ? 'Mua vào' : h.invoiceType}</TableCell>
+                      <TableCell><Badge variant="secondary">{h.username || 'Cron'}</Badge></TableCell>
+                      <TableCell className="text-center">{statusBadge(h.status)}</TableCell>
+                      <TableCell className="text-center font-bold">{h.countDownloaded}</TableCell>
+                      <TableCell className="text-center">
+                        <Button variant="ghost" size="icon" onClick={() => setSelectedHistory(h)}><FileText className="h-4 w-4" /></Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            size={size}
-            total={total}
-            onPageChange={setPage}
-            onSizeChange={(s) => { setSize(s); setPage(0); }}
-          />
-        </div>
+          <PaginationBar page={page} totalPages={totalPages} size={size} total={total} onPageChange={setPage} onSizeChange={(s) => { setSize(s); setPage(0); }} />
+        </Card>
       )}
 
-      {/* Invoice Detail (Items) Modal */}
-      {detailInvoice && (
-        <div className="fixed inset-0 bg-card/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-4xl bg-bg-primary border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="flex justify-between items-center px-6 py-5 bg-card/80 border-b border-border">
-              <h2 className="text-md font-bold text-text-primary flex items-center space-x-2">
-                <List className="w-5 h-5 text-accent-default" />
-                <span>Chi Tiết Hàng Hóa — HĐ {String(detailInvoice.invoiceNumber).padStart(8, '0')}</span>
-              </h2>
-              <button
-                onClick={() => setDetailInvoice(null)}
-                className="text-text-secondary hover:text-text-primary p-1 bg-bg-tertiary hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* Invoice Detail Dialog */}
+      <Dialog open={!!detailInvoice} onOpenChange={(open) => !open && setDetailInvoice(null)}>
+        <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <List className="h-5 w-5" />
+              Chi Tiết Hàng Hóa — HĐ {detailInvoice ? formatInvoiceNumber(detailInvoice.invoiceNumber) : ''}
+            </DialogTitle>
+          </DialogHeader>
+          {detailInvoice && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs bg-muted/30 rounded-lg p-4">
+                <div><span className="text-muted-foreground">Ngày lập:</span> <span className="font-semibold">{new Date(detailInvoice.invoiceDate).toLocaleDateString('vi-VN')}</span></div>
+                <div><span className="text-muted-foreground">Loại:</span> {invoiceTypeBadge(detailInvoice.type)}</div>
+                <div className="truncate"><span className="text-muted-foreground">Bên bán:</span> {detailInvoice.sellerName}</div>
+                <div className="truncate"><span className="text-muted-foreground">Bên mua:</span> {detailInvoice.buyerName}</div>
+              </div>
 
-            {/* Invoice summary */}
-            <div className="px-6 py-4 bg-card/50 border-b border-border grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-              <div>
-                <span className="text-text-muted">Ngày lập:</span>{' '}
-                <span className="text-text-secondary font-semibold">{new Date(detailInvoice.invoiceDate).toLocaleDateString('vi-VN')}</span>
-              </div>
-              <div>
-                <span className="text-text-muted">Loại:</span>{' '}
-                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${detailInvoice.type === 'SELL' ? 'bg-accent-light-default text-accent-default' : 'bg-amber-900/50 text-amber-300'}`}>
-                  {detailInvoice.type === 'SELL' ? 'Bán ra' : 'Mua vào'}
-                </span>
-              </div>
-              <div className="truncate">
-                <span className="text-text-muted">Bên bán:</span>{' '}
-                <span className="text-text-secondary font-semibold" title={detailInvoice.sellerName}>{detailInvoice.sellerName}</span>
-              </div>
-              <div className="truncate">
-                <span className="text-text-muted">Bên mua:</span>{' '}
-                <span className="text-text-secondary font-semibold" title={detailInvoice.buyerName}>{detailInvoice.buyerName}</span>
-              </div>
-            </div>
-
-            {/* Items table */}
-            <div className="flex-1 overflow-y-auto p-6">
               {detailInvoice.items && detailInvoice.items.length > 0 ? (
-                <table className="w-full text-left border-collapse text-sm">
-                  <thead className="bg-bg-primary/50 border-b border-border text-text-secondary font-semibold uppercase text-xs sticky top-0">
-                    <tr>
-                      <th className="p-3 w-12 text-center">STT</th>
-                      <th className="p-3">Tên hàng hóa, dịch vụ</th>
-                      <th className="p-3 w-16 text-center">ĐVT</th>
-                      <th className="p-3 w-20 text-right">Số lượng</th>
-                      <th className="p-3 w-28 text-right">Đơn giá</th>
-                      <th className="p-3 w-28 text-right">Thành tiền</th>
-                      <th className="p-3 w-18 text-center">Thuế suất</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/50 text-text-muted">
-                    {detailInvoice.items.map((item) => (
-                      <tr key={item.id} className="hover:bg-bg-primary/30 transition">
-                        <td className="p-3 text-center text-text-muted">{item.lineNumber || '-'}</td>
-                        <td className="p-3 font-medium text-text-primary max-w-[300px]">
-                          <span title={item.name}>{item.name}</span>
-                        </td>
-                        <td className="p-3 text-center text-text-secondary">{item.unit || '-'}</td>
-                        <td className="p-3 text-right text-text-secondary">
-                          {item.quantity != null ? Number(item.quantity).toLocaleString('vi-VN') : '-'}
-                        </td>
-                        <td className="p-3 text-right text-text-secondary">
-                          {item.price != null ? Number(item.price).toLocaleString('vi-VN') : '-'}
-                        </td>
-                        <td className="p-3 text-right font-semibold text-success-default">
-                          {Number(item.amount).toLocaleString('vi-VN')}
-                        </td>
-                        <td className="p-3 text-center">
-                          <span className="px-2 py-0.5 rounded text-xs font-mono bg-bg-primary text-text-secondary border border-border">
-                            {item.taxRate || '0%'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12 text-center">STT</TableHead>
+                        <TableHead>Tên hàng hóa</TableHead>
+                        <TableHead className="w-16 text-center">ĐVT</TableHead>
+                        <TableHead className="w-20 text-right">SL</TableHead>
+                        <TableHead className="w-28 text-right">Đơn giá</TableHead>
+                        <TableHead className="w-28 text-right">Thành tiền</TableHead>
+                        <TableHead className="w-18 text-center">Thuế suất</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {detailInvoice.items.map(item => (
+                        <TableRow key={item.id}>
+                          <TableCell className="text-center text-muted-foreground">{item.lineNumber || '-'}</TableCell>
+                          <TableCell className="max-w-[300px]">{item.name}</TableCell>
+                          <TableCell className="text-center">{item.unit || '-'}</TableCell>
+                          <TableCell className="text-right">{item.quantity != null ? Number(item.quantity).toLocaleString('vi-VN') : '-'}</TableCell>
+                          <TableCell className="text-right">{item.price != null ? Number(item.price).toLocaleString('vi-VN') : '-'}</TableCell>
+                          <TableCell className="text-right font-semibold">{Number(item.amount).toLocaleString('vi-VN')}</TableCell>
+                          <TableCell className="text-center"><Badge variant="outline">{item.taxRate || '0%'}</Badge></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               ) : (
-                <div className="text-center py-12 text-text-muted">
+                <div className="text-center py-12 text-muted-foreground">
                   <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                  <p>Không có dữ liệu hàng hóa cho hóa đơn này.</p>
+                  <p>Không có dữ liệu hàng hóa.</p>
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
 
-      {/* Log Detail Modal */}
-      {selectedHistory && (
-        <div className="fixed inset-0 bg-card/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-3xl bg-bg-primary border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="flex justify-between items-center px-6 py-5 bg-card/80 border-b border-border">
-              <h2 className="text-md font-bold text-text-primary flex items-center space-x-2">
-                <ShieldAlert className="w-5 h-5 text-accent-default" />
-                <span>Chi Tiết Nhật Ký Quét Hóa Đơn</span>
-              </h2>
-              <button
-                onClick={() => setSelectedHistory(null)}
-                className="text-text-secondary hover:text-text-primary p-1 bg-bg-tertiary hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 flex-1 overflow-hidden flex flex-col space-y-6 bg-gradient-to-b from-bg-primary to-bg-tertiary/20">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-card p-4 rounded-2xl border border-border flex flex-col shadow-sm">
-                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Thời gian</span>
-                  <span className="font-bold text-text-primary text-sm">{new Date(selectedHistory.downloadDate).toLocaleTimeString('vi-VN')}</span>
-                  <span className="text-text-secondary text-xs">{new Date(selectedHistory.downloadDate).toLocaleDateString('vi-VN')}</span>
+      {/* Log Detail Dialog */}
+      <Dialog open={!!selectedHistory} onOpenChange={(open) => !open && setSelectedHistory(null)}>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5" />
+              Chi Tiết Nhật Ký Quét Hóa Đơn
+            </DialogTitle>
+          </DialogHeader>
+          {selectedHistory && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-muted/30 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase">Thời gian</p>
+                  <p className="font-bold text-sm">{new Date(selectedHistory.downloadDate).toLocaleTimeString('vi-VN')}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(selectedHistory.downloadDate).toLocaleDateString('vi-VN')}</p>
                 </div>
-                <div className="bg-card p-4 rounded-2xl border border-border flex flex-col shadow-sm">
-                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Mã Số Thuế</span>
-                  <span className="font-bold text-text-primary text-sm select-all">{selectedHistory.taxCode}</span>
+                <div className="bg-muted/30 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase">MST</p>
+                  <p className="font-bold text-sm select-all">{selectedHistory.taxCode}</p>
                 </div>
-                <div className="bg-card p-4 rounded-2xl border border-border flex flex-col shadow-sm">
-                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Người Quét</span>
-                  <span className="font-bold text-text-primary text-sm">{selectedHistory.username || 'Hệ Thống (Cron)'}</span>
+                <div className="bg-muted/30 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase">Người Quét</p>
+                  <p className="font-bold text-sm">{selectedHistory.username || 'Hệ thống (Cron)'}</p>
                 </div>
-                <div className="bg-card p-4 rounded-2xl border border-border flex flex-col shadow-sm">
-                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Thành Công</span>
-                  <span className="font-bold text-success-default text-lg leading-tight">{selectedHistory.countDownloaded} <span className="text-xs font-normal text-text-secondary">Hóa đơn</span></span>
+                <div className="bg-muted/30 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase">Thành Công</p>
+                  <p className="font-bold text-lg text-green-600">{selectedHistory.countDownloaded} <span className="text-xs font-normal text-muted-foreground">HĐ</span></p>
                 </div>
               </div>
 
-              {/* Detail Logs */}
-              <div className="flex-1 overflow-hidden flex flex-col bg-card rounded-2xl border border-border shadow-sm">
-                <div className="px-5 py-3 border-b border-border bg-bg-tertiary/50">
-                  <span className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center space-x-2">
-                    <FileText className="w-4 h-4 text-text-muted" />
-                    <span>Lịch sử chi tiết & Lỗi hệ thống</span>
-                  </span>
+              <div className="rounded-lg border">
+                <div className="px-4 py-3 border-b bg-muted/30">
+                  <p className="text-xs font-semibold uppercase tracking-wide">Lịch sử chi tiết</p>
                 </div>
-                <div className="p-4 overflow-y-auto max-h-[350px]">
+                <div className="p-4 max-h-[350px] overflow-y-auto">
                   {selectedHistory.log ? (
-                    <ul className="space-y-3">
-                      {selectedHistory.log.split('\n').filter(line => line.trim() !== '').map((line, idx) => {
+                    <ul className="space-y-2">
+                      {selectedHistory.log.split('\n').filter(l => l.trim()).map((line, idx) => {
                         const isError = line.toLowerCase().includes('lỗi') || line.toLowerCase().includes('thất bại') || line.toLowerCase().includes('error');
                         const isBuy = line.includes('[BUY]');
-                        const isSell = line.includes('[SELL]');
-                        const typeTag = isBuy ? 'Mua vào' : (isSell ? 'Bán ra' : 'Hệ thống');
-
+                        const typeTag = isBuy ? 'Mua vào' : (line.includes('[SELL]') ? 'Bán ra' : 'Hệ thống');
                         return (
-                          <li key={idx} className={`p-3 rounded-xl border flex items-start space-x-3 ${isError ? 'bg-danger-light/30 border-danger-default/20' : 'bg-bg-primary border-border'}`}>
-                            <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${isError ? 'bg-danger-default shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-success-default'}`} />
+                          <li key={idx} className={`p-3 rounded-lg border flex items-start gap-3 ${isError ? 'bg-destructive/5 border-destructive/20' : 'bg-muted/30'}`}>
+                            <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${isError ? 'bg-destructive' : 'bg-green-500'}`} />
                             <div className="flex-1">
-                              <div className="flex items-center space-x-2 mb-1">
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted uppercase tracking-wider">{typeTag}</span>
-                              </div>
-                              <span className={`text-sm font-medium ${isError ? 'text-danger-default' : 'text-text-secondary'}`}>
+                              <Badge variant="outline" className="text-[10px] mb-1">{typeTag}</Badge>
+                              <p className={`text-sm ${isError ? 'text-destructive font-medium' : 'text-foreground'}`}>
                                 {line.replace(/\[(BUY|SELL)\]\s*/, '')}
-                              </span>
+                              </p>
                             </div>
                           </li>
                         );
                       })}
                     </ul>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-center text-success-default">
-                      <div className="w-12 h-12 rounded-full bg-success-light flex items-center justify-center mb-3">
-                        <svg className="w-6 h-6 text-success-default" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    <div className="flex flex-col items-center py-10 text-center text-green-600">
+                      <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mb-3">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                       </div>
-                      <p className="font-semibold">Tuyệt vời! Không ghi nhận bất kỳ lỗi nào trong phiên tải này.</p>
-                      <p className="text-xs text-text-muted mt-1">Toàn bộ quá trình diễn ra trơn tru.</p>
+                      <p className="font-semibold">Không ghi nhận lỗi nào!</p>
                     </div>
                   )}
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
 
+// ── Pagination ──
+function PaginationBar({ page, totalPages, size, total, onPageChange, onSizeChange }: {
+  page: number; totalPages: number; size: number; total: number;
+  onPageChange: (p: number) => void; onSizeChange: (s: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 border-t text-sm">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <span className="hidden sm:inline">Tổng:</span>
+        <span className="font-semibold text-foreground">{total}</span>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-muted-foreground text-xs">Số dòng:</span>
+        <Select value={String(size)} onValueChange={(v) => onSizeChange(Number(v))}>
+          <SelectTrigger className="w-20 h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PAGE_SIZES.map(s => <SelectItem key={s} value={String(s)}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => onPageChange(page - 1)} disabled={page <= 0}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-xs whitespace-nowrap px-1">
+          Trang <span className="font-semibold">{totalPages > 0 ? page + 1 : 0}</span> / <span className="font-semibold">{totalPages}</span>
+        </span>
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages - 1}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }

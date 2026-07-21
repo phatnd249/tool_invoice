@@ -43,3 +43,4 @@ backend/public/
 *.zip
 
 temp/
+bun.lock

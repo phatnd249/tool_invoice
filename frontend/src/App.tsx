@@ -12,11 +12,32 @@ import {
   LogOut,
   MessageSquare,
   Search,
-  X,
   Sun,
   Moon,
+  Loader2,
 } from 'lucide-react';
 import { useTheme } from './context/ThemeContext';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 import InvoiceDownloader from './components/InvoiceDownloader';
 import InvoiceHistory from './components/InvoiceHistory';
 import SchedulePanel from './components/SchedulePanel';
@@ -49,7 +70,7 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<Tab>('download');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [authError, setAuthError] = useState('');
 
   // Feedback states
@@ -75,8 +96,6 @@ export default function App() {
           const status = error.response.status;
           const errMsg = error.response.data?.error || '';
 
-          // Only logout on actual auth errors (JWT expired / missing / insufficient permissions).
-          // Errors from third-party services (GDT login, captcha) should NOT trigger logout.
           const isRealAuthError =
             (status === 401 || status === 403) &&
             (errMsg.includes('Yêu cầu xác thực') ||
@@ -130,13 +149,16 @@ export default function App() {
         content: feedbackContent.trim(),
       });
       setFeedbackSuccess(true);
+      toast.success('Cảm ơn đóng góp của bạn!');
       setFeedbackContent('');
       setTimeout(() => {
         setFeedbackModalOpen(false);
         setFeedbackSuccess(false);
       }, 1500);
     } catch (err: any) {
-      setFeedbackError(err.response?.data?.error || 'Không thể gửi ý kiến góp ý lúc này.');
+      const msg = err.response?.data?.error || 'Không thể gửi ý kiến góp ý lúc này.';
+      setFeedbackError(msg);
+      toast.error(msg);
     } finally {
       setSubmittingFeedback(false);
     }
@@ -144,22 +166,14 @@ export default function App() {
 
   const getPageTitle = () => {
     switch (activeTab) {
-      case 'download':
-        return 'Tải Hoá Đơn Mới';
-      case 'history':
-        return 'Lịch Sử Hoá Đơn Đã Tải';
-      case 'schedules':
-        return 'Lập Lịch Tải Định Kỳ';
-      case 'companies':
-        return 'Quản Lý Doanh Nghiệp';
-      case 'config':
-        return 'Cấu Hình API Key';
-      case 'users':
-        return 'Quản Lý Thành Viên';
-      case 'feedbacks':
-        return 'Ý Kiến Đóng Góp';
-      case 'tax-lookup':
-        return 'Tra Cứu Mã Số Thuế';
+      case 'download': return 'Tải Hoá Đơn Mới';
+      case 'history': return 'Lịch Sử Hoá Đơn Đã Tải';
+      case 'schedules': return 'Lập Lịch Tải Định Kỳ';
+      case 'companies': return 'Quản Lý Doanh Nghiệp';
+      case 'config': return 'Cấu Hình API Key';
+      case 'users': return 'Quản Lý Thành Viên';
+      case 'feedbacks': return 'Ý Kiến Đóng Góp';
+      case 'tax-lookup': return 'Tra Cứu Mã Số Thuế';
     }
   };
 
@@ -170,7 +184,6 @@ export default function App() {
 
   const isAdmin = user.role === 'ADMIN';
 
-  // Sidebar navigation structure with groups
   const sidebarGroups = [
     {
       label: 'HOÁ ĐƠN',
@@ -199,130 +212,133 @@ export default function App() {
     },
   ];
 
-  return (
-    <div className="bg-bg-primary text-text-primary min-h-screen flex w-full relative">
-      {/* Sidebar */}
-      <aside
-        className={`${sidebarCollapsed ? 'w-20' : 'w-64'
-          } h-screen sticky top-0 overflow-y-auto bg-sidebar border-r border-border flex flex-col justify-between shrink-0 transition-all duration-300`}
-      >
-        <div>
-          <div className="h-16 flex items-center px-6 border-b border-white/10 bg-sidebar">
-            <FileText className="text-sidebar-brand text-2xl w-8 h-8 mr-3 animate-pulse" />
-            {!sidebarCollapsed && (
-              <span className="text-lg font-bold text-white transition duration-200">
-                Invoice Pro
-              </span>
-            )}
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-3 px-6 py-4">
+        <FileText className="h-6 w-6 text-primary shrink-0" />
+        <span className="text-lg font-bold">Invoice Pro</span>
+      </div>
+      <Separator />
+      <nav className="flex-1 p-4 space-y-1">
+        {sidebarGroups.map(group => {
+          const visibleItems = group.adminOnly && !isAdmin ? [] : group.items;
+          if (visibleItems.length === 0) return null;
+          return (
+            <div key={group.label} className="mb-3">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-1.5">
+                {group.label}
+              </p>
+              {visibleItems.map(item => (
+                <Button
+                  key={item.id}
+                  variant={activeTab === item.id ? 'secondary' : 'ghost'}
+                  className="w-full justify-start gap-3 mb-0.5"
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setSidebarOpen(false);
+                  }}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </Button>
+              ))}
+            </div>
+          );
+        })}
+      </nav>
+      <Separator />
+      <div className="p-4 space-y-2">
+        <div className="flex items-center gap-3 px-3 py-2">
+          <Avatar className="h-8 w-8">
+            <AvatarFallback className="text-xs">
+              {user.username.substring(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{user.username}</p>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+              {user.role === 'ADMIN' ? 'Admin' : 'Staff'}
+            </Badge>
           </div>
-                    <nav className="p-4 space-y-2">
-            {sidebarGroups.map(group => {
-              // Hide entire group if admin-only and user is not admin
-              const visibleItems = group.adminOnly && !isAdmin ? [] : group.items;
-              if (visibleItems.length === 0) return null;
-
-              return (
-                <div key={group.label} className="mb-2">
-                  {!sidebarCollapsed && (
-                    <p className="text-[10px] font-bold text-sidebar-text-muted uppercase tracking-widest px-3 mb-2 mt-2">
-                      {group.label}
-                    </p>
-                  )}
-                  {visibleItems.map(item => (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer mb-1 ${
-                        activeTab === item.id
-                          ? 'bg-white/20 text-white shadow-md'
-                          : 'text-sidebar-text-muted hover:bg-white/10 hover:text-sidebar-text'
-                      }`}
-                    >
-                      <item.icon className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-                      {!sidebarCollapsed && <span>{item.label}</span>}
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
-          </nav>
-
-
         </div>
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={() => handleLogout()}
+        >
+          <LogOut className="h-4 w-4" />
+          Đăng Xuất
+        </Button>
+      </div>
+    </div>
+  );
 
-        {/* User Info and Logout Section */}
-        <div className="border-t border-white/10 p-4 space-y-2">
-          {!sidebarCollapsed && (
-            <div className="flex items-center space-x-3 px-3 py-2 bg-white/10 rounded-xl mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center font-bold text-white text-sm">
-                {user.username.substring(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs font-bold text-white truncate">{user.username}</p>
-                <p className="text-[10px] text-blue-200 font-medium tracking-wide uppercase mt-0.5">
-                  {user.role === 'ADMIN' ? 'Quản trị viên' : 'Nhân viên'}
-                </p>
-              </div>
-            </div>
-          )}
+  return (
+    <div className="min-h-screen flex w-full bg-background text-foreground">
+      <Toaster richColors />
 
-          <button
-            onClick={() => handleLogout()}
-            className="w-full flex items-center px-4 py-3 text-sm font-medium text-red-300 hover:bg-white/10 hover:text-red-200 rounded-xl transition-colors duration-200 cursor-pointer"
-          >
-            <LogOut className={`w-5 h-5 ${sidebarCollapsed ? 'mx-auto' : 'mr-3'}`} />
-            {!sidebarCollapsed && <span>Đăng Xuất</span>}
-          </button>
-
-          {!sidebarCollapsed && (
-            <div className="text-[10px] text-sidebar-text-muted text-center pt-2">
-              v1.0.0 &copy; 2026 Invoice Pro
-            </div>
-          )}
-        </div>
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex lg:flex-col w-64 h-screen sticky top-0 border-r bg-sidebar text-sidebar-foreground overflow-y-auto shrink-0">
+        <SidebarContent />
       </aside>
 
+      {/* Mobile Sidebar (Sheet) */}
+      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetTrigger asChild>
+          <Button variant="ghost" size="icon" className="lg:hidden">
+            <Menu className="h-5 w-5" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="p-0 w-64">
+          <SidebarContent />
+        </SheetContent>
+      </Sheet>
+
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 font-sans">
+      <main className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-16 border-b border-border bg-header-bg backdrop-blur-sm flex items-center justify-between px-8 shrink-0">
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="text-text-secondary hover:text-text-primary focus:outline-none transition duration-150 p-2 hover:bg-bg-tertiary rounded-lg cursor-pointer"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <h1 className="text-xl font-bold text-text-primary">{getPageTitle()}</h1>
+        <header className="h-16 border-b bg-background/80 backdrop-blur-sm flex items-center justify-between px-4 lg:px-8 shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Mobile menu trigger */}
+            <div className="lg:hidden">
+              <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
+                <Menu className="h-5 w-5" />
+              </Button>
+            </div>
+            <h1 className="text-xl font-bold">{getPageTitle()}</h1>
           </div>
-          <div className="flex items-center space-x-4">
-            <button
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={toggleTheme}
-              className="text-text-secondary hover:text-text-primary p-2 hover:bg-bg-tertiary rounded-lg transition-all duration-200 cursor-pointer"
               title={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
             >
-              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-            <button
+              {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setFeedbackModalOpen(true);
                 setFeedbackContent('');
                 setFeedbackError('');
                 setFeedbackSuccess(false);
               }}
-              className="text-xs font-semibold text-accent-default hover:text-accent-default bg-accent-hover-default/10 hover:bg-accent-hover-default/20 border border-accent-default/20 px-3.5 py-1.5 rounded-xl cursor-pointer transition-all duration-150"
+              className="gap-1.5"
             >
+              <MessageSquare className="h-4 w-4" />
               Góp ý
-            </button>
-            <div className="flex items-center space-x-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-success-default animate-ping"></span>
-              <span className="text-xs text-text-secondary font-medium">Hệ thống đang hoạt động</span>
+            </Button>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs text-muted-foreground hidden sm:inline">Hệ thống đang hoạt động</span>
             </div>
           </div>
         </header>
 
         {/* Content View */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 lg:p-8">
           {activeTab === 'download' && <InvoiceDownloader />}
           {activeTab === 'history' && <InvoiceHistory />}
           {activeTab === 'schedules' && <SchedulePanel />}
@@ -334,74 +350,67 @@ export default function App() {
         </div>
       </main>
 
-      {/* Feedback Submission Modal */}
-      {feedbackModalOpen && (
-        <div className="fixed inset-0 bg-overlay backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-lg bg-card border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center px-6 py-5 bg-bg-secondary/80 border-b border-border">
-              <h2 className="text-md font-bold text-text-primary flex items-center space-x-2">
-                <MessageSquare className="w-5 h-5 text-accent-default" />
-                <span>Gửi Ý Kiến Đóng Góp</span>
-              </h2>
-              <button
-                onClick={() => setFeedbackModalOpen(false)}
-                className="text-text-secondary hover:text-text-primary p-1 hover:bg-bg-tertiary rounded-xl transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleSendFeedback} className="p-6 space-y-4">
+      {/* Feedback Submission Dialog */}
+      <Dialog open={feedbackModalOpen} onOpenChange={setFeedbackModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" />
+              Gửi Ý Kiến Đóng Góp
+            </DialogTitle>
+            <DialogDescription>
+              Đóng góp ý kiến của bạn để cải thiện ứng dụng.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSendFeedback}>
+            <div className="space-y-4 py-2">
               {feedbackError && (
-                <div className="bg-error-bg border border-error-border text-danger text-sm px-4 py-3 rounded-xl">
+                <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm px-4 py-3 rounded-lg">
                   {feedbackError}
                 </div>
               )}
               {feedbackSuccess && (
-                <div className="bg-success-bg border border-success-border text-success text-sm px-4 py-3 rounded-xl">
+                <div className="bg-green-500/10 border border-green-500/20 text-green-600 text-sm px-4 py-3 rounded-lg">
                   Cảm ơn đóng góp của bạn. Ý kiến đã được gửi thành công!
                 </div>
               )}
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-text-secondary">Nội dung góp ý của bạn</label>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Nội dung góp ý</label>
                 <textarea
                   required
                   rows={4}
                   value={feedbackContent}
                   onChange={(e) => setFeedbackContent(e.target.value)}
                   placeholder="Nhập ý kiến đóng góp, phản hồi hoặc báo lỗi của bạn tại đây..."
-                  className="w-full bg-input border border-border rounded-2xl px-4 py-3 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent transition-colors duration-150 resize-none leading-relaxed"
+                  className="w-full bg-background border border-input rounded-lg px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none leading-relaxed"
                 />
               </div>
-              <div className="flex justify-end space-x-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setFeedbackModalOpen(false)}
-                  className="bg-bg-tertiary hover:bg-bg-tertiary text-text-secondary px-4 py-2 rounded-xl transition duration-150 cursor-pointer text-xs font-semibold"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingFeedback}
-                  className="bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default text-white px-4 py-2 rounded-xl transition duration-150 cursor-pointer text-xs font-semibold shadow-lg shadow-accent-default/10 flex items-center justify-center space-x-1.5"
-                >
-                  {submittingFeedback ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      <span>Đang gửi...</span>
-                    </>
-                  ) : (
-                    <span>Gửi Đóng Góp</span>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFeedbackModalOpen(false)}
+              >
+                Hủy
+              </Button>
+              <Button
+                type="submit"
+                disabled={submittingFeedback}
+              >
+                {submittingFeedback ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Đang gửi...
+                  </>
+                ) : (
+                  'Gửi Đóng Góp'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
