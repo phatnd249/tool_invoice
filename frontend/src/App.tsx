@@ -239,12 +239,12 @@ export default function App() {
 
           {/* Shadcn App Sidebar */}
           <Sidebar collapsible="icon">
-            <SidebarHeader className="border-b border-sidebar-border">
-              <div className="flex items-center gap-3 px-3 py-2 overflow-hidden">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <SidebarHeader className="border-b border-sidebar-border py-2">
+              <div className="flex items-center gap-3 px-3 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center overflow-hidden transition-all duration-200">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/95 text-primary-foreground shadow-sm shadow-primary/20 shrink-0">
                   <FileText className="h-4 w-4 shrink-0" />
                 </div>
-                <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden animate-in fade-in duration-200">
                   <span className="truncate font-semibold text-foreground">Invoice Pro</span>
                   <span className="truncate text-xs text-muted-foreground">Invoice Management</span>
                 </div>
