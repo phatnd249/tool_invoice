@@ -2,6 +2,9 @@ import AdmZip from 'adm-zip';
 import { XMLParser } from 'fast-xml-parser';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createLogger } from '../logger/index.js';
+
+const log = createLogger('ParserService');
 
 export interface ParsedInvoiceItem {
   lineNumber?: string;
@@ -44,6 +47,8 @@ export interface ParsedInvoice {
   totalBeforeTax: number;
   taxAmount: number;
   totalAmount: number;
+  discountAmount?: number;
+  feeAmount?: number;
   totalAmountInWords?: string;
 
   pdfPath?: string;
@@ -220,6 +225,8 @@ export class ParserService {
       totalBeforeTax: this.toNumber(this.findKeyRecursive(tToan, 'TgTCThue')),
       taxAmount: this.toNumber(this.findKeyRecursive(tToan, 'TgTThue')),
       totalAmount: this.toNumber(this.findKeyRecursive(tToan, 'TgTTTBSo')),
+      discountAmount: this.toNumber(this.findKeyRecursive(tToan, 'TTCKTmai')),
+      feeAmount: this.toNumber(this.findKeyRecursive(tToan, 'TgTPhi')),
       totalAmountInWords: this.getSafeText(this.findKeyRecursive(tToan, 'TgTTTBChu')) || undefined,
 
       // Invoice status from GDT
@@ -262,7 +269,7 @@ export class ParserService {
 
       return this.parseXmlContent(xmlContent, targetXmlName);
     } catch (error: any) {
-      console.error(`[ParserService] Error unzipping or parsing XML: ${error.message}`);
+      log.error({ err: error.message, zipPath }, 'Error unzipping or parsing XML');
       return null;
     }
   }

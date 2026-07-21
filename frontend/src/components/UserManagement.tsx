@@ -1,14 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Users, UserPlus, Shield, Trash2, Lock, Unlock, Edit2, X, Check, CheckSquare, Square } from 'lucide-react';
+import { Users, UserPlus, Shield, Trash2, Lock, Unlock, Edit2, X, Check, Loader2, CheckSquare, Square } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { toast } from 'sonner';
 import { API_BASE_URL } from '../config';
 
 interface UserCompany {
   companyId: number;
-  company: {
-    name: string;
-    taxCode: string;
-  };
+  company: { name: string; taxCode: string };
 }
 
 interface User {
@@ -31,7 +58,6 @@ export default function UserManagement() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Form states
   const [modalOpen, setModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -56,15 +82,13 @@ export default function UserManagement() {
       setUsers(usersRes.data);
       setCompanies(companiesRes.data);
     } catch (err) {
-      console.error('Failed to load user management data:', err);
+      console.error('Failed to load data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const openAddModal = () => {
     setIsEditMode(false);
@@ -83,7 +107,7 @@ export default function UserManagement() {
     setIsEditMode(true);
     setSelectedUserId(user.id);
     setUsername(user.username);
-    setPassword(''); // Leave blank to keep existing
+    setPassword('');
     setRole(user.role);
     setIsActive(user.isActive);
     setAssignedCompanyIds(user.companies.map(uc => uc.companyId));
@@ -93,10 +117,8 @@ export default function UserManagement() {
   };
 
   const handleToggleCompany = (companyId: number) => {
-    setAssignedCompanyIds(prev => 
-      prev.includes(companyId) 
-        ? prev.filter(id => id !== companyId) 
-        : [...prev, companyId]
+    setAssignedCompanyIds(prev =>
+      prev.includes(companyId) ? prev.filter(id => id !== companyId) : [...prev, companyId]
     );
   };
 
@@ -110,40 +132,32 @@ export default function UserManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) {
-      setFormError('Vui lòng nhập tên đăng nhập.');
-      return;
-    }
-    if (!isEditMode && !password) {
-      setFormError('Vui lòng nhập mật khẩu cho tài khoản mới.');
-      return;
-    }
+    if (!username.trim()) { setFormError('Vui lòng nhập tên đăng nhập.'); return; }
+    if (!isEditMode && !password) { setFormError('Vui lòng nhập mật khẩu cho tài khoản mới.'); return; }
 
     setSubmitting(true);
     setFormError('');
     setFormSuccess('');
 
     try {
-      const payload = {
+      const payload: any = {
         username: username.trim(),
         role,
         isActive,
-        companyIds: role === 'ADMIN' ? [] : assignedCompanyIds, // Admin doesn't need explicit assignments
-        ...(password ? { password } : {}),
+        companyIds: role === 'ADMIN' ? [] : assignedCompanyIds,
       };
+      if (password) payload.password = password;
 
       if (isEditMode && selectedUserId) {
         await axios.put(`${API_BASE_URL}/api/users/${selectedUserId}`, payload);
-        setFormSuccess('Cập nhật tài khoản thành công!');
+        toast.success('Cập nhật tài khoản thành công!');
       } else {
         await axios.post(`${API_BASE_URL}/api/users`, payload);
-        setFormSuccess('Tạo tài khoản mới thành công!');
+        toast.success('Tạo tài khoản mới thành công!');
       }
 
       await fetchData();
-      setTimeout(() => {
-        setModalOpen(false);
-      }, 1500);
+      setModalOpen(false);
     } catch (err: any) {
       setFormError(err.response?.data?.error || 'Đã xảy ra lỗi khi lưu thông tin.');
     } finally {
@@ -152,278 +166,218 @@ export default function UserManagement() {
   };
 
   const handleToggleActive = async (user: User) => {
-    const nextActive = !user.isActive;
     try {
-      await axios.put(`${API_BASE_URL}/api/users/${user.id}`, {
-        isActive: nextActive,
-      });
-      setUsers(prev => 
-        prev.map(u => u.id === user.id ? { ...u, isActive: nextActive } : u)
-      );
+      await axios.put(`${API_BASE_URL}/api/users/${user.id}`, { isActive: !user.isActive });
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isActive: !user.isActive } : u));
+      toast.success(user.isActive ? 'Đã khóa tài khoản' : 'Đã mở khóa tài khoản');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Không thể thay đổi trạng thái tài khoản.');
+      toast.error(err.response?.data?.error || 'Không thể thay đổi trạng thái tài khoản.');
     }
   };
 
   const handleDelete = async (user: User) => {
-    if (!confirm(`Bạn có chắc chắn muốn xóa tài khoản "${user.username}"?`)) return;
-
     try {
       await axios.delete(`${API_BASE_URL}/api/users/${user.id}`);
       setUsers(prev => prev.filter(u => u.id !== user.id));
+      toast.success(`Đã xóa tài khoản "${user.username}"`);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Không thể xóa tài khoản.');
+      toast.error(err.response?.data?.error || 'Không thể xóa tài khoản.');
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header and Actions */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card p-6 rounded-2xl border border-border shadow-xl">
-        <div className="flex items-center space-x-3">
-          <div className="p-3 bg-accent-hover-default/10 rounded-2xl border border-accent-default/20 text-accent-default">
-            <Users className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-text-primary">Quản Lý Thành Viên</h1>
-            <p className="text-text-secondary text-xs mt-0.5">Thêm, sửa đổi quyền truy cập và quản lý tài khoản người dùng</p>
-          </div>
-        </div>
-        <button
-          onClick={openAddModal}
-          className="bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default text-white font-semibold px-5 py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-accent-default/10 flex items-center space-x-2 cursor-pointer text-sm"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Thêm Thành Viên</span>
-        </button>
-      </div>
-
-      {/* Users List Grid */}
-      <div className="bg-card rounded-2xl border border-border shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-border bg-bg-primary/50 text-xs font-semibold text-text-secondary uppercase tracking-wider">
-                <th className="px-6 py-4">Tên tài khoản</th>
-                <th className="px-6 py-4">Vai trò</th>
-                <th className="px-6 py-4">Trạng thái</th>
-                <th className="px-6 py-4">Doanh nghiệp gán</th>
-                <th className="px-6 py-4">Ngày tạo</th>
-                <th className="px-6 py-4 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50 text-sm text-text-secondary">
-              {loading && users.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-8 text-text-muted">
-                    Đang tải danh sách thành viên...
-                  </td>
-                </tr>
-              ) : users.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-8 text-text-muted">
-                    Chưa có thành viên nào được tạo.
-                  </td>
-                </tr>
-              ) : (
-                users.map((user) => (
-                  <tr key={user.id} className="hover:bg-bg-primary/30 transition-colors duration-150">
-                    <td className="px-6 py-4 font-semibold text-text-primary">{user.username}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.role === 'ADMIN' 
-                          ? 'bg-accent-default/10 text-accent-default border border-accent-default/20' 
-                          : 'bg-accent-hover-default/10 text-accent-default border border-accent-default/20'
-                      }`}>
-                        {user.role === 'ADMIN' ? 'Quản trị viên' : 'Nhân viên'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => handleToggleActive(user)}
-                        className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-150 ${
-                          user.isActive 
-                            ? 'bg-green-500/10 text-green-400 border border-green-500/20' 
-                            : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                        }`}
-                      >
-                        {user.isActive ? (
-                          <>
-                            <Unlock className="w-3 h-3" />
-                            <span>Đang hoạt động</span>
-                          </>
-                        ) : (
-                          <>
-                            <Lock className="w-3 h-3" />
-                            <span>Đã khóa</span>
-                          </>
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 max-w-xs truncate">
-                      {user.role === 'ADMIN' ? (
-                        <span className="text-text-muted text-xs italic">Toàn quyền truy cập</span>
-                      ) : user.companies.length === 0 ? (
-                        <span className="text-red-400/80 text-xs">Chưa gán doanh nghiệp</span>
-                      ) : (
-                        <span className="text-text-secondary text-xs">
-                          {user.companies.map(c => `${c.company.name} (${c.company.taxCode})`).join(', ')}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-text-muted">
-                      {new Date(user.createdAt).toLocaleDateString('vi-VN')}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => openEditModal(user)}
-                          className="p-2 text-text-secondary hover:text-accent-default hover:bg-accent-hover-default/10 border border-transparent hover:border-accent-default/20 rounded-xl transition-all duration-150 cursor-pointer"
-                          title="Sửa thông tin"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(user)}
-                          className="p-2 text-text-secondary hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-xl transition-all duration-150 cursor-pointer"
-                          title="Xóa tài khoản"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal Popup (Add/Edit) */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-card/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-2xl bg-bg-primary border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="flex justify-between items-center px-6 py-5 bg-card/80 border-b border-border">
-              <h2 className="text-lg font-bold text-text-primary flex items-center space-x-2">
-                <Shield className="w-5 h-5 text-accent-default" />
-                <span>{isEditMode ? 'Cập Nhật Tài Khoản' : 'Thêm Thành Viên Mới'}</span>
-              </h2>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="text-text-secondary hover:text-text-primary p-1 bg-bg-tertiary hover:bg-bg-tertiary rounded-xl transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      <Card>
+        <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3">
+            <Users className="h-6 w-6" />
+            <div>
+              <CardTitle>Quản Lý Thành Viên</CardTitle>
+              <CardDescription>Thêm, sửa đổi quyền truy cập và quản lý tài khoản người dùng</CardDescription>
             </div>
+          </div>
+          <Button onClick={openAddModal} className="gap-1.5">
+            <UserPlus className="h-4 w-4" />
+            Thêm Thành Viên
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tên tài khoản</TableHead>
+                  <TableHead>Vai trò</TableHead>
+                  <TableHead>Trạng thái</TableHead>
+                  <TableHead className="max-w-xs">Doanh nghiệp gán</TableHead>
+                  <TableHead>Ngày tạo</TableHead>
+                  <TableHead className="text-right">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading && users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      Đang tải danh sách thành viên...
+                    </TableCell>
+                  </TableRow>
+                ) : users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      Chưa có thành viên nào được tạo.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.username}</TableCell>
+                      <TableCell>
+                        <Badge variant={user.role === 'ADMIN' ? 'default' : 'secondary'}>
+                          {user.role === 'ADMIN' ? 'Quản trị viên' : 'Nhân viên'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={user.isActive ? 'text-green-600 border-green-300' : 'text-destructive border-destructive/30'}
+                        >
+                          {user.isActive ? (
+                            <><Unlock className="w-3 h-3 mr-1" /> Đang hoạt động</>
+                          ) : (
+                            <><Lock className="w-3 h-3 mr-1" /> Đã khóa</>
+                          )}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate text-xs text-muted-foreground">
+                        {user.role === 'ADMIN' ? (
+                          <span className="italic">Toàn quyền truy cập</span>
+                        ) : user.companies.length === 0 ? (
+                          <span className="text-destructive/80">Chưa gán doanh nghiệp</span>
+                        ) : (
+                          user.companies.map(c => c.company.name).join(', ')
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(user.createdAt).toLocaleDateString('vi-VN')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => openEditModal(user)} title="Sửa">
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon"
+                            onClick={() => handleToggleActive(user)}
+                            title={user.isActive ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}
+                          >
+                            {user.isActive ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(user)} title="Xóa">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-            {/* Modal Body */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+      {/* Add/Edit Dialog */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              {isEditMode ? 'Cập Nhật Tài Khoản' : 'Thêm Thành Viên Mới'}
+            </DialogTitle>
+            <DialogDescription>
+              {isEditMode ? 'Chỉnh sửa thông tin tài khoản người dùng.' : 'Tạo tài khoản mới cho nhân viên.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit}>
+            <div className="space-y-4 py-2">
               {formError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl">
-                  {formError}
-                </div>
+                <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm px-4 py-3 rounded-lg">{formError}</div>
               )}
               {formSuccess && (
-                <div className="bg-green-500/10 border border-green-500/20 text-green-400 text-sm px-4 py-3 rounded-xl flex items-center space-x-2">
-                  <Check className="w-4 h-4" />
-                  <span>{formSuccess}</span>
+                <div className="bg-green-500/10 border border-green-500/20 text-green-600 text-sm px-4 py-3 rounded-lg flex items-center gap-2">
+                  <Check className="h-4 w-4" />
+                  {formSuccess}
                 </div>
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-text-secondary mb-1">Tên đăng nhập</label>
-                  <input
-                    type="text"
-                    required
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="E.g. nhanvien01"
-                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent"
-                  />
+                <div className="space-y-2">
+                  <Label htmlFor="um-username">Tên đăng nhập</Label>
+                  <Input id="um-username" type="text" required value={username} onChange={e => setUsername(e.target.value)} placeholder="nhanvien01" />
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-text-secondary mb-1">
-                    {isEditMode ? 'Mật khẩu mới (để trống nếu không đổi)' : 'Mật khẩu'}
-                  </label>
-                  <input
-                    type="password"
-                    required={!isEditMode}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={isEditMode ? '••••••••' : 'Nhập mật khẩu'}
-                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent"
-                  />
+                <div className="space-y-2">
+                  <Label htmlFor="um-password">{isEditMode ? 'Mật khẩu mới (để trống nếu không đổi)' : 'Mật khẩu'}</Label>
+                  <Input id="um-password" type="password" required={!isEditMode} value={password} onChange={e => setPassword(e.target.value)} placeholder={isEditMode ? '••••••••' : 'Nhập mật khẩu'} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-text-secondary mb-1">Quyền hạn</label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as any)}
-                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent cursor-pointer"
-                  >
-                    <option value="STAFF">Nhân viên</option>
-                    <option value="ADMIN">Quản trị viên</option>
-                  </select>
+                <div className="space-y-2">
+                  <Label htmlFor="um-role">Quyền hạn</Label>
+                  <Select value={role} onValueChange={(v: any) => setRole(v)}>
+                    <SelectTrigger id="um-role">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="STAFF">Nhân viên</SelectItem>
+                      <SelectItem value="ADMIN">Quản trị viên</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-text-secondary mb-1">Trạng thái tài khoản</label>
-                  <select
-                    value={isActive ? 'true' : 'false'}
-                    onChange={(e) => setIsActive(e.target.value === 'true')}
-                    className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent cursor-pointer"
-                  >
-                    <option value="true">Kích hoạt</option>
-                    <option value="false">Tạm khóa</option>
-                  </select>
+                <div className="space-y-2">
+                  <Label htmlFor="um-active">Trạng thái tài khoản</Label>
+                  <Select value={isActive ? 'true' : 'false'} onValueChange={v => setIsActive(v === 'true')}>
+                    <SelectTrigger id="um-active">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="true">Kích hoạt</SelectItem>
+                      <SelectItem value="false">Tạm khóa</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              {/* Assign Companies Section (STAFF only) */}
               {role === 'STAFF' && (
-                <div className="space-y-2 border-t border-border pt-4">
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-wide">
+                <div className="space-y-2 border-t pt-4">
+                  <div className="flex justify-between items-center">
+                    <Label className="font-bold uppercase tracking-wide text-xs">
                       Gán quyền truy cập doanh nghiệp ({assignedCompanyIds.length}/{companies.length})
-                    </label>
+                    </Label>
                     {companies.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleSelectAllCompanies}
-                        className="text-xs text-accent-default hover:text-accent-default font-semibold cursor-pointer"
-                      >
+                      <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={handleSelectAllCompanies}>
                         {assignedCompanyIds.length === companies.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
-                      </button>
+                      </Button>
                     )}
                   </div>
 
                   {companies.length === 0 ? (
-                    <p className="text-text-muted text-xs italic">Chưa có doanh nghiệp nào được cấu hình trong hệ thống.</p>
+                    <p className="text-muted-foreground text-xs italic">Chưa có doanh nghiệp nào được cấu hình trong hệ thống.</p>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[220px] overflow-y-auto bg-card/50 p-4 rounded-2xl border border-border/80">
-                      {companies.map((company) => {
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[220px] overflow-y-auto bg-muted/30 p-4 rounded-lg border">
+                      {companies.map(company => {
                         const isChecked = assignedCompanyIds.includes(company.id);
                         return (
                           <div
                             key={company.id}
                             onClick={() => handleToggleCompany(company.id)}
-                            className="flex items-center space-x-2.5 p-2.5 rounded-xl border border-border/40 hover:border-border/60 bg-bg-primary/35 hover:bg-bg-primary/60 cursor-pointer transition-all duration-150"
+                            className="flex items-center gap-2.5 p-2.5 rounded-lg border hover:border-primary/50 bg-background hover:bg-accent/5 cursor-pointer transition-all"
                           >
-                            {isChecked ? (
-                              <CheckSquare className="w-4 h-4 text-accent-default" />
-                            ) : (
-                              <Square className="w-4 h-4 text-text-muted" />
-                            )}
-                            <div className="text-xs text-left truncate flex-1">
-                              <div className="font-semibold text-text-primary truncate">{company.name}</div>
-                              <div className="text-text-muted mt-0.5">{company.taxCode}</div>
+                            {isChecked ? <CheckSquare className="h-4 w-4 text-primary shrink-0" /> : <Square className="h-4 w-4 text-muted-foreground shrink-0" />}
+                            <div className="text-xs min-w-0">
+                              <div className="font-medium truncate">{company.name}</div>
+                              <div className="text-muted-foreground">{company.taxCode}</div>
                             </div>
                           </div>
                         );
@@ -432,38 +386,18 @@ export default function UserManagement() {
                   )}
                 </div>
               )}
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex justify-end space-x-3 pt-4 border-t border-border/50">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="bg-bg-tertiary hover:bg-slate-750 text-text-secondary px-5 py-2.5 rounded-xl transition-all duration-150 cursor-pointer text-sm font-semibold"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="bg-gradient-to-r from-accent-default to-accent-hover-default hover:from-accent-hover-default hover:to-accent-hover-default text-white px-5 py-2.5 rounded-xl transition-all duration-150 cursor-pointer text-sm font-semibold shadow-lg shadow-accent-default/10 flex items-center justify-center space-x-2"
-                >
-                  {submitting ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      <span>Đang lưu...</span>
-                    </>
-                  ) : (
-                    <span>Lưu Thay Đổi</span>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <DialogFooter className="mt-6">
+              <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Hủy</Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Lưu Thay Đổi
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

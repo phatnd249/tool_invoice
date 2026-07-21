@@ -1,20 +1,51 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { 
-  Building2, 
-  Plus, 
-  Trash2, 
-  RefreshCw, 
-  Lock, 
-  Edit2, 
-  Eye, 
-  EyeOff, 
-  AlertCircle, 
-  CheckCircle2, 
+import {
+  Building2,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Lock,
+  Edit2,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  CheckCircle2,
   X,
   Search,
-  CloudDownload
+  CloudDownload,
+  Loader2,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { toast } from 'sonner';
 import { API_BASE_URL } from '../config';
 
 interface Company {
@@ -27,7 +58,6 @@ interface Company {
   loginMode: 'AUTO' | 'MANUAL';
   downloadCount?: number;
   createdAt: string;
-  // Fields from masothue sync
   address?: string | null;
   taxAddress?: string | null;
   representative?: string | null;
@@ -40,11 +70,10 @@ interface Company {
 }
 
 export default function CompanyManager() {
-  // Companies List
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companiesLoading, setCompaniesLoading] = useState(false);
 
-  // Add Company Form State
+  // Add Company
   const [newTaxCode, setNewTaxCode] = useState('');
   const [newName, setNewName] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -56,14 +85,14 @@ export default function CompanyManager() {
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
-
-  // Password Visibility
   const [showAddPassword, setShowAddPassword] = useState(false);
-  const [refreshingMap, setRefreshingMap] = useState<Record<number, boolean>>({});
-  const [syncingMap, setSyncingMap] = useState<Record<number, boolean>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  // Edit Modal State
+  const [refreshingMap, setRefreshingMap] = useState<Record<number, boolean>>({});
+  const [syncingMap, setSyncingMap] = useState<Record<number, boolean>>({});
+  const [syncConfirmCompany, setSyncConfirmCompany] = useState<{ id: number; name: string; taxCode: string } | null>(null);
+
+  // Edit
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
@@ -71,7 +100,7 @@ export default function CompanyManager() {
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState('');
 
-  // Re-login Captcha Modal State (for MANUAL mode companies)
+  // Re-login captcha
   const [reloginCompany, setReloginCompany] = useState<Company | null>(null);
   const [reloginCaptchaSvg, setReloginCaptchaSvg] = useState('');
   const [reloginCaptchaKey, setReloginCaptchaKey] = useState('');
@@ -80,12 +109,11 @@ export default function CompanyManager() {
   const [reloginLoading, setReloginLoading] = useState(false);
   const [reloginError, setReloginError] = useState('');
 
-  // Search & Filter State
+  // Filters
   const [searchText, setSearchText] = useState('');
   const [filterLoginMode, setFilterLoginMode] = useState<'ALL' | 'AUTO' | 'MANUAL'>('ALL');
   const [filterTokenStatus, setFilterTokenStatus] = useState<'ALL' | 'VALID' | 'EXPIRED'>('ALL');
 
-  // Fetch Companies
   const fetchCompanies = async () => {
     setCompaniesLoading(true);
     try {
@@ -98,13 +126,12 @@ export default function CompanyManager() {
     }
   };
 
-  // Fetch GDT Captcha for Add Company
   const fetchNewCaptcha = async () => {
     setNewCaptchaLoading(true);
     setNewCaptchaValue('');
     try {
       const res = await axios.get(`${API_BASE_URL}/api/auth/captcha`);
-      if (res.data && res.data.key && res.data.content) {
+      if (res.data?.key && res.data?.content) {
         setNewCaptchaKey(res.data.key);
         setNewCaptchaSvg(res.data.content);
       }
@@ -115,13 +142,12 @@ export default function CompanyManager() {
     }
   };
 
-  // Fetch GDT Captcha for Re-login Modal
   const fetchReloginCaptcha = async () => {
     setReloginCaptchaLoading(true);
     setReloginCaptchaValue('');
     try {
       const res = await axios.get(`${API_BASE_URL}/api/auth/captcha`);
-      if (res.data && res.data.key && res.data.content) {
+      if (res.data?.key && res.data?.content) {
         setReloginCaptchaKey(res.data.key);
         setReloginCaptchaSvg(res.data.content);
       }
@@ -132,43 +158,28 @@ export default function CompanyManager() {
     }
   };
 
-  useEffect(() => {
-    fetchCompanies();
-  }, []);
+  useEffect(() => { fetchCompanies(); }, []);
 
   useEffect(() => {
-    if (newLoginMode === 'MANUAL') {
-      fetchNewCaptcha();
-    }
+    if (newLoginMode === 'MANUAL') fetchNewCaptcha();
   }, [newLoginMode]);
 
-  // Filtered companies (client-side search & filter)
   const filteredCompanies = useMemo(() => {
     return companies.filter(c => {
-      // Search by tax code or name (case-insensitive)
       const keyword = searchText.toLowerCase().trim();
       if (keyword) {
-        const matchesTaxCode = c.taxCode.toLowerCase().includes(keyword);
-        const matchesName = c.name.toLowerCase().includes(keyword);
-        if (!matchesTaxCode && !matchesName) return false;
+        if (!c.taxCode.toLowerCase().includes(keyword) && !c.name.toLowerCase().includes(keyword)) return false;
       }
-
-      // Filter by login mode
       if (filterLoginMode !== 'ALL' && c.loginMode !== filterLoginMode) return false;
-
-      // Filter by token status
       if (filterTokenStatus === 'VALID') {
         if (!c.tokenExpiredAt || new Date(c.tokenExpiredAt) < new Date()) return false;
       } else if (filterTokenStatus === 'EXPIRED') {
-        if (!c.tokenExpiredAt) return false;
-        if (new Date(c.tokenExpiredAt) >= new Date()) return false;
+        if (!c.tokenExpiredAt || new Date(c.tokenExpiredAt) >= new Date()) return false;
       }
-
       return true;
     });
   }, [companies, searchText, filterLoginMode, filterTokenStatus]);
 
-  // Add Company
   const handleAddCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddLoading(true);
@@ -182,91 +193,86 @@ export default function CompanyManager() {
         lookupPassword: newPassword,
         loginMode: newLoginMode,
       };
-
       if (newLoginMode === 'MANUAL') {
         payload.ckey = newCaptchaKey;
         payload.cvalue = newCaptchaValue.trim();
       }
 
-      await axios.post(`${API_BASE_URL}/api/companies`, payload);
-
-      setAddSuccess('Thêm doanh nghiệp và xác thực thành công!');
-      // Reset form
+      const res = await axios.post(`${API_BASE_URL}/api/companies`, payload);
+      toast.success('Thêm doanh nghiệp và xác thực thành công!');
       setNewTaxCode('');
       setNewName('');
       setNewPassword('');
       setNewLoginMode('AUTO');
       setNewCaptchaValue('');
-      fetchCompanies();
-      setTimeout(() => {
-        setIsAddModalOpen(false);
-        setAddSuccess('');
-      }, 1500);
+      await fetchCompanies();
+      setIsAddModalOpen(false);
+      if (res.data?.id) {
+        setSyncConfirmCompany({
+          id: res.data.id,
+          name: res.data.name || payload.taxCode,
+          taxCode: payload.taxCode,
+        });
+      }
     } catch (err: any) {
       const details = err.response?.data?.details || err.response?.data?.error || err.message;
       setAddError(`Xác thực thất bại: ${details}`);
-      if (newLoginMode === 'MANUAL') {
-        fetchNewCaptcha();
-      }
+      if (newLoginMode === 'MANUAL') fetchNewCaptcha();
     } finally {
       setAddLoading(false);
     }
   };
 
-  // Auto-refresh company token
   const handleAutoRefreshToken = async (id: number) => {
-    setRefreshingMap((prev) => ({ ...prev, [id]: true }));
+    setRefreshingMap(prev => ({ ...prev, [id]: true }));
     try {
       await axios.post(`${API_BASE_URL}/api/companies/${id}/refresh`);
-      alert(`Làm mới token thành công!`);
-      fetchCompanies();
+      toast.success('Làm mới token thành công!');
+      await fetchCompanies();
     } catch (err: any) {
-      alert(`Làm mới token thất bại: ${err.response?.data?.error || err.message}`);
+      toast.error(err.response?.data?.error || 'Làm mới token thất bại');
     } finally {
-      setRefreshingMap((prev) => ({ ...prev, [id]: false }));
+      setRefreshingMap(prev => ({ ...prev, [id]: false }));
     }
   };
 
-  // Sync company info from masothue.com
-  const handleSyncInfo = async (id: number, _name: string) => {
-    setSyncingMap((prev) => ({ ...prev, [id]: true }));
+  const handleSyncInfo = async (id: number) => {
+    setSyncingMap(prev => ({ ...prev, [id]: true }));
     try {
       await axios.put(`${API_BASE_URL}/api/companies/${id}/sync-info`);
-      fetchCompanies();
+      toast.success('Cập nhật thông tin thành công!');
+      await fetchCompanies();
     } catch (err: any) {
-      alert(`Cập nhật thông tin thất bại: ${err.response?.data?.details || err.response?.data?.error || err.message}`);
+      toast.error(err.response?.data?.details || err.response?.data?.error || err.message);
     } finally {
-      setSyncingMap((prev) => ({ ...prev, [id]: false }));
+      setSyncingMap(prev => ({ ...prev, [id]: false }));
     }
   };
 
-  // Delete Company
   const handleDeleteCompany = async (id: number, name: string) => {
-    if (!confirm(`Bạn có chắc chắn muốn xóa doanh nghiệp "${name}"? Các lịch tải định kỳ liên quan cũng sẽ bị xóa.`)) return;
-
     try {
       await axios.delete(`${API_BASE_URL}/api/companies/${id}`);
-      fetchCompanies();
+      toast.success(`Đã xóa doanh nghiệp "${name}"`);
+      await fetchCompanies();
     } catch (err: any) {
-      alert(`Xóa doanh nghiệp thất bại: ${err.response?.data?.error || err.message}`);
+      toast.error(err.response?.data?.error || 'Không thể xóa doanh nghiệp');
     }
   };
 
-  // Edit Modal Submission
   const handleUpdateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCompany) return;
     setEditLoading(true);
     setEditError('');
-
     try {
       await axios.put(`${API_BASE_URL}/api/companies/${editingCompany.id}`, {
         name: editName.trim(),
         lookupPassword: editPassword,
-        loginMode: editLoginMode
+        loginMode: editLoginMode,
       });
+      toast.success('Cập nhật thành công!');
       setEditingCompany(null);
-      fetchCompanies();
+      await fetchCompanies();
     } catch (err: any) {
       setEditError(err.response?.data?.error || err.message);
     } finally {
@@ -274,21 +280,19 @@ export default function CompanyManager() {
     }
   };
 
-  // Re-login Modal Submission
   const handleReloginManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reloginCompany) return;
     setReloginLoading(true);
     setReloginError('');
-
     try {
       await axios.post(`${API_BASE_URL}/api/companies/${reloginCompany.id}/login-manual`, {
         ckey: reloginCaptchaKey,
-        cvalue: reloginCaptchaValue.trim()
+        cvalue: reloginCaptchaValue.trim(),
       });
+      toast.success('Đăng nhập lại thành công!');
       setReloginCompany(null);
-      fetchCompanies();
-      alert('Đăng nhập lại và gia hạn token thủ công thành công!');
+      await fetchCompanies();
     } catch (err: any) {
       setReloginError(err.response?.data?.details || err.response?.data?.error || err.message);
       fetchReloginCaptcha();
@@ -297,604 +301,375 @@ export default function CompanyManager() {
     }
   };
 
-  // Check token status expiration
   return (
-    <div className="space-y-8">
-      {/* Companies Table List (Full Width) */}
-      <div className="bg-card p-6 rounded-2xl border border-border shadow-xl flex flex-col">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <h2 className="text-lg font-semibold text-accent-default flex items-center">
-            <Building2 className="w-5 h-5 mr-2" />
-            Danh Sách ({filteredCompanies.length}/{companies.length})
-          </h2>
-          <button
-            onClick={() => {
-              setIsAddModalOpen(true);
-              setAddError('');
-              setAddSuccess('');
-              if (newLoginMode === 'MANUAL') {
-                fetchNewCaptcha();
-              }
-            }}
-            className="bg-accent-default hover:bg-accent-hover-default text-white font-semibold py-2 px-4 rounded-xl transition duration-150 flex items-center justify-center space-x-2 text-xs shrink-0 cursor-pointer shadow-lg shadow-accent-default/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Thêm Doanh Nghiệp</span>
-          </button>
-        </div>
-
-        {/* Search & Filter Bar */}
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-            <input
-              type="text"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              placeholder="Tìm theo MST hoặc tên..."
-              className="w-full bg-bg-primary border border-border rounded-xl pl-10 pr-4 py-2 text-xs text-text-primary placeholder-text-muted focus:outline-none focus:border-accent"
-            />
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3">
+            <Building2 className="h-6 w-6" />
+            <div>
+              <CardTitle>
+                Danh Sách Doanh Nghiệp ({filteredCompanies.length}/{companies.length})
+              </CardTitle>
+              <CardDescription>Quản lý danh sách doanh nghiệp đã kết nối với hệ thống</CardDescription>
+            </div>
           </div>
-          <select
-            value={filterLoginMode}
-            onChange={(e) => setFilterLoginMode(e.target.value as any)}
-            className="bg-bg-primary border border-border rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent cursor-pointer"
+          <Button
+            onClick={() => { setIsAddModalOpen(true); setAddError(''); setAddSuccess(''); if (newLoginMode === 'MANUAL') fetchNewCaptcha(); }}
+            className="gap-1.5"
           >
-            <option value="ALL">Tất cả chế độ</option>
-            <option value="AUTO">Tự động</option>
-            <option value="MANUAL">Thủ công</option>
-          </select>
-          <select
-            value={filterTokenStatus}
-            onChange={(e) => setFilterTokenStatus(e.target.value as any)}
-            className="bg-bg-primary border border-border rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent cursor-pointer"
-          >
-            <option value="ALL">Tất cả token</option>
-            <option value="VALID">Còn hiệu lực</option>
-            <option value="EXPIRED">Hết hiệu lực</option>
-          </select>
-        </div>
+            <Plus className="h-4 w-4" />
+            Thêm Doanh Nghiệp
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {/* Search & Filter */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                placeholder="Tìm theo MST hoặc tên..."
+                className="pl-9 text-xs"
+              />
+            </div>
+            <Select value={filterLoginMode} onValueChange={(v: any) => setFilterLoginMode(v)}>
+              <SelectTrigger className="w-[140px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Tất cả chế độ</SelectItem>
+                <SelectItem value="AUTO">Tự động</SelectItem>
+                <SelectItem value="MANUAL">Thủ công</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterTokenStatus} onValueChange={(v: any) => setFilterTokenStatus(v)}>
+              <SelectTrigger className="w-[140px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Tất cả token</SelectItem>
+                <SelectItem value="VALID">Còn hiệu lực</SelectItem>
+                <SelectItem value="EXPIRED">Hết hiệu lực</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="flex-1 overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-bg-primary/60 border-b border-border text-text-secondary font-semibold uppercase text-xxs tracking-wider">
-                <tr>
-                  <th className="p-3">Mã Số Thuế</th>
-                  <th className="p-3">Tên Doanh Nghiệp</th>
-                  <th className="p-3">Địa chỉ</th>
-                  <th className="p-3">Chế Độ</th>
-                  <th className="p-3">Tình trạng</th>
-                  <th className="p-3">Số Lần Tải</th>
-                  <th className="p-3">Ngày Tạo</th>
-                  <th className="p-3 text-center">Thao Tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border text-text-secondary">
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mã Số Thuế</TableHead>
+                  <TableHead>Tên Doanh Nghiệp</TableHead>
+                  <TableHead className="max-w-[180px]">Địa chỉ</TableHead>
+                  <TableHead>Chế Độ</TableHead>
+                  <TableHead>Tình trạng</TableHead>
+                  <TableHead className="text-right">Số Lần Tải</TableHead>
+                  <TableHead>Ngày Tạo</TableHead>
+                  <TableHead className="text-center">Thao Tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {companiesLoading && companies.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="p-8 text-center text-text-muted">
-                      Đang tải danh sách...
-                    </td>
-                  </tr>
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Đang tải danh sách...</TableCell>
+                  </TableRow>
                 ) : companies.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="p-8 text-center text-text-muted">
-                      Chưa có doanh nghiệp nào được lưu cấu hình.
-                    </td>
-                  </tr>
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Chưa có doanh nghiệp nào.</TableCell>
+                  </TableRow>
                 ) : filteredCompanies.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="p-8 text-center text-text-muted">
-                      Không tìm thấy doanh nghiệp phù hợp với bộ lọc.
-                    </td>
-                  </tr>
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Không tìm thấy doanh nghiệp phù hợp.</TableCell>
+                  </TableRow>
                 ) : (
-                  filteredCompanies.map((c) => {
-                    const cDate = new Date(c.createdAt).toLocaleDateString('vi-VN', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric'
-                    });
-
-                    return (
-                      <tr key={c.id} className="hover:bg-bg-primary/30 transition">
-                        <td className="p-3 font-semibold text-text-primary font-mono select-all">
-                          {c.taxCode}
-                        </td>
-                        <td className="p-3 font-medium text-text-secondary max-w-[200px] truncate" title={c.name}>
-                          {c.name}
-                        </td>
-                        <td className="p-3 max-w-[180px] truncate text-text-muted" title={c.address || c.taxAddress || ''}>
-                          {c.address || c.taxAddress || <span className="italic">—</span>}
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-xxs font-medium ${
-                            c.loginMode === 'AUTO' 
-                              ? 'bg-accent-hover-default/10 text-accent-default border border-accent-default/20' 
-                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          }`}>
-                            {c.loginMode === 'AUTO' ? 'Tự động' : 'Thủ công'}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-xxs font-medium ${
-                            c.status
-                              ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-700/30'
-                              : 'bg-gray-700/30 text-gray-400 border border-gray-600/30'
-                          }`}>
-                            {c.status || 'Chưa đồng bộ'}
-                          </span>
-                        </td>
-                        <td className="p-3 font-semibold text-accent-default font-mono">
-                          {c.downloadCount || 0}
-                        </td>
-                        <td className="p-3 text-text-secondary">{cDate}</td>
-                        <td className="p-3">
-                          <div className="flex items-center justify-center space-x-2">
-                            
-                            {/* Token Refresh action */}
-                            {c.loginMode === 'AUTO' ? (
-                              <button
-                                onClick={() => handleAutoRefreshToken(c.id)}
-                                disabled={refreshingMap[c.id]}
-                                title="Tự động gia hạn token"
-                                className="p-1.5 bg-bg-primary hover:bg-accent-default/20 border border-border hover:border-accent-default/40 text-text-secondary hover:text-accent-default rounded-lg cursor-pointer transition disabled:opacity-50"
-                              >
-                                <RefreshCw className={`w-3.5 h-3.5 ${refreshingMap[c.id] ? 'animate-spin text-accent-default' : ''}`} />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setReloginCompany(c);
-                                  setReloginError('');
-                                  fetchReloginCaptcha();
-                                }}
-                                title="Đăng nhập thủ công lại"
-                                className="p-1.5 bg-bg-primary hover:bg-amber-600/20 border border-border hover:border-amber-500/40 text-text-secondary hover:text-amber-300 rounded-lg cursor-pointer transition"
-                              >
-                                <Lock className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-
-                            {/* Sync Info action */}
-                            <button
-                              onClick={() => handleSyncInfo(c.id, c.name)}
-                              disabled={syncingMap[c.id]}
-                              title="Cập nhật thông tin doanh nghiệp từ masothue.com"
-                              className="p-1.5 bg-bg-primary hover:bg-blue-500/20 border border-border hover:border-blue-500/40 text-text-secondary hover:text-blue-400 rounded-lg cursor-pointer transition disabled:opacity-50"
-                            >
-                              <CloudDownload className={`w-3.5 h-3.5 ${syncingMap[c.id] ? 'animate-pulse text-blue-400' : ''}`} />
-                            </button>
-
-                            {/* Edit Action */}
-                            <button
-                              onClick={() => {
-                                setEditingCompany(c);
-                                setEditName(c.name);
-                                setEditPassword(c.lookupPassword);
-                                setEditLoginMode(c.loginMode);
-                                setEditError('');
-                              }}
-                              title="Chỉnh sửa thông tin"
-                              className="p-1.5 bg-bg-primary hover:bg-success-default/20 border border-border hover:border-success-default/40 text-text-secondary hover:text-success-default rounded-lg cursor-pointer transition"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-
-                            {/* Delete Action */}
-                            <button
-                              onClick={() => handleDeleteCompany(c.id, c.name)}
-                              title="Xóa cấu hình doanh nghiệp"
-                              className="p-1.5 bg-bg-primary hover:bg-danger-default/20 border border-border hover:border-danger-default/40 text-text-secondary hover:text-danger-default rounded-lg cursor-pointer transition"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                  filteredCompanies.map(c => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-mono font-semibold select-all">{c.taxCode}</TableCell>
+                      <TableCell className="max-w-[200px] truncate" title={c.name}>{c.name}</TableCell>
+                      <TableCell className="max-w-[180px] truncate text-muted-foreground" title={c.address || c.taxAddress || ''}>
+                        {c.address || c.taxAddress || <span className="italic">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={c.loginMode === 'AUTO' ? 'default' : 'secondary'}>
+                          {c.loginMode === 'AUTO' ? 'Tự động' : 'Thủ công'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={c.status ? 'default' : 'outline'} className={c.status ? 'bg-green-500/10 text-green-600 border-green-300' : ''}>
+                          {c.status || 'Chưa đồng bộ'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-semibold">{c.downloadCount || 0}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(c.createdAt).toLocaleDateString('vi-VN')}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1">
+                          {c.loginMode === 'AUTO' ? (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleAutoRefreshToken(c.id)} disabled={refreshingMap[c.id]} title="Gia hạn token">
+                              <RefreshCw className={`h-3.5 w-3.5 ${refreshingMap[c.id] ? 'animate-spin' : ''}`} />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setReloginCompany(c); setReloginError(''); fetchReloginCaptcha(); }} title="Đăng nhập thủ công">
+                              <Lock className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSyncInfo(c.id)} disabled={syncingMap[c.id]} title="Đồng bộ thông tin">
+                            <CloudDownload className={`h-3.5 w-3.5 ${syncingMap[c.id] ? 'animate-pulse' : ''}`} />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingCompany(c); setEditName(c.name); setEditPassword(c.lookupPassword); setEditLoginMode(c.loginMode); setEditError(''); }} title="Sửa">
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteCompany(c.id, c.name)} title="Xóa">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-      {/* MODAL: EDIT COMPANY */}
-      {editingCompany && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 relative space-y-4">
-            <button 
-              onClick={() => setEditingCompany(null)}
-              className="absolute right-4 top-4 text-text-muted hover:text-text-primary"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h3 className="text-md font-bold text-text-primary flex items-center">
-              <Edit2 className="w-4 h-4 mr-2 text-accent-default" /> Chỉnh Sửa Thông Tin Doanh Nghiệp
-            </h3>
-            <p className="text-xxs text-text-secondary">
-              MST: <span className="font-mono text-accent-default select-all">{editingCompany.taxCode}</span>
-            </p>
+      {/* Edit Dialog */}
+      <Dialog open={!!editingCompany} onOpenChange={(open) => !open && setEditingCompany(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit2 className="h-5 w-5" />
+              Chỉnh Sửa Doanh Nghiệp
+            </DialogTitle>
+            {editingCompany && (
+              <DialogDescription>
+                MST: <span className="font-mono font-semibold">{editingCompany.taxCode}</span>
+              </DialogDescription>
+            )}
+          </DialogHeader>
 
-            {/* Synced Company Info */}
-            {(editingCompany.address || editingCompany.representative || editingCompany.phone || editingCompany.status) && (
-              <div className="bg-bg-primary/50 border border-border rounded-xl p-4 space-y-2">
-                <h4 className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-accent-default" />
-                  Thông tin doanh nghiệp
-                  {editingCompany.lastSyncedAt && (
-                    <span className="text-xxs text-text-muted font-normal ml-auto">
-                      Đồng bộ: {new Date(editingCompany.lastSyncedAt).toLocaleString('vi-VN')}
-                    </span>
-                  )}
-                </h4>
-                <div className="grid grid-cols-1 gap-1.5 text-xs">
-                  {editingCompany.address && (
-                    <div className="flex gap-2">
-                      <span className="text-text-muted shrink-0 w-20">Địa chỉ:</span>
-                      <span className="text-text-primary">{editingCompany.address}</span>
-                    </div>
-                  )}
-                  {editingCompany.taxAddress && editingCompany.taxAddress !== editingCompany.address && (
-                    <div className="flex gap-2">
-                      <span className="text-text-muted shrink-0 w-20">Địa chỉ thuế:</span>
-                      <span className="text-text-primary">{editingCompany.taxAddress}</span>
-                    </div>
-                  )}
-                  {editingCompany.representative && (
-                    <div className="flex gap-2">
-                      <span className="text-text-muted shrink-0 w-20">Đại diện:</span>
-                      <span className="text-text-primary">{editingCompany.representative}</span>
-                    </div>
-                  )}
-                  {editingCompany.phone && (
-                    <div className="flex gap-2">
-                      <span className="text-text-muted shrink-0 w-20">Điện thoại:</span>
-                      <span className="text-text-primary">{editingCompany.phone}</span>
-                    </div>
-                  )}
-                  {editingCompany.status && (
-                    <div className="flex gap-2">
-                      <span className="text-text-muted shrink-0 w-20">Tình trạng:</span>
-                      <span className="text-emerald-400 font-medium">{editingCompany.status}</span>
-                    </div>
-                  )}
-                  {editingCompany.companyType && (
-                    <div className="flex gap-2">
-                      <span className="text-text-muted shrink-0 w-20">Loại hình:</span>
-                      <span className="text-text-primary">{editingCompany.companyType}</span>
-                    </div>
-                  )}
-                  {editingCompany.activeDate && (
-                    <div className="flex gap-2">
-                      <span className="text-text-muted shrink-0 w-20">Ngày HĐ:</span>
-                      <span className="text-text-primary">{editingCompany.activeDate}</span>
-                    </div>
-                  )}
-                  {editingCompany.managedBy && (
-                    <div className="flex gap-2">
-                      <span className="text-text-muted shrink-0 w-20">QL bởi:</span>
-                      <span className="text-text-primary">{editingCompany.managedBy}</span>
-                    </div>
+          {editingCompany && (editingCompany.address || editingCompany.representative || editingCompany.phone) && (
+            <div className="bg-muted/30 border rounded-lg p-4 space-y-1.5 text-xs">
+              <p className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5" />
+                Thông tin doanh nghiệp
+                {editingCompany.lastSyncedAt && (
+                  <span className="text-muted-foreground font-normal ml-auto">
+                    Đồng bộ: {new Date(editingCompany.lastSyncedAt).toLocaleString('vi-VN')}
+                  </span>
+                )}
+              </p>
+              {editingCompany.address && <DetailRow label="Địa chỉ" value={editingCompany.address} />}
+              {editingCompany.taxAddress && editingCompany.taxAddress !== editingCompany.address && <DetailRow label="Địa chỉ thuế" value={editingCompany.taxAddress} />}
+              {editingCompany.representative && <DetailRow label="Đại diện" value={editingCompany.representative} />}
+              {editingCompany.phone && <DetailRow label="Điện thoại" value={editingCompany.phone} />}
+              {editingCompany.status && <DetailRow label="Tình trạng" value={editingCompany.status} />}
+              {editingCompany.companyType && <DetailRow label="Loại hình" value={editingCompany.companyType} />}
+              {editingCompany.activeDate && <DetailRow label="Ngày HĐ" value={editingCompany.activeDate} />}
+              {editingCompany.managedBy && <DetailRow label="QL bởi" value={editingCompany.managedBy} />}
+            </div>
+          )}
+
+          {editError && (
+            <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm px-4 py-3 rounded-lg flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{editError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleUpdateCompany} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Tên Gọi Nhớ</Label>
+              <Input id="edit-name" type="text" required value={editName} onChange={e => setEditName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-password">Mật Khẩu Tra Cứu</Label>
+              <Input id="edit-password" type="password" required value={editPassword} onChange={e => setEditPassword(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Chế Độ Đăng Nhập</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <Button type="button" variant={editLoginMode === 'AUTO' ? 'default' : 'outline'} onClick={() => setEditLoginMode('AUTO')}>Tự động</Button>
+                <Button type="button" variant={editLoginMode === 'MANUAL' ? 'default' : 'outline'} onClick={() => setEditLoginMode('MANUAL')}>Thủ công</Button>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingCompany(null)}>Hủy</Button>
+              <Button type="submit" disabled={editLoading}>
+                {editLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Cập Nhật
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Re-login Manual Captcha Dialog */}
+      <Dialog open={!!reloginCompany} onOpenChange={(open) => !open && setReloginCompany(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5 text-amber-500" />
+              Đăng Nhập Lại Doanh Nghiệp
+            </DialogTitle>
+            {reloginCompany && (
+              <DialogDescription>
+                Cập nhật phiên token cho <strong>{reloginCompany.name}</strong> ({reloginCompany.taxCode})
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {reloginError && (
+            <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm px-4 py-3 rounded-lg flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span className="break-all">{reloginError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleReloginManualSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Giải Captcha Tổng cục Thuế</Label>
+              <div className="flex items-center gap-2">
+                <div className="h-10 bg-white rounded-lg flex items-center justify-center p-1 flex-1 overflow-hidden">
+                  {reloginCaptchaLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center svg-captcha-wrapper" dangerouslySetInnerHTML={{ __html: reloginCaptchaSvg }} />
                   )}
                 </div>
+                <Button type="button" variant="outline" size="icon" onClick={fetchReloginCaptcha} disabled={reloginCaptchaLoading}>
+                  <RefreshCw className={`h-4 w-4 ${reloginCaptchaLoading ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
-            )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="relogin-captcha">Mã xác thực Captcha</Label>
+              <Input id="relogin-captcha" type="text" required maxLength={6} value={reloginCaptchaValue} onChange={e => setReloginCaptchaValue(e.target.value)} placeholder="Nhập 6 ký tự captcha..." className="text-center tracking-widest uppercase font-semibold" />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setReloginCompany(null)}>Đóng</Button>
+              <Button type="submit" disabled={reloginLoading}>
+                {reloginLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Xác thực
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-            {editError && (
-              <div className="p-3 bg-danger-light border border-danger-default/20 text-danger-default rounded-xl text-xs flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{editError}</span>
+      {/* Add Company Dialog */}
+      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Thêm Doanh Nghiệp Mới
+            </DialogTitle>
+            <DialogDescription>
+              Kết nối và lấy token kiểm thử lần đầu từ hoadondientu.gdt.gov.vn
+            </DialogDescription>
+          </DialogHeader>
+
+          {addError && (
+            <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm px-4 py-3 rounded-lg flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span className="break-all">{addError}</span>
+            </div>
+          )}
+          {addSuccess && (
+            <div className="bg-green-500/10 border border-green-500/20 text-green-600 text-sm px-4 py-3 rounded-lg flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>{addSuccess}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleAddCompany} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="add-taxcode">Mã Số Thuế (MST)</Label>
+              <Input id="add-taxcode" type="text" required value={newTaxCode} onChange={e => setNewTaxCode(e.target.value)} placeholder="Nhập mã số thuế..." />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add-password">Mật khẩu tra cứu</Label>
+              <div className="relative">
+                <Input id="add-password" type={showAddPassword ? 'text' : 'password'} required value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mật khẩu trang hoadondientu..." className="pr-10" />
+                <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1 h-8 w-8" onClick={() => setShowAddPassword(!showAddPassword)}>
+                  {showAddPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
               </div>
-            )}
-
-            <form onSubmit={handleUpdateCompany} className="space-y-4 pt-2">
-              <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1">Tên Gọi Nhớ</label>
-                <input
-                  type="text"
-                  required
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                />
+            </div>
+            <div className="space-y-2">
+              <Label>Chế độ đăng nhập</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <Button type="button" variant={newLoginMode === 'AUTO' ? 'default' : 'outline'} onClick={() => setNewLoginMode('AUTO')}>Tự động (Gemini)</Button>
+                <Button type="button" variant={newLoginMode === 'MANUAL' ? 'default' : 'outline'} onClick={() => setNewLoginMode('MANUAL')}>Thủ công</Button>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1">Mật Khẩu Tra Cứu</label>
-                <input
-                  type="password"
-                  required
-                  value={editPassword}
-                  onChange={(e) => setEditPassword(e.target.value)}
-                  className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1">Chế Độ Đăng Nhập</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setEditLoginMode('AUTO')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      editLoginMode === 'AUTO'
-                        ? 'bg-accent-default/20 border-accent-default text-accent-default'
-                        : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    Tự động
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditLoginMode('MANUAL')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      editLoginMode === 'MANUAL'
-                        ? 'bg-accent-default/20 border-accent-default text-accent-default'
-                        : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    Thủ công
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingCompany(null)}
-                  className="flex-1 bg-bg-primary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={editLoading}
-                  className="flex-1 bg-accent-default hover:bg-accent-hover-default disabled:opacity-50 text-white py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
-                >
-                  {editLoading ? 'Đang cập nhật...' : 'Cập Nhật'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: RELOGIN MANUAL CAPTCHA */}
-      {reloginCompany && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 relative space-y-4">
-            <button 
-              onClick={() => setReloginCompany(null)}
-              className="absolute right-4 top-4 text-text-muted hover:text-text-primary"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h3 className="text-md font-bold text-text-primary flex items-center">
-              <Lock className="w-4 h-4 mr-2 text-amber-400" /> Đăng Nhập Lại Doanh Nghiệp
-            </h3>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Bạn đang thực hiện đăng nhập thủ công để cập nhật lại phiên (token) cho doanh nghiệp **{reloginCompany.name} ({reloginCompany.taxCode})**.
-            </p>
-
-            {reloginError && (
-              <div className="p-3 bg-danger-light border border-danger-default/20 text-danger-default rounded-xl text-xs flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span className="break-all">{reloginError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleReloginManualSubmit} className="space-y-4 pt-2">
-              <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1">Giải Captcha Tổng cục Thuế</label>
-                <div className="flex items-center space-x-2">
-                  <div className="h-10 bg-white rounded-lg flex items-center justify-center p-1 flex-1 relative overflow-hidden">
-                    {reloginCaptchaLoading ? (
-                      <RefreshCw className="w-4 h-4 text-accent-default animate-spin" />
+            {newLoginMode === 'MANUAL' && (
+              <div className="bg-muted/30 border rounded-lg p-4 space-y-3">
+                <Label>Xác thực mã Captcha GDT</Label>
+                <div className="flex items-center gap-2">
+                  <div className="h-10 bg-white rounded-lg flex items-center justify-center p-1 flex-1 overflow-hidden">
+                    {newCaptchaLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <div 
-                        className="w-full h-full flex items-center justify-center svg-captcha-wrapper"
-                        dangerouslySetInnerHTML={{ __html: reloginCaptchaSvg }}
-                      />
+                      <div className="w-full h-full flex items-center justify-center svg-captcha-wrapper" dangerouslySetInnerHTML={{ __html: newCaptchaSvg }} />
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={fetchReloginCaptcha}
-                    disabled={reloginCaptchaLoading}
-                    className="h-10 w-10 bg-bg-primary hover:bg-bg-tertiary border border-border rounded-lg flex items-center justify-center text-text-secondary hover:text-text-primary transition disabled:opacity-50 cursor-pointer"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${reloginCaptchaLoading ? 'animate-spin' : ''}`} />
-                  </button>
+                  <Button type="button" variant="outline" size="icon" onClick={fetchNewCaptcha} disabled={newCaptchaLoading}>
+                    <RefreshCw className={`h-4 w-4 ${newCaptchaLoading ? 'animate-spin' : ''}`} />
+                  </Button>
                 </div>
+                <Input type="text" required maxLength={6} value={newCaptchaValue} onChange={e => setNewCaptchaValue(e.target.value)} placeholder="Nhập mã captcha..." className="text-center tracking-widest uppercase" />
               </div>
+            )}
 
-              <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1">Mã xác thực Captcha</label>
-                <input
-                  type="text"
-                  required
-                  maxLength={6}
-                  value={reloginCaptchaValue}
-                  onChange={(e) => setReloginCaptchaValue(e.target.value)}
-                  placeholder="Nhập 6 ký tự captcha..."
-                  className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2 text-center text-sm font-semibold tracking-widest uppercase focus:outline-none focus:border-accent"
-                />
-              </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>Hủy</Button>
+              <Button type="submit" disabled={addLoading}>
+                {addLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Lưu & Kết Nối
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-              <div className="flex items-center space-x-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setReloginCompany(null)}
-                  className="flex-1 bg-bg-primary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
-                >
-                  Đóng
-                </button>
-                <button
-                  type="submit"
-                  disabled={reloginLoading}
-                  className="flex-1 bg-accent-default hover:bg-accent-hover-default disabled:opacity-50 text-white py-2 px-4 rounded-xl text-xs font-semibold cursor-pointer"
-                >
-                  {reloginLoading ? 'Đang kết nối...' : 'Xác thực'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ADD COMPANY */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 relative space-y-4">
-            <button 
-              onClick={() => setIsAddModalOpen(false)}
-              className="absolute right-4 top-4 text-text-muted hover:text-text-primary"
+      {/* Sync Confirmation Dialog */}
+      <Dialog open={!!syncConfirmCompany} onOpenChange={(open) => !open && setSyncConfirmCompany(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CloudDownload className="h-5 w-5" />
+              Đồng bộ thông tin
+            </DialogTitle>
+            <DialogDescription>
+              Tự động điền dữ liệu doanh nghiệp từ masothue.com
+            </DialogDescription>
+          </DialogHeader>
+          {syncConfirmCompany && (
+            <div className="py-4 text-center">
+              <p className="text-sm leading-relaxed">
+                Bạn có muốn hệ thống tự động tải thông tin chi tiết như <strong>tên đầy đủ, địa chỉ, người đại diện...</strong> của mã số thuế <strong className="text-primary">{syncConfirmCompany.taxCode}</strong> từ masothue.com không?
+              </p>
+            </div>
+          )}
+          <DialogFooter className="gap-3">
+            <Button variant="outline" onClick={() => setSyncConfirmCompany(null)} className="flex-1">Không, bỏ qua</Button>
+            <Button
+              onClick={() => { if (syncConfirmCompany) { handleSyncInfo(syncConfirmCompany.id); } setSyncConfirmCompany(null); }}
+              className="flex-1"
             >
-              <X className="w-5 h-5" />
-            </button>
-            <h3 className="text-md font-bold text-text-primary flex items-center">
-              <Building2 className="w-5 h-5 mr-2 text-accent-default" /> Thêm Doanh Nghiệp Mới
-            </h3>
-            <p className="text-xs text-text-muted">
-              Kết nối và lấy token kiểm thử lần đầu từ hoadondientu.gdt.gov.vn
-            </p>
+              Đồng ý cập nhật
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-            {addError && (
-              <div className="p-3.5 bg-danger-light border border-danger-default/20 text-danger-default rounded-xl text-xs flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span className="break-all">{addError}</span>
-              </div>
-            )}
-
-            {addSuccess && (
-              <div className="p-3.5 bg-success-light border border-success-default/20 text-success-default rounded-xl text-xs flex items-center space-x-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{addSuccess}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleAddCompany} className="space-y-4 pt-2">
-              <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1">Mã Số Thuế (MST)</label>
-                <input
-                  type="text"
-                  required
-                  value={newTaxCode}
-                  onChange={(e) => setNewTaxCode(e.target.value)}
-                  placeholder="Nhập mã số thuế..."
-                  className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1">Mật khẩu tra cứu</label>
-                <div className="relative">
-                  <input
-                    type={showAddPassword ? 'text' : 'password'}
-                    required
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Mật khẩu trang hoadondientu..."
-                    className="w-full bg-bg-primary border border-border rounded-xl pl-4 pr-10 py-2.5 text-sm text-text-primary focus:outline-none focus:border-accent"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowAddPassword(!showAddPassword)}
-                    className="absolute right-3 top-3 text-text-muted hover:text-text-primary"
-                  >
-                    {showAddPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-text-secondary mb-1">Chế độ đăng nhập</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setNewLoginMode('AUTO')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      newLoginMode === 'AUTO'
-                        ? 'bg-accent-default/20 border-accent-default text-accent-default'
-                        : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    Tự động (Gemini)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewLoginMode('MANUAL')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      newLoginMode === 'MANUAL'
-                        ? 'bg-accent-default/20 border-accent-default text-accent-default'
-                        : 'bg-bg-primary border-border text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    Thủ công
-                  </button>
-                </div>
-              </div>
-
-              {newLoginMode === 'MANUAL' && (
-                <div className="p-4 bg-bg-primary/60 rounded-2xl border border-border space-y-3">
-                  <label className="block text-xs font-semibold text-text-secondary">Xác thực mã Captcha GDT</label>
-                  <div className="flex items-center space-x-2">
-                    <div className="h-10 bg-white rounded-lg flex items-center justify-center p-1 flex-1 relative overflow-hidden">
-                      {newCaptchaLoading ? (
-                        <RefreshCw className="w-4 h-4 text-accent-default animate-spin" />
-                      ) : (
-                        <div 
-                          className="w-full h-full flex items-center justify-center svg-captcha-wrapper"
-                          dangerouslySetInnerHTML={{ __html: newCaptchaSvg }}
-                        />
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={fetchNewCaptcha}
-                      disabled={newCaptchaLoading}
-                      className="h-10 w-10 bg-bg-primary hover:bg-bg-tertiary border border-border rounded-lg flex items-center justify-center text-text-secondary hover:text-text-primary transition disabled:opacity-50 cursor-pointer"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${newCaptchaLoading ? 'animate-spin' : ''}`} />
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
-                    value={newCaptchaValue}
-                    onChange={(e) => setNewCaptchaValue(e.target.value)}
-                    placeholder="Nhập mã captcha..."
-                    className="w-full bg-bg-primary border border-border rounded-xl px-4 py-2 text-center text-xs font-semibold tracking-widest uppercase focus:outline-none focus:border-accent"
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center space-x-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="flex-1 bg-bg-primary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary py-2.5 px-4 rounded-xl text-xs font-semibold cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={addLoading}
-                  className="flex-1 bg-accent-default hover:bg-accent-hover-default disabled:opacity-50 text-white py-2.5 px-4 rounded-xl text-xs font-semibold cursor-pointer"
-                >
-                  {addLoading ? 'Đang kết nối...' : 'Lưu & Kết Nối'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Global Svg container fixes inside lists */}
       <style>{`
         .svg-captcha-wrapper svg {
           width: 100% !important;
@@ -902,6 +677,15 @@ export default function CompanyManager() {
           max-height: 32px !important;
         }
       `}</style>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-2">
+      <span className="text-muted-foreground shrink-0 w-20">{label}:</span>
+      <span>{value}</span>
     </div>
   );
 }

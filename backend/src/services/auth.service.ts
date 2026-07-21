@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { CaptchaService } from './captcha.service.js';
+import { createLogger } from '../logger/index.js';
 
 const captchaService = new CaptchaService();
+const log = createLogger('AuthService');
 
 export class AuthService {
   /**
@@ -23,7 +25,7 @@ export class AuthService {
         }
       }
     } catch (error) {
-      console.error('[AuthService] Error checking token expiration:', error);
+      log.error({ err: error }, 'Error checking token expiration');
     }
     return true; // Default to expired if check fails
   }
@@ -51,7 +53,7 @@ export class AuthService {
     let attempt = 0;
     while (attempt < maxRetries) {
       attempt++;
-      console.log(`[AuthService] Login attempt ${attempt}/${maxRetries} for MST ${username}...`);
+      log.info({ mst: username, attempt, maxRetries }, 'Login attempt');
       
       try {
         // Step 1: Fetch captcha SVG and key
@@ -64,7 +66,7 @@ export class AuthService {
         const cvalue = await captchaService.solveCaptcha(pngBuffer, geminiApiKey);
 
         if (!cvalue || cvalue.length !== 6) {
-          console.warn(`[AuthService] Resolved captcha "${cvalue}" is invalid length (expected 6 characters). Retrying...`);
+          log.warn({ cvalue, length: cvalue?.length }, 'Resolved captcha invalid length, retrying...');
           continue;
         }
 
@@ -79,7 +81,7 @@ export class AuthService {
         const response = await axios.post(loginUrl, payload, { headers, timeout: 20000 });
         
         if (response.data && response.data.token) {
-          console.log(`[AuthService] Login successful on attempt ${attempt}. Token obtained.`);
+          log.info({ mst: username, attempt }, 'Login successful. Token obtained.');
           return response.data.token;
         }
 
@@ -87,7 +89,7 @@ export class AuthService {
       } catch (error: any) {
         const errorData = error.response?.data;
         const errorMsg = errorData?.message || errorData?.error || error.message;
-        console.error(`[AuthService] Login attempt ${attempt} failed. Details:`, errorMsg);
+        log.error({ mst: username, attempt, errorMsg }, 'Login attempt failed');
         
         // Fail fast if credentials are wrong (not a captcha mistake)
         const isCredentialError = typeof errorMsg === 'string' && (
@@ -125,7 +127,7 @@ export class AuthService {
         }
       }
     } catch (error) {
-      console.error('[AuthService] Error decoding token expiration:', error);
+      log.error({ err: error }, 'Error decoding token expiration');
     }
     return null;
   }
@@ -170,7 +172,7 @@ export class AuthService {
     } catch (error: any) {
       const errorData = error.response?.data;
       const errorMsg = errorData?.message || errorData?.error || error.message;
-      console.error(`[AuthService] Manual login failed for MST ${username}. Details:`, errorMsg);
+      log.error({ mst: username, errorMsg }, 'Manual login failed');
       throw new Error(errorMsg);
     }
   }
@@ -193,7 +195,7 @@ export class AuthService {
         return response.data.name;
       }
     } catch (error: any) {
-      console.error('[AuthService] Failed to fetch taxpayer profile name:', error.message);
+      log.error({ err: error.message }, 'Failed to fetch taxpayer profile name');
     }
     return '';
   }

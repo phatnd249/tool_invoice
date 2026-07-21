@@ -1,0 +1,59 @@
+HƯỚNG DẪN CẤU HÌNH TÊN MIỀN LOCAL (ketoan.nhantaiviet.com)
+===================================================
+
+PHẦN 1: DÀNH CHO MÁY WINDOWS (Truy cập từ máy tính khác cùng mạng LAN)
+-------------------------------------------------------------------------
+Nếu bạn dùng máy tính Windows và muốn truy cập vào code đang chạy trên máy Ubuntu:
+
+Bước 1: Tìm IP của máy Ubuntu
+- Trên máy Ubuntu, mở terminal và gõ lệnh: `ip addr`
+- Tìm địa chỉ IP nội bộ (thường có dạng 192.168.x.x), ví dụ: 192.168.1.50
+
+Bước 2: Cấu hình file hosts trên máy Windows
+- Bấm Start, gõ "Notepad", click chuột phải vào Notepad -> "Run as administrator".
+- Trong Notepad, bấm File -> Open, dán đường dẫn này: C:\Windows\System32\drivers\etc
+- Chuyển "Text Documents (*.txt)" thành "All Files (*.*)" ở góc dưới bên phải để thấy file hosts.
+- Mở file hosts và thêm dòng này xuống dưới cùng:
+  192.168.1.50    ketoan.nhantaiviet.com
+  (Nhớ thay IP bằng IP của máy Ubuntu bạn tìm được ở Bước 1)
+- Bấm Ctrl + S để lưu lại.
+
+Bước 3: Truy cập
+- Mở trình duyệt web trên máy Windows và truy cập: http://ketoan.nhantaiviet.com:8080
+
+
+PHẦN 2: DÀNH CHO MÁY UBUNTU HIỆN TẠI (Truy cập trực tiếp trên máy đang chạy code)
+-------------------------------------------------------------------------
+Nếu bạn đang dùng trình duyệt ngay trên máy Ubuntu này (máy đang chạy code):
+
+Bước 1: Cấu hình file hosts trên Ubuntu
+- Mở terminal và gõ lệnh:
+  sudo nano /etc/hosts
+- Thêm dòng này xuống dưới cùng:
+  127.0.0.1    ketoan.nhantaiviet.com
+- Bấm Ctrl + O -> Enter để lưu, sau đó Ctrl + X để thoát.
+
+Bước 2 (Tùy chọn): Cài Nginx để bỏ đuôi cổng :8080
+Nếu bạn muốn truy cập ngắn gọn là http://ketoan.nhantaiviet.com (không có chữ 8080), hãy cài thêm phần này:
+1. Cài Nginx:
+   sudo apt update && sudo apt install nginx -y
+2. Tạo file cấu hình:
+   sudo nano /etc/nginx/sites-available/ketoan.nhantaiviet.com
+3. Dán nội dung proxy vào:
+   server {
+       listen 80;
+       server_name ketoan.nhantaiviet.com;
+       location / {
+           proxy_pass http://localhost:8080;
+       }
+   }
+   (Bấm Ctrl+O -> Enter -> Ctrl+X để lưu và thoát)
+4. Kích hoạt và khởi động lại Nginx:
+   sudo ln -s /etc/nginx/sites-available/ketoan.nhantaiviet.com /etc/nginx/sites-enabled/
+   sudo nginx -t
+   sudo systemctl restart nginx
+
+Bước 3: Truy cập
+- Mở trình duyệt trên Ubuntu và vào:
+  http://ketoan.nhantaiviet.com (Nếu đã làm Bước 2)
+  hoặc http://ketoan.nhantaiviet.com:8080 (Nếu bỏ qua Bước 2)

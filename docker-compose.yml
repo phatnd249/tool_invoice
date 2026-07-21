@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    container_name: tool-invoice
+    restart: unless-stopped
+    ports:
+      - "8080:3000"
+    volumes:
+      - ./data/db:/app/data/db
+      - ./data/invoices:/app/data/invoices
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/db/database.db
+      - INVOICES_DIR=/app/data/invoices
+      - TZ=Asia/Ho_Chi_Minh

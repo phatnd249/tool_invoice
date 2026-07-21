@@ -1,6 +1,9 @@
 import axios from 'axios';
 import sharp from 'sharp';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { createLogger } from '../logger/index.js';
+
+const log = createLogger('CaptchaService');
 
 export interface GdtCaptcha {
   key: string;
@@ -39,7 +42,7 @@ export class CaptchaService {
       }
       throw new Error('Invalid GDT captcha response structure.');
     } catch (error: any) {
-      console.error('[CaptchaService] Error fetching GDT captcha:', error.message);
+      log.error({ err: error.message }, 'Error fetching GDT captcha');
       throw error;
     }
   }
@@ -53,7 +56,7 @@ export class CaptchaService {
         .png()
         .toBuffer();
     } catch (error: any) {
-      console.error('[CaptchaService] Error converting SVG to PNG:', error.message);
+      log.error({ err: error.message }, 'Error converting SVG to PNG');
       throw error;
     }
   }
@@ -87,10 +90,10 @@ export class CaptchaService {
       // Clean result: keep only alphanumeric characters, uppercase them
       const solvedText = responseText.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().trim();
       
-      console.log(`[CaptchaService] Gemini solved captcha: "${solvedText}"`);
+      log.info({ solvedText }, 'Gemini solved captcha');
       return solvedText;
     } catch (error: any) {
-      console.error('[CaptchaService] Error calling Gemini API for OCR:', error.message);
+      log.error({ err: error.message }, 'Error calling Gemini API for OCR');
       throw error;
     }
   }

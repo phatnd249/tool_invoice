@@ -1,65 +1,28 @@
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import { withRetry } from '../utils/rate-limiter.js';
+import { createLogger } from '../logger/index.js';
+import { formatGdtError, extractResponseBody } from '../utils/gdt-errors.js';
+import { getResultCode } from '../utils/gdt-format.js';
 
-// ────────────────────────────────────────────────────────────
-// Helper: parse GDT error response into a user-friendly message
-// ────────────────────────────────────────────────────────────
-
-const GDT_INVOICE_NOT_FOUND_PATTERNS = [
-  'Không tồn tại hồ sơ gốc của hóa đơn',
-  'không tồn tại hồ sơ gốc',
-  'Invoice not found',
-  'No original record',
-];
+const log = createLogger('DownloaderService');
 
 /**
- * Parse GDT response body và trả về message thân thiện với người dùng.
- * Phân biệt:
- *   - Hoá đơn không tồn tại (bị thu hồi/xoá) → message rõ ràng
- *   - Lỗi khác → message kèm HTTP status
+ * Wrapper for axios.get with automatic retry and exponential backoff for 429 errors.
  */
-function formatGdtError(responseBody: string, invoiceLabel: string, status: number): string {
-  const isNotFound = GDT_INVOICE_NOT_FOUND_PATTERNS.some(p =>
-    responseBody.toLowerCase().includes(p.toLowerCase())
-  );
-  if (isNotFound) {
-    return `Hoá đơn ${invoiceLabel} không còn tồn tại trên hệ thống GDT (đã bị thu hồi/xoá).`;
+async function axiosGetWithRetry(url: string, config: any, retries: number = 3, delayMs: number = 1000): Promise<any> {
+  for (let i = 0; i < retries; i++) {
+    const response = await axios.get(url, config);
+    if (response.status === 429) {
+      log.warn({ url, delayMs, attempt: i + 1, retries }, 'Rate limit (429) hit, retrying...');
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      delayMs *= 2;
+      continue;
+    }
+    return response;
   }
-  // Parse message từ JSON nếu có
-  try {
-    const parsed = JSON.parse(responseBody);
-    return `GDT trả về lỗi (HTTP ${status}): ${parsed.message || responseBody.slice(0, 200)}`;
-  } catch {
-    return `GDT trả về lỗi (HTTP ${status}): ${responseBody.slice(0, 200)}`;
-  }
-}
-
-/**
- * Map processStatus (ttxly) to result code for file naming:
- *   C = Đã cấp mã (ttxly=5)
- *   K = Cục thuế đã nhận không mã / không đủ điều kiện cấp mã (ttxly=6 BUY, 4 SELL)
- *   M = Máy tính tiền (ttxly=8)
- */
-function mapProcessStatusToCode(ttxly: number | undefined | null, invoiceType: 'BUY' | 'SELL'): string {
-  if (ttxly === 5) return 'C';
-  if (ttxly === 8) return 'M';
-  if (ttxly === 6 || ttxly === 4) return 'K';
-  return 'K'; // Default
-}
-
-/**
- * Extract response body from an axios error or response as a string.
- */
-function extractResponseBody(data: any): string {
-  if (!data) return '(empty)';
-  if (typeof data === 'string') return data.slice(0, 2000);
-  if (Buffer.isBuffer(data)) return Buffer.from(data).toString('utf-8').slice(0, 2000);
-  try {
-    return JSON.stringify(data).slice(0, 2000);
-  } catch {
-    return String(data).slice(0, 2000);
-  }
+  return axios.get(url, config);
 }
 
 export class DownloaderService {
@@ -73,14 +36,13 @@ export class DownloaderService {
         const payloadB64 = parts[1];
         const buffer = Buffer.from(payloadB64, 'base64');
         const payload = JSON.parse(buffer.toString('utf-8'));
-        
         const mst = payload.username || payload.mst || payload.sub;
         if (mst) {
           return String(mst).replace(/[^a-zA-Z0-9-]/g, '');
         }
       }
     } catch (error) {
-      console.error('[DownloaderService] Error decoding token JWT:', error);
+      log.error({ err: error }, 'Error decoding token JWT');
     }
     return null;
   }
@@ -93,23 +55,19 @@ export class DownloaderService {
     let currentStart = new Date(startDate.getTime());
 
     while (currentStart <= endDate) {
-      // 27 days added (inclusive of currentStart makes a 28-day window)
       const currentEnd = new Date(currentStart.getTime());
       currentEnd.setDate(currentEnd.getDate() + 27);
-      
       const actualEnd = currentEnd > endDate ? new Date(endDate.getTime()) : currentEnd;
       chunks.push({ start: new Date(currentStart), end: new Date(actualEnd) });
-
       currentStart = new Date(actualEnd.getTime());
       currentStart.setDate(currentStart.getDate() + 1);
     }
-    
+
     return chunks;
   }
 
   /**
    * Query invoices from GDT Portal
-   * @param type "BUY" or "SELL"
    */
   public async queryInvoicesInRange(
     startDate: Date,
@@ -135,30 +93,40 @@ export class DownloaderService {
       'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
     };
 
-    // Determine correct endpoint based on BUY (purchase) or SELL (sold)
     const apiPath = type === 'BUY' ? 'purchase' : 'sold';
     const baseUrlQuery = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${apiPath}`;
     const baseUrlScoQuery = `https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/${apiPath}`;
 
     let allInvoices: any[] = [];
 
-    // 1. Query standard invoices
-    try {
-      const queryInvoices = await this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers);
-      allInvoices = allInvoices.concat(queryInvoices);
-    } catch (error) {
-      throw error;
+    // Query standard invoices for statuses: 4,5,6,7,8
+    const standardStatuses = [4, 5, 6, 7, 8];
+    for (const status of standardStatuses) {
+      try {
+        const queryInvoices = await withRetry(
+          () => this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers, status),
+          { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
+        );
+        allInvoices = allInvoices.concat(queryInvoices);
+      } catch (error: any) {
+        if (error.message && error.message.includes('401')) throw error;
+        log.warn({ status, err: error.message }, 'Error fetching standard invoices, ignoring');
+      }
     }
 
-    // 2. Query cash register invoices (máy tính tiền)
-    try {
-      const scoQueryInvoices = await this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers);
-      allInvoices = allInvoices.concat(scoQueryInvoices);
-    } catch (error: any) {
-      if (error.message && error.message.includes('401')) {
-        throw error;
+    // Query cash register invoices (máy tính tiền)
+    const scoStatuses = [5, 6, 8];
+    for (const status of scoStatuses) {
+      try {
+        const scoQueryInvoices = await withRetry(
+          () => this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers, status),
+          { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
+        );
+        allInvoices = allInvoices.concat(scoQueryInvoices);
+      } catch (error: any) {
+        if (error.message && error.message.includes('401')) throw error;
+        log.warn({ status, err: error.message }, 'Error fetching sco-query invoices, ignoring');
       }
-      console.error('[DownloaderService] Error fetching sco-query invoices, ignoring to return standard invoices:', error.message);
     }
 
     return allInvoices;
@@ -168,61 +136,60 @@ export class DownloaderService {
     baseUrl: string,
     startStr: string,
     endStr: string,
-    headers: any
+    headers: any,
+    status?: number
   ): Promise<any[]> {
-    // Step 1: Send query with size=1 to find total matching records
-    const urlCount = `${baseUrl}?sort=tdlap:desc&size=1&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
-    
+    let searchStr = `tdlap=ge=${startStr};tdlap=le=${endStr}`;
+    if (status !== undefined) {
+      searchStr += `;ttxly==${status}`;
+    }
+    const searchParam = encodeURIComponent(searchStr);
+    const urlCount = `${baseUrl}?sort=tdlap:desc&size=1&search=${searchParam}`;
+
     try {
-      console.log(`[DownloaderService] Querying count from ${startStr} to ${endStr} at ${baseUrl}...`);
-      const response = await axios.get(urlCount, {
-        headers,
-        timeout: 20000,
-        validateStatus: () => true,
+      log.info({ startStr, endStr, baseUrl }, 'Querying count from GDT...');
+      const response = await axiosGetWithRetry(urlCount, {
+        headers, timeout: 60000, validateStatus: () => true,
       });
 
-      if (response.status === 401) {
-        throw new Error('Unauthorized GDT Token (401)');
-      }
+      if (response.status === 401) throw new Error('Unauthorized GDT Token (401)');
 
       if (response.status !== 200) {
         const responseBody = typeof response.data === 'string'
           ? response.data.slice(0, 2000)
           : JSON.stringify(response.data).slice(0, 2000);
-        console.error(`[DownloaderService] GDT query count responded with status ${response.status}`);
-        console.error(`  URL: ${urlCount}`);
-        console.error(`  Response body: ${responseBody}`);
-        throw new Error(`GDT query failed with status ${response.status}`);
+        log.error({ status: response.status, url: urlCount, responseBody }, 'GDT query count failed');
+        const err = new Error(`GDT query failed with status ${response.status}`);
+        (err as any).status = response.status;
+        throw err;
       }
-      
+
       const total = response.data?.total || 0;
-      console.log(`[DownloaderService] Found ${total} invoices in GDT at ${baseUrl}.`);
+      log.info({ total, baseUrl }, 'Found %d invoices in GDT', total);
       if (total === 0) return [];
 
-      // Step 2: Retrieve all details via pagination (GDT limit: 50 records/page)
       const PAGE_SIZE = 50;
       const totalPages = Math.ceil(total / PAGE_SIZE);
       const allRecords: any[] = [];
 
       for (let page = 0; page < totalPages; page++) {
-        const urlPage = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&page=${page}&search=tdlap=ge=${startStr};tdlap=le=${endStr}`;
+        const urlPage = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&page=${page}&search=${searchParam}`;
+        log.debug({ page: page + 1, totalPages, baseUrl }, 'Fetching page...');
 
-        console.log(`[DownloaderService] Fetching page ${page + 1}/${totalPages} (size=${PAGE_SIZE}) from ${baseUrl}...`);
-
-        const responsePage = await axios.get(urlPage, {
-          headers,
-          timeout: 30000,
-          validateStatus: () => true,
+        const responsePage = await axiosGetWithRetry(urlPage, {
+          headers, timeout: 60000, validateStatus: () => true,
         });
 
         if (responsePage.status !== 200) {
           const responseBody = typeof responsePage.data === 'string'
             ? responsePage.data.slice(0, 2000)
             : JSON.stringify(responsePage.data).slice(0, 2000);
-          console.error(`[DownloaderService] GDT query page ${page + 1}/${totalPages} responded with status ${responsePage.status}`);
-          console.error(`  URL: ${urlPage}`);
-          console.error(`  Response body: ${responseBody}`);
-          // Continue to next page instead of throwing — partial data is better than none
+          log.error({ page: page + 1, totalPages, status: responsePage.status, url: urlPage, responseBody }, 'GDT query page failed');
+          if (responsePage.status === 429) {
+            const err = new Error(`GDT query page failed with status 429`);
+            (err as any).status = 429;
+            throw err;
+          }
           continue;
         }
 
@@ -230,15 +197,14 @@ export class DownloaderService {
         const sourceApi = baseUrl.includes('sco-query') ? 'sco-query' : 'query';
         const enhancedRecords = records.map((r: any) => ({ ...r, _sourceApi: sourceApi }));
         allRecords.push(...enhancedRecords);
-        console.log(`[DownloaderService] Page ${page + 1}/${totalPages} from ${baseUrl} returned ${records.length} records.`);
+        log.debug({ page: page + 1, totalPages, baseUrl, recordsCount: records.length }, 'Page returned records');
 
-        // Delay between pages to avoid rate limiting
         if (page < totalPages - 1) {
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
 
-      console.log(`[DownloaderService] Total records collected across ${totalPages} page(s) from ${baseUrl}: ${allRecords.length}`);
+      log.info({ totalPages, baseUrl, totalRecords: allRecords.length }, 'Total records collected');
       return allRecords;
     } catch (error: any) {
       if (error.response) {
@@ -247,23 +213,18 @@ export class DownloaderService {
               ? error.response.data.slice(0, 2000)
               : JSON.stringify(error.response.data).slice(0, 2000))
           : '(empty)';
-        console.error(`[DownloaderService] GDT query error at ${baseUrl}: status ${error.response.status}`);
-        console.error(`  Response body: ${responseBody}`);
+        log.error({ baseUrl, status: error.response.status, responseBody }, 'GDT query error');
       } else {
-        console.error(`[DownloaderService] Error querying GDT invoices at ${baseUrl}:`, error.message);
+        log.error({ baseUrl, err: error.message }, 'Error querying GDT invoices');
       }
       throw error;
     }
   }
 
   /**
-   * Download the XML/ZIP file for a specific invoice
-   */
-  /**
    * Download the XML/ZIP file for a specific invoice.
-   *
    * @returns zipPath nếu tải thành công.
-   * @throws Error với message thân thiện nếu GDT trả về lỗi (vd: hoá đơn không tồn tại).
+   * @throws Error với message thân thiện nếu GDT trả về lỗi.
    */
   public async downloadInvoiceZip(
     invoice: any,
@@ -271,21 +232,20 @@ export class DownloaderService {
     outputDir: string,
     invoiceType: 'BUY' | 'SELL' = 'SELL'
   ): Promise<string> {
-    const nbmst = invoice.nbmst;         // Seller tax code
-    const khmshdon = invoice.khmshdon;   // Invoice template symbol
-    const khhdon = invoice.khhdon;       // Invoice symbol
-    const shdon = invoice.shdon;         // Invoice number
-    const mhdon = invoice.mhdon;         // Tax Authority Code (MCCQT/hash)
+    const nbmst = invoice.nbmst;
+    const khmshdon = invoice.khmshdon;
+    const khhdon = invoice.khhdon;
+    const shdon = invoice.shdon;
 
     if (!nbmst || shdon === undefined || !khmshdon || !khhdon) {
-      throw new Error(`Thiếu thông tin hoá đơn (nbmst/shd on/khmshdon/khhdon) để tải ZIP.`);
+      throw new Error(`Thiếu thông tin hoá đơn (nbmst/shdon/khmshdon/khhdon) để tải ZIP.`);
     }
-    const resultCode = mapProcessStatusToCode(invoice.ttxly, invoiceType);
-    const zipFileName = `${nbmst} - ${resultCode} - ${shdon}.zip`;
 
+    const resultCode = getResultCode(invoice);
+    const zipFileName = `${nbmst}-${String(khmshdon).replace(/[^a-zA-Z0-9]/g, '')}-${String(khhdon).replace(/[^a-zA-Z0-9]/g, '')}-${shdon}-${resultCode}.zip`;
     const zipPath = path.join(outputDir, zipFileName);
 
-    // Skip if already downloaded and not empty
+    // Skip if already downloaded
     if (fs.existsSync(zipPath) && fs.statSync(zipPath).size > 0) {
       return zipPath;
     }
@@ -299,14 +259,12 @@ export class DownloaderService {
     };
 
     try {
-      // Ensure directory exists
       fs.mkdirSync(outputDir, { recursive: true });
 
-      const response = await axios.get(exportUrl, {
+      const response = await axiosGetWithRetry(exportUrl, {
         headers,
         responseType: 'arraybuffer',
-        timeout: 20000,
-        // Do not throw on non-200 so we can inspect the response body
+        timeout: 60000,
         validateStatus: () => true,
       });
 
@@ -315,16 +273,13 @@ export class DownloaderService {
         return zipPath;
       }
 
-      // Non-200 response from GDT — parse và throw message thân thiện
+      // Non-200 — parse và throw message thân thiện
       const responseBody = response.data ? Buffer.from(response.data).toString('utf-8').slice(0, 2000) : '(empty)';
-      console.error(`[DownloaderService] GDT responded with status ${response.status} for invoice ${shdon}`);
-      console.error(`  URL: ${exportUrl}`);
-      console.error(`  Response body: ${responseBody}`);
+      log.error({ status: response.status, invoiceNumber: shdon, url: exportUrl, responseBody }, 'GDT responded with error for invoice download');
 
       const friendlyMessage = formatGdtError(responseBody, String(shdon), response.status);
       throw new Error(friendlyMessage);
     } catch (error: any) {
-      // Nếu đã là Error với message thân thiện (do throw ở trên), throw tiếp
       if (error.message && (
         error.message.includes('không còn tồn tại') ||
         error.message.includes('GDT trả về lỗi')
@@ -332,26 +287,20 @@ export class DownloaderService {
         throw error;
       }
 
-      // Axios error với response từ GDT
       if (error.response) {
         const responseBody = extractResponseBody(error.response.data);
-        console.error(`[DownloaderService] GDT error for invoice ${shdon}: status ${error.response.status}`);
-        console.error(`  URL: ${exportUrl}`);
-        console.error(`  Response body: ${responseBody}`);
-
+        log.error({ invoiceNumber: shdon, status: error.response.status, url: exportUrl, responseBody }, 'GDT error for invoice');
         const friendlyMessage = formatGdtError(responseBody, String(shdon), error.response.status);
         throw new Error(friendlyMessage);
       }
 
-      // Network error / timeout
-      console.error(`[DownloaderService] Failed to download ZIP for invoice ${shdon}: ${error.message}`);
+      log.error({ invoiceNumber: shdon, err: error.message }, 'Failed to download ZIP');
       throw new Error(`Lỗi mạng khi tải hoá đơn ${shdon}: ${error.message}`);
     }
   }
 
   /**
    * Download Excel report for a date range from GDT portal.
-   * Returns an array of paths to saved .xlsx files.
    */
   public async downloadExcelReport(
     startDate: Date,
@@ -396,47 +345,31 @@ export class DownloaderService {
 
     for (const task of exportTasks) {
       const filePath = path.join(outputDir, task.fileName);
-
-      // Skip if already downloaded
       if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
-        console.log(`[DownloaderService] Excel report already exists: ${filePath}`);
+        log.debug({ filePath }, 'Excel report already exists');
         savedPaths.push(filePath);
         continue;
       }
 
       try {
-        const response = await axios.get(task.url, {
-          headers,
-          responseType: 'arraybuffer',
-          timeout: 30000,
-          // Do not throw on non-200 so we can inspect the response body
-          validateStatus: () => true,
+        const response = await axiosGetWithRetry(task.url, {
+          headers, responseType: 'arraybuffer', timeout: 60000, validateStatus: () => true,
         });
 
         if (response.status === 200) {
           fs.writeFileSync(filePath, response.data);
-          console.log(`[DownloaderService] Downloaded Excel report: ${filePath}`);
+          log.info({ filePath }, 'Downloaded Excel report');
           savedPaths.push(filePath);
         } else {
-          // Log non-200 response from GDT
           const responseBody = response.data ? Buffer.from(response.data).toString('utf-8').slice(0, 2000) : '(empty)';
-          console.error(`[DownloaderService] GDT responded with status ${response.status} for Excel report`);
-          console.error(`  URL: ${task.url}`);
-          console.error(`  Response body: ${responseBody}`);
+          log.error({ status: response.status, url: task.url, responseBody }, 'GDT responded error for Excel report');
         }
       } catch (error: any) {
         if (error.response) {
-          // Axios error with response from GDT
-          const responseBody = error.response.data
-            ? (typeof error.response.data === 'string'
-                ? error.response.data.slice(0, 2000)
-                : JSON.stringify(error.response.data).slice(0, 2000))
-            : '(empty)';
-          console.error(`[DownloaderService] GDT error for Excel report: status ${error.response.status}`);
-          console.error(`  URL: ${task.url}`);
-          console.error(`  Response body: ${responseBody}`);
+          const responseBody = extractResponseBody(error.response.data);
+          log.error({ status: error.response.status, url: task.url, responseBody }, 'GDT error for Excel report');
         } else {
-          console.error(`[DownloaderService] Failed to download Excel report from ${task.url}: ${error.message}`);
+          log.error({ url: task.url, err: error.message }, 'Failed to download Excel report');
         }
       }
     }
@@ -445,17 +378,13 @@ export class DownloaderService {
   }
 
   /**
-   * Tải chi tiết hoá đơn (JSON) từ API detail để fallback build HTML
-   * khi không tải được file ZIP gốc.
+   * Tải chi tiết hoá đơn (JSON) từ API detail để fallback build HTML.
    */
-  public async downloadInvoiceDetail(
-    invoice: any,
-    token: string
-  ): Promise<any> {
-    const nbmst = invoice.nbmst;         // Seller tax code
-    const khmshdon = invoice.khmshdon;   // Invoice template symbol
-    const khhdon = invoice.khhdon;       // Invoice symbol
-    const shdon = invoice.shdon;         // Invoice number
+  public async downloadInvoiceDetail(invoice: any, token: string): Promise<any> {
+    const nbmst = invoice.nbmst;
+    const khmshdon = invoice.khmshdon;
+    const khhdon = invoice.khhdon;
+    const shdon = invoice.shdon;
 
     if (!nbmst || shdon === undefined || !khmshdon || !khhdon) {
       throw new Error(`Thiếu thông tin hoá đơn (nbmst/shdon/khmshdon/khhdon) để tải chi tiết.`);
@@ -463,7 +392,6 @@ export class DownloaderService {
 
     const isSco = invoice._sourceApi === 'sco-query' || String(khhdon).toUpperCase().startsWith('M');
     const apiPath = isSco ? 'sco-query' : 'query';
-    
     const detailUrl = `https://hoadondientu.gdt.gov.vn/api/${apiPath}/invoices/detail?nbmst=${nbmst}&khhdon=${khhdon}&shdon=${shdon}&khmshdon=${khmshdon}`;
     const headers = {
       Authorization: `Bearer ${token}`,
@@ -472,16 +400,14 @@ export class DownloaderService {
     };
 
     try {
-      const response = await axios.get(detailUrl, {
-        headers,
-        timeout: 15000,
-        validateStatus: () => true,
+      const response = await axiosGetWithRetry(detailUrl, {
+        headers, timeout: 60000, validateStatus: () => true,
       });
 
       if (response.status === 200 && response.data) {
         return response.data;
       }
-      
+
       throw new Error(`GDT trả về lỗi ${response.status} khi lấy detail.`);
     } catch (error: any) {
       throw new Error(`Lỗi gọi API detail: ${error.message}`);

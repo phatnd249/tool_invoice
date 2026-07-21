@@ -3,6 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import prisma from '../utils/db.js';
 import { renderInvoiceTemplate } from '../templates/invoice-template.js';
+import { createLogger } from '../logger/index.js';
+
+const log = createLogger('PreviewService');
 
 /**
  * Service xử lý preview hoá đơn (file HTML từ ZIP).
@@ -78,7 +81,7 @@ export class PreviewService {
     try {
       fs.writeFileSync(cachePath, htmlContent, 'utf-8');
     } catch (err: any) {
-      console.warn(`[PreviewService] Failed to write cache file: ${err.message}`);
+      log.warn({ err: err.message }, 'Failed to write cache file');
     }
 
     return htmlContent;
@@ -95,7 +98,7 @@ export class PreviewService {
     try {
       fs.writeFileSync(cachePath, htmlContent, 'utf-8');
     } catch (err: any) {
-      console.warn(`[PreviewService] Failed to write generated HTML to cache: ${err.message}`);
+      log.warn({ err: err.message }, 'Failed to write generated HTML to cache');
     }
 
     return htmlContent;
@@ -111,7 +114,7 @@ export class PreviewService {
   public extractHtmlFromZip(zipPath: string): string | null {
     try {
       if (!fs.existsSync(zipPath)) {
-        console.warn(`[PreviewService] ZIP file not found: ${zipPath}`);
+        log.warn({ zipPath }, 'ZIP file not found');
         return null;
       }
 
@@ -124,7 +127,7 @@ export class PreviewService {
       );
 
       if (!htmlEntry) {
-        console.warn(`[PreviewService] No HTML file found in ZIP: ${zipPath}`);
+        log.warn({ zipPath }, 'No HTML file found in ZIP');
         return null;
       }
 
@@ -158,14 +161,46 @@ export class PreviewService {
             // Replace src="name", href="name", or url("name")
             htmlContent = htmlContent.replace(new RegExp(`src=["']?\\/?${escapedName}["']?`, 'g'), `src="${dataUri}"`);
             htmlContent = htmlContent.replace(new RegExp(`href=["']?\\/?${escapedName}["']?`, 'g'), `href="${dataUri}"`);
+            // Only replace the url without adding !important to avoid !important !important syntax errors
             htmlContent = htmlContent.replace(new RegExp(`url\\(["']?\\/?${escapedName}["']?\\)`, 'g'), `url("${dataUri}")`);
           }
         }
       });
 
+      // Inject the explicit background image from the images directory to ensure it is always present
+      try {
+        // Resolve bgPath by finding the 'images' folder in the root workspace
+        // this.cacheDir is something like tool-invoice/backend/public/preview
+        const bgPath = path.resolve(this.cacheDir, '../../../images/viewinvoice-bg.jpg');
+        
+        if (fs.existsSync(bgPath)) {
+          const bgBase64 = fs.readFileSync(bgPath).toString('base64');
+          const bgDataUri = `data:image/jpeg;base64,${bgBase64}`;
+          const styleInjection = `
+            <style>
+              @media print {
+                .main-page, .bg-container {
+                  background-image: url("${bgDataUri}") !important;
+                  background-color: transparent !important;
+                  border: 3px double rgba(145, 87, 21, 0.69) !important;
+                }
+              }
+              .main-page, .bg-container {
+                background-image: url("${bgDataUri}") !important;
+              }
+            </style>
+          `;
+          htmlContent = htmlContent.replace('</head>', `${styleInjection}</head>`);
+        } else {
+          log.warn({ bgPath }, 'Background image not found');
+        }
+      } catch (err) {
+        log.warn({ err }, 'Failed to inject custom background');
+      }
+
       return htmlContent;
     } catch (error: any) {
-      console.error(`[PreviewService] Error extracting HTML from ZIP: ${error.message}`);
+      log.error({ err: error.message, zipPath }, 'Error extracting HTML from ZIP');
       return null;
     }
   }
@@ -180,7 +215,7 @@ export class PreviewService {
         fs.unlinkSync(cachePath);
       }
     } catch (err: any) {
-      console.warn(`[PreviewService] Failed to clear cache: ${err.message}`);
+      log.warn({ err: err.message }, 'Failed to clear cache');
     }
   }
 }

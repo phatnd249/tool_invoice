@@ -16,10 +16,13 @@ export function delay(ms: number): Promise<void> {
  * Only retry on HTTP 429 (Too Many Requests) from GDT rate limiting.
  */
 export function isRetryableError(error: any): boolean {
-  const status = error?.response?.status;
+  const status = error?.response?.status || error?.status;
 
   // HTTP 429 Too Many Requests — rate limited, worth retrying after delay
   if (status === 429) return true;
+  
+  // Custom Error messages thrown by DownloaderService with 429
+  if (error?.message && error.message.includes('429')) return true;
 
   return false;
 }

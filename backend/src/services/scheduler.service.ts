@@ -1,8 +1,13 @@
 import cron, { ScheduledTask } from 'node-cron';
 import prisma from '../utils/db.js';
+import { createLogger } from '../logger/index.js';
+import { invoiceDownloadService } from './invoice-download.service.js';
+import { parseDateString } from '../utils/gdt-format.js';
+
+const log = createLogger('SchedulerService');
 
 /**
- * Format Date to dd/MM/yyyy string (GMT+7 safe).
+ * Format Date to dd/MM/yyyy string.
  */
 function formatDate(d: Date): string {
   const dd = String(d.getDate()).padStart(2, '0');
@@ -17,48 +22,42 @@ function formatDate(d: Date): string {
 function getDateRange(schedule: {
   repeatMode: string;
   dateRangeDays: number | null;
-}): { startDate: string; endDate: string } {
+}): { startDate: Date; endDate: Date } {
   const now = new Date();
-  const today = formatDate(now);
 
-  // Yesterday
-  const yesterday = (() => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 1);
-    return formatDate(d);
-  })();
-
-  // If user set a custom number of days → use it
   if (schedule.dateRangeDays) {
     const start = new Date(now);
     start.setDate(start.getDate() - schedule.dateRangeDays);
-    return { startDate: formatDate(start), endDate: today };
+    return { startDate: start, endDate: now };
   }
 
-  // Auto-detect from repeatMode
   switch (schedule.repeatMode) {
     case 'daily': {
       const yesterday = new Date(now);
       yesterday.setDate(yesterday.getDate() - 1);
-      return { startDate: formatDate(yesterday), endDate: formatDate(yesterday) };
+      return { startDate: yesterday, endDate: yesterday };
     }
     case 'weekly': {
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
-      return { startDate: formatDate(weekAgo), endDate: yesterday };
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return { startDate: weekAgo, endDate: yesterday };
     }
     case 'monthly': {
-      const firstOfLast = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastOfLast = new Date(now.getFullYear(), now.getMonth(), 0);
-      return { startDate: formatDate(firstOfLast), endDate: formatDate(lastOfLast) };
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { startDate: start, endDate: end };
     }
     case 'quarterly': {
-      const threeMonthsAgo = new Date(now);
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-      return { startDate: formatDate(threeMonthsAgo), endDate: yesterday };
+      const start = new Date(now);
+      start.setMonth(start.getMonth() - 3);
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return { startDate: start, endDate: yesterday };
     }
     default:
-      return { startDate: today, endDate: today };
+      return { startDate: now, endDate: now };
   }
 }
 
@@ -85,15 +84,12 @@ class SchedulerService {
         this.startJob(this.formatSchedule(s));
       }
 
-      console.log(`[Scheduler] Started ${schedules.length} active schedule(s).`);
+      log.info({ count: schedules.length }, 'Started %d active schedule(s)', schedules.length);
     } catch (err: any) {
-      console.error('[Scheduler] Failed to start schedules:', err.message);
+      log.error({ err: err.message }, 'Failed to start schedules');
     }
   }
 
-  /**
-   * Normalise schedule object: convert DB shape to the expected interface.
-   */
   private formatSchedule(s: any): ScheduleWithCompanies {
     const companies = s.companies?.map((sc: any) => ({
       companyId: sc.companyId,
@@ -117,47 +113,34 @@ class SchedulerService {
 
   /**
    * Run the download task for all companies in a schedule.
+   * Sử dụng InvoiceDownloadService thay vì gọi controller với mock req/res.
    */
   private async runDownload(schedule: ScheduleWithCompanies): Promise<void> {
     const { id, repeatMode, dateRangeDays, invoiceType, companies } = schedule;
     const companyNames = companies.map(c => c.company.taxCode).join(',');
-    console.log(`[Scheduler] Running schedule #${id} (${companyNames}, ${invoiceType})...`);
+
+    const ctxLog = createLogger('SchedulerService', `schedule-${id}`);
+    ctxLog.info({ companyNames, invoiceType }, 'Running schedule #%d', id);
 
     try {
       const { startDate, endDate } = getDateRange({ repeatMode, dateRangeDays });
-      console.log(`[Scheduler] Date range: ${startDate} → ${endDate}`);
-
-      const { InvoiceController } = await import('../controllers/invoice.controller.js');
+      ctxLog.info({ startDate: formatDate(startDate), endDate: formatDate(endDate) }, 'Date range');
 
       for (const sc of companies) {
         const taxCode = sc.company.taxCode;
-        console.log(`[Scheduler] Downloading for company ${taxCode}...`);
+        ctxLog.info({ company: taxCode }, 'Downloading for company...');
 
-        const mockReq = {
-          body: {
-            startDate,
-            endDate,
-            invoiceType,
-            companyId: sc.companyId,
-          },
-          user: { id: null, username: 'scheduler', role: 'ADMIN' },
-        } as any;
+        const result = await invoiceDownloadService.run({
+          startDate,
+          endDate,
+          companyId: sc.companyId,
+          invoiceType: (invoiceType as any) || 'SELL',
+          saveToDb: true,
+          usernameLabel: 'scheduler',
+        });
 
-        let resultMessage = '';
-        const mockRes = {
-          json: (data: any) => { resultMessage = data?.message || JSON.stringify(data); },
-          status: (code: number) => ({
-            json: (data: any) => {
-              if (code >= 400) {
-                console.error(`[Scheduler] Schedule #${id} company #${sc.companyId} failed with status ${code}:`, data?.error || data);
-              }
-              resultMessage = data?.message || data?.error || JSON.stringify(data);
-            },
-          }),
-        } as any;
-
-        await InvoiceController.downloadInvoices(mockReq, mockRes);
-        console.log(`[Scheduler] Company ${taxCode} done: ${resultMessage}`);
+        ctxLog.info({ company: taxCode, status: result.status, successCount: result.successCount },
+          'Company done: %s', result.status);
       }
 
       // Update lastRun
@@ -173,12 +156,12 @@ class SchedulerService {
           data: { isActive: false },
         });
         this.stopJob(id);
-        console.log(`[Scheduler] One-time schedule #${id} completed and deactivated.`);
+        ctxLog.info('One-time schedule #%d completed and deactivated', id);
       }
 
-      console.log(`[Scheduler] Schedule #${id} completed.`);
+      ctxLog.info('Schedule #%d completed', id);
     } catch (err: any) {
-      console.error(`[Scheduler] Schedule #${id} error:`, err.message);
+      ctxLog.error({ err: err.message }, 'Schedule #%d error', id);
     }
   }
 
@@ -190,19 +173,16 @@ class SchedulerService {
     const companies = schedule.companies || [];
     const taxCodes = companies.map(c => c.company.taxCode).join(',') || 'unknown';
 
-    // Stop existing job if any
     this.stopJob(id);
 
     if (repeatMode === 'once') {
-      // One-time: use setTimeout
       if (!scheduledAt) {
-        console.error(`[Scheduler] No scheduledAt for one-time schedule #${id}`);
+        log.error({ scheduleId: id }, 'No scheduledAt for one-time schedule');
         return;
       }
       const delayMs = new Date(scheduledAt).getTime() - Date.now();
       if (delayMs <= 0) {
-        console.log(`[Scheduler] One-time schedule #${id} is in the past, skipping.`);
-        // Deactivate it
+        log.info({ scheduleId: id }, 'One-time schedule is in the past, skipping');
         prisma.schedule.update({ where: { id }, data: { isActive: false } }).catch(() => {});
         return;
       }
@@ -210,22 +190,26 @@ class SchedulerService {
         this.runDownload(schedule);
       }, delayMs);
       this.timeouts.set(id, timeout);
-      console.log(`[Scheduler] One-time job #${id} scheduled in ${Math.round(delayMs / 1000)}s (at ${new Date(scheduledAt).toISOString()})`);
+      log.info({ scheduleId: id, delaySec: Math.round(delayMs / 1000), scheduledAt: new Date(scheduledAt).toISOString() },
+        'One-time job scheduled');
       return;
     }
 
-    // Recurring: use cron
     if (!cron.validate(cronExpression)) {
-      console.error(`[Scheduler] Invalid cron "${cronExpression}" for schedule #${id}`);
+      log.error({ scheduleId: id, cronExpression }, 'Invalid cron expression');
       return;
     }
 
     const job = cron.schedule(cronExpression, async () => {
       await this.runDownload(schedule);
+    }, {
+      timezone: 'Asia/Ho_Chi_Minh',
     });
 
     this.jobs.set(id, job);
-    console.log(`[Scheduler] Job #${id} scheduled: ${cronExpression} (mode=${repeatMode}, companies=${taxCodes})`);
+    log.info({ scheduleId: id, cronExpression, repeatMode, companies: taxCodes },
+      'Job scheduled: %s', cronExpression,
+    );
   }
 
   /**
@@ -248,15 +232,15 @@ class SchedulerService {
    * Stop all jobs. Call on graceful shutdown.
    */
   stopAll(): void {
-    for (const [id, job] of this.jobs) {
+    for (const [, job] of this.jobs) {
       job.stop();
     }
     this.jobs.clear();
-    for (const [id, timeout] of this.timeouts) {
+    for (const [, timeout] of this.timeouts) {
       clearTimeout(timeout);
     }
     this.timeouts.clear();
-    console.log('[Scheduler] All jobs stopped.');
+    log.info('All jobs stopped.');
   }
 }
 
