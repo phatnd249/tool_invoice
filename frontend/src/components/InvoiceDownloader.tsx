@@ -5,7 +5,6 @@ import {
   MapPin, PhoneCall, User, CheckCircle2, Loader2, XCircle, Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -18,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../config';
 
@@ -305,20 +305,21 @@ function CompanyCard({
   progress: ProgressState;
   onStartDownload: (companyId: number, startDate: string, endDate: string, invoiceType: string) => void;
 }) {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>();
   const [invoiceType, setInvoiceType] = useState('BOTH');
 
-  const formatDatePayload = (dateStr: string) => {
-    if (!dateStr) return '';
-    const [yyyy, mm, dd] = dateStr.split('-');
+  const formatDatePayload = (d: Date | undefined) => {
+    if (!d) return '';
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
     return `${dd}/${mm}/${yyyy}`;
   };
 
   const handleDownload = (e: React.FormEvent) => {
     e.preventDefault();
-    const formattedStart = formatDatePayload(startDate);
-    const formattedEnd = formatDatePayload(endDate);
+    const formattedStart = formatDatePayload(dateRange?.from);
+    const formattedEnd = formatDatePayload(dateRange?.to);
 
     if (!formattedStart || !formattedEnd) {
       toast.error(`[${company.name}] Cần chọn đầy đủ ngày bắt đầu và kết thúc.`);
@@ -418,25 +419,12 @@ function CompanyCard({
 
             <form onSubmit={handleDownload} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor={`start-${company.id}`}>Từ ngày</Label>
-                  <Input
-                    id={`start-${company.id}`}
-                    type="date"
-                    required
-                    value={startDate}
-                    onChange={e => setStartDate(e.target.value)}
-                    disabled={isDownloading}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`end-${company.id}`}>Đến ngày</Label>
-                  <Input
-                    id={`end-${company.id}`}
-                    type="date"
-                    required
-                    value={endDate}
-                    onChange={e => setEndDate(e.target.value)}
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label>Khoảng ngày</Label>
+                  <DateRangePicker
+                    dateRange={dateRange}
+                    onDateRangeChange={setDateRange}
+                    placeholder="Chọn khoảng thời gian"
                     disabled={isDownloading}
                   />
                 </div>
