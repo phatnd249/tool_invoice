@@ -337,7 +337,7 @@ function CompanyCard({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors cursor-pointer text-left"
+        className="w-full flex items-center justify-between px-5 hover:bg-muted/30 transition-colors cursor-pointer text-left"
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -356,7 +356,7 @@ function CompanyCard({
       {isExpanded && (
         <>
           <Separator />
-          <CardContent className="pt-5 pb-5 space-y-4">
+          <CardContent className="space-y-4">
             {/* Company Info */}
             {(company.address || company.representative || company.phone || company.status) && (
               <div className="bg-muted/30 border rounded-lg p-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
