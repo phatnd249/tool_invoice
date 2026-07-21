@@ -1,6 +1,9 @@
 import puppeteer, { Browser } from 'puppeteer';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createLogger } from '../logger/index.js';
+
+const log = createLogger('PuppeteerService');
 
 export class PuppeteerService {
   private browser: Browser | null = null;
@@ -13,7 +16,7 @@ export class PuppeteerService {
     if (this.browser) return this.browser;
     if (this.browserLaunchPromise) return this.browserLaunchPromise;
 
-    console.log('[PuppeteerService] Khởi tạo trình duyệt Chromium ẩn...');
+    log.info('Khởi tạo trình duyệt Chromium ẩn...');
     this.browserLaunchPromise = puppeteer.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']

@@ -3,6 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import prisma from '../utils/db.js';
 import { renderInvoiceTemplate } from '../templates/invoice-template.js';
+import { createLogger } from '../logger/index.js';
+
+const log = createLogger('PreviewService');
 
 /**
  * Service xử lý preview hoá đơn (file HTML từ ZIP).
@@ -78,7 +81,7 @@ export class PreviewService {
     try {
       fs.writeFileSync(cachePath, htmlContent, 'utf-8');
     } catch (err: any) {
-      console.warn(`[PreviewService] Failed to write cache file: ${err.message}`);
+      log.warn({ err: err.message }, 'Failed to write cache file');
     }
 
     return htmlContent;
@@ -95,7 +98,7 @@ export class PreviewService {
     try {
       fs.writeFileSync(cachePath, htmlContent, 'utf-8');
     } catch (err: any) {
-      console.warn(`[PreviewService] Failed to write generated HTML to cache: ${err.message}`);
+      log.warn({ err: err.message }, 'Failed to write generated HTML to cache');
     }
 
     return htmlContent;
@@ -111,7 +114,7 @@ export class PreviewService {
   public extractHtmlFromZip(zipPath: string): string | null {
     try {
       if (!fs.existsSync(zipPath)) {
-        console.warn(`[PreviewService] ZIP file not found: ${zipPath}`);
+        log.warn({ zipPath }, 'ZIP file not found');
         return null;
       }
 
@@ -124,7 +127,7 @@ export class PreviewService {
       );
 
       if (!htmlEntry) {
-        console.warn(`[PreviewService] No HTML file found in ZIP: ${zipPath}`);
+        log.warn({ zipPath }, 'No HTML file found in ZIP');
         return null;
       }
 
@@ -189,15 +192,15 @@ export class PreviewService {
           `;
           htmlContent = htmlContent.replace('</head>', `${styleInjection}</head>`);
         } else {
-          console.warn('[PreviewService] Background image not found at', bgPath);
+          log.warn({ bgPath }, 'Background image not found');
         }
       } catch (err) {
-        console.warn('[PreviewService] Failed to inject custom background:', err);
+        log.warn({ err }, 'Failed to inject custom background');
       }
 
       return htmlContent;
     } catch (error: any) {
-      console.error(`[PreviewService] Error extracting HTML from ZIP: ${error.message}`);
+      log.error({ err: error.message, zipPath }, 'Error extracting HTML from ZIP');
       return null;
     }
   }
@@ -212,7 +215,7 @@ export class PreviewService {
         fs.unlinkSync(cachePath);
       }
     } catch (err: any) {
-      console.warn(`[PreviewService] Failed to clear cache: ${err.message}`);
+      log.warn({ err: err.message }, 'Failed to clear cache');
     }
   }
 }

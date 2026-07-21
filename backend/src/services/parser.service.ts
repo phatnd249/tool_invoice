@@ -2,6 +2,9 @@ import AdmZip from 'adm-zip';
 import { XMLParser } from 'fast-xml-parser';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createLogger } from '../logger/index.js';
+
+const log = createLogger('ParserService');
 
 export interface ParsedInvoiceItem {
   lineNumber?: string;
@@ -266,7 +269,7 @@ export class ParserService {
 
       return this.parseXmlContent(xmlContent, targetXmlName);
     } catch (error: any) {
-      console.error(`[ParserService] Error unzipping or parsing XML: ${error.message}`);
+      log.error({ err: error.message, zipPath }, 'Error unzipping or parsing XML');
       return null;
     }
   }
