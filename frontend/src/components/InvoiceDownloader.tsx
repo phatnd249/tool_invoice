@@ -467,7 +467,7 @@ function CompanyCard({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-5 py-3 hover:bg-muted/30 transition-colors cursor-pointer text-left"
+        className="w-full flex items-center justify-between px-5 hover:bg-muted/30 transition-colors cursor-pointer text-left"
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
