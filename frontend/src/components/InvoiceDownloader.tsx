@@ -604,7 +604,7 @@ function CompanyCard({
                   ) : (
                     <>
                       <RefreshCw className="mr-2 h-4 w-4" />
-                      Kiểm tra GDT
+                      Kiểm tra kết nối
                     </>
                   )}
                 </Button>

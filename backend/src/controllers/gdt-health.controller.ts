@@ -18,14 +18,16 @@ export class GdtHealthController {
    * GET /api/gdt/health
    *
    * Health check là **global** — tất cả company dùng chung hệ thống GDT,
-   * kết quả được cache 30s.
+   * kết quả được cache 30s. Dùng `?force=true` để bỏ qua cache.
    *
    * Query params:
    *   - companyId (optional): ID công ty để lấy token từ DB (dùng check token validity)
    *   - token     (optional): Token GDT truyền trực tiếp
+   *   - force     (optional): 'true' để bỏ qua cache, kiểm tra lại ngay
    */
   static async check(req: AuthRequest, res: Response): Promise<void> {
-    const { companyId, token: queryToken, mst: queryMst } = req.query;
+    const { companyId, token: queryToken, mst: queryMst, force: forceParam } = req.query;
+    const force = forceParam === 'true';
 
     if (!req.user) {
       res.status(401).json({ error: 'Yêu cầu xác thực.' });
@@ -83,8 +85,8 @@ export class GdtHealthController {
       }
 
       // ── Gọi health check ──
-      log.info({ companyId, mst, hasToken: !!gdtToken }, 'Health check requested');
-      const result = await gdtHealthService.checkAll(gdtToken, mst);
+      log.info({ companyId, mst, hasToken: !!gdtToken, force }, 'Health check requested');
+      const result = await gdtHealthService.checkAll(gdtToken, mst, force);
 
       // ── HTTP status dựa trên overall ──
       let httpStatus = 200;

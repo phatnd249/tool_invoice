@@ -89,13 +89,15 @@ export class GdtHealthService {
    *
    * @param token Token GDT (optional) — dùng để kiểm tra token validity
    * @param _mst  MST (không còn dùng cho cache, giữ param để tương thích)
+   * @param force Nếu true, bỏ qua cache và kiểm tra lại ngay lập tức
    * @returns Kết quả health check tổng hợp
    */
-  async checkAll(token: string | null, _mst?: string): Promise<GdtHealthResult> {
+  async checkAll(token: string | null, _mst?: string, force?: boolean): Promise<GdtHealthResult> {
     const now = Date.now();
 
     // Cache global — chỉ 1 entry duy nhất cho toàn bộ hệ thống GDT
-    if (cachedResult && (now - cachedResult.timestamp) < CACHE_TTL_MS) {
+    // Bỏ qua cache nếu force=true
+    if (!force && cachedResult && (now - cachedResult.timestamp) < CACHE_TTL_MS) {
       log.debug({ age: now - cachedResult.timestamp }, 'Returning cached GDT health result');
       // Nếu có token, kiểm tra token validity dựa trên kết quả có sẵn
       if (token) {

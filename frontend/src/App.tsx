@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import {
   FileText,
@@ -15,6 +15,11 @@ import {
   Moon,
   Loader2,
   ChevronsUpDown,
+  Activity,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  WifiHigh,
 } from 'lucide-react';
 import { useTheme } from './context/ThemeContext';
 import { Button } from '@/components/ui/button';
@@ -83,6 +88,34 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('download');
 
   const [authError, setAuthError] = useState('');
+
+    // GDT Health state (global trên navbar)
+  const [gdtStatus, setGdtStatus] = useState<{
+    overall: 'healthy' | 'degraded' | 'unhealthy' | 'checking' | 'unknown';
+    summary: string;
+  }>({ overall: 'unknown', summary: 'Đang kiểm tra...' });
+
+  const checkGdtHealth = useCallback(async (force = false) => {
+    setGdtStatus(prev => ({ ...prev, overall: 'checking' }));
+    try {
+      const params: Record<string, string> = {};
+      if (force) params.force = 'true';
+      const res = await axios.get(`${API_BASE_URL}/api/gdt/health`, { params });
+      const data = res.data;
+      setGdtStatus({ overall: data.overall, summary: data.summary });
+    } catch (err: any) {
+      const msg = err.response?.data?.summary || err.message || 'Không thể kết nối GDT';
+      setGdtStatus({ overall: 'unknown', summary: msg });
+    }
+  }, []);
+
+  // Health check tự động khi app mount (không force)
+  useEffect(() => {
+    checkGdtHealth(false);
+    // Refresh mỗi 60s (không force — nếu cache còn thì dùng cache)
+    const interval = setInterval(() => checkGdtHealth(false), 60000);
+    return () => clearInterval(interval);
+  }, [checkGdtHealth]);
 
   // Feedback states
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -365,10 +398,12 @@ export default function App() {
               <MessageSquare className="h-4 w-4" />
               Góp ý
             </Button>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-xs text-muted-foreground hidden sm:inline">Hệ thống đang hoạt động</span>
-            </div>
+            {/* GDT Health Indicator */}
+            <GdtHealthBadge
+              status={gdtStatus.overall}
+              summary={gdtStatus.summary}
+              onRefresh={() => checkGdtHealth(true)}
+            />
           </div>
         </header>
 
@@ -449,5 +484,135 @@ export default function App() {
     </div>
       </SidebarProvider>
     </TooltipProvider>
+  );
+}
+
+// ─── GDT Health Badge Component ────────────────────────────────
+// Chỉ hiển thị chấm tròn màu sắc, hover/popover mới hiện chi tiết.
+//   🟢 Xanh lá — API GDT hoạt động
+//   🟡 Vàng    — Đang kiểm tra health
+//   🔴 Đỏ      — API GDT không hoạt động
+function GdtHealthBadge({
+  status,
+  summary,
+  onRefresh,
+}: {
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'checking' | 'unknown';
+  summary: string;
+  onRefresh: () => void;
+}) {
+  // Màu sắc & hiệu ứng cho chấm tròn
+  let dotColor = 'bg-gray-400';
+  let animate = false;
+  let popoverTitle = 'Hệ thống API GDT';
+  let popoverDesc = '';
+  let iconColor = '';
+  let bgColor = '';
+
+  switch (status) {
+    case 'checking':
+      dotColor = 'bg-yellow-500';
+      animate = true;
+      popoverDesc = 'Đang kiểm tra kết nối đến hệ thống API GDT...';
+      iconColor = 'text-yellow-600 dark:text-yellow-400';
+      bgColor = 'bg-yellow-100 dark:bg-yellow-900/30';
+      break;
+    case 'healthy':
+      dotColor = 'bg-green-500';
+      popoverDesc = 'Hệ thống API GDT đang hoạt động tốt.';
+      iconColor = 'text-green-600 dark:text-green-400';
+      bgColor = 'bg-green-100 dark:bg-green-900/30';
+      break;
+    case 'degraded':
+      dotColor = 'bg-red-500';
+      animate = true;
+      popoverDesc = 'Một số API GDT đang gặp vấn đề, có thể ảnh hưởng đến việc tải hoá đơn.';
+      iconColor = 'text-red-600 dark:text-red-400';
+      bgColor = 'bg-red-100 dark:bg-red-900/30';
+      break;
+    case 'unhealthy':
+      dotColor = 'bg-red-500';
+      animate = true;
+      popoverDesc = 'Hệ thống API GDT không hoạt động. Không thể tải hoá đơn ngay lúc này.';
+      iconColor = 'text-red-600 dark:text-red-400';
+      bgColor = 'bg-red-100 dark:bg-red-900/30';
+      break;
+    case 'unknown':
+    default:
+      dotColor = 'bg-red-500';
+      animate = true;
+      popoverDesc = 'Không thể xác định trạng thái hệ thống API GDT.';
+      iconColor = 'text-red-600 dark:text-red-400';
+      bgColor = 'bg-red-100 dark:bg-red-900/30';
+      break;
+  }
+
+  const Icon = status === 'checking' ? Loader2 : status === 'healthy' ? WifiHigh : WifiOff;
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className="flex items-center gap-1.5 px-1.5 py-1 rounded-md hover:bg-muted/60 transition-colors cursor-pointer group"
+            title="Nhấn để xem chi tiết trạng thái API GDT"
+          >
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${dotColor} ${animate ? 'animate-pulse' : ''}`}
+            />
+            <RefreshCw
+              className="w-3 h-3 ml-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRefresh();
+              }}
+            />
+          </button>
+        }
+      />
+      <PopoverContent className="w-72 p-3 text-sm" side="bottom" align="end">
+        <div className="flex items-start gap-3">
+          <div className={`p-1.5 rounded-full ${bgColor}`}>
+            {status === 'checking' ? (
+              <Loader2 className={`w-4 h-4 animate-spin ${iconColor}`} />
+            ) : (
+              <Icon className={`w-4 h-4 ${iconColor}`} />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm">{popoverTitle}</p>
+            {status === 'checking' ? (
+              <div className="flex items-center gap-2 mt-1">
+                <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Đang kiểm tra...</span>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  {popoverDesc}
+                </p>
+                {summary && (
+                  <p className="text-xs text-muted-foreground/70 mt-0.5 italic">
+                    {summary}
+                  </p>
+                )}
+              </>
+            )}
+            <div className="mt-2 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={onRefresh}
+              >
+                <RefreshCw className="w-3 h-3" />
+                Kiểm tra lại
+              </Button>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
