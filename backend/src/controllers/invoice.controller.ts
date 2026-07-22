@@ -216,8 +216,17 @@ export class InvoiceController {
 
     const whereClause: any = {};
     if (type) whereClause.type = String(type);
-    if (sellerTaxCode) whereClause.sellerTaxCode = String(sellerTaxCode);
-    if (buyerTaxCode) whereClause.buyerTaxCode = String(buyerTaxCode);
+    if (sellerTaxCode) {
+      const raw = String(sellerTaxCode);
+      // Bỏ ký tự '0' đầu tiên nếu có, vì một số dữ liệu MST không lưu số 0 đầu
+      const normalized = raw.startsWith('0') ? raw.slice(1) : raw;
+      whereClause.sellerTaxCode = { contains: normalized };
+    }
+    if (buyerTaxCode) {
+      const raw = String(buyerTaxCode);
+      const normalized = raw.startsWith('0') ? raw.slice(1) : raw;
+      whereClause.buyerTaxCode = { contains: normalized };
+    }
     if (startDate || endDate) {
       whereClause.invoiceDate = {};
       if (startDate) whereClause.invoiceDate.gte = new Date(String(startDate));
