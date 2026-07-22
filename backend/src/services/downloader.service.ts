@@ -67,7 +67,9 @@ export class DownloaderService {
   }
 
   /**
-   * Query invoices from GDT Portal
+   * Query invoices from GDT Portal.
+   * Gọi 2 API (query chuẩn + sco-query) mỗi loại 1 lần, không filter theo ttxly,
+   * vì API tự trả về tất cả hoá đơn trong khoảng thời gian.
    */
   public async queryInvoicesInRange(
     startDate: Date,
@@ -99,34 +101,28 @@ export class DownloaderService {
 
     let allInvoices: any[] = [];
 
-    // Query standard invoices for statuses: 4,5,6,7,8
-    const standardStatuses = [4, 5, 6, 7, 8];
-    for (const status of standardStatuses) {
-      try {
-        const queryInvoices = await withRetry(
-          () => this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers, status),
-          { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
-        );
-        allInvoices = allInvoices.concat(queryInvoices);
-      } catch (error: any) {
-        if (error.message && error.message.includes('401')) throw error;
-        log.warn({ status, err: error.message }, 'Error fetching standard invoices, ignoring');
-      }
+    // Query standard invoices — 1 lần duy nhất (không filter ttxly, API trả về tất cả)
+    try {
+      const queryInvoices = await withRetry(
+        () => this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers),
+        { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
+      );
+      allInvoices = allInvoices.concat(queryInvoices);
+    } catch (error: any) {
+      if (error.message && error.message.includes('401')) throw error;
+      log.warn({ err: error.message }, 'Error fetching standard invoices, ignoring');
     }
 
-    // Query cash register invoices (máy tính tiền)
-    const scoStatuses = [5, 6, 8];
-    for (const status of scoStatuses) {
-      try {
-        const scoQueryInvoices = await withRetry(
-          () => this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers, status),
-          { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
-        );
-        allInvoices = allInvoices.concat(scoQueryInvoices);
-      } catch (error: any) {
-        if (error.message && error.message.includes('401')) throw error;
-        log.warn({ status, err: error.message }, 'Error fetching sco-query invoices, ignoring');
-      }
+    // Query cash register invoices (máy tính tiền) — 1 lần duy nhất
+    try {
+      const scoQueryInvoices = await withRetry(
+        () => this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers),
+        { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
+      );
+      allInvoices = allInvoices.concat(scoQueryInvoices);
+    } catch (error: any) {
+      if (error.message && error.message.includes('401')) throw error;
+      log.warn({ err: error.message }, 'Error fetching sco-query invoices, ignoring');
     }
 
     return allInvoices;
