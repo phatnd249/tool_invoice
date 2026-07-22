@@ -60,11 +60,10 @@ export default function OverwriteConfirmDialog({
   onConfirm,
 }: OverwriteConfirmDialogProps) {
   const [selected, setSelected] = useState<OverwriteMode | null>(null);
-  const [isConfirming, setIsConfirming] = useState(false);
 
   const handleConfirm = () => {
     if (!selected) return;
-    setIsConfirming(true);
+    // Gọi callback ngay, không cần isConfirming vì dialog sẽ đóng ngay sau đó
     onConfirm(selected);
   };
 
@@ -72,7 +71,6 @@ export default function OverwriteConfirmDialog({
     if (!newOpen) {
       // Reset state khi đóng
       setSelected(null);
-      setIsConfirming(false);
     }
     onOpenChange(newOpen);
   };
@@ -141,15 +139,14 @@ export default function OverwriteConfirmDialog({
           <Button
             variant="outline"
             onClick={() => handleOpenChange(false)}
-            disabled={isConfirming}
           >
             Huỷ
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={!selected || isConfirming}
+            disabled={!selected}
           >
-            {isConfirming ? 'Đang xử lý...' : 'Xác nhận'}
+            Xác nhận
           </Button>
         </DialogFooter>
       </DialogContent>
