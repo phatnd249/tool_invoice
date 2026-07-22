@@ -226,7 +226,8 @@ export class DownloaderService {
     invoice: any,
     token: string,
     outputDir: string,
-    invoiceType: 'BUY' | 'SELL' = 'SELL'
+    invoiceType: 'BUY' | 'SELL' = 'SELL',
+    companyTaxCode?: string,
   ): Promise<string> {
     const nbmst = invoice.nbmst;
     const khmshdon = invoice.khmshdon;
@@ -238,7 +239,8 @@ export class DownloaderService {
     }
 
     const resultCode = getResultCode(invoice);
-    const zipFileName = `${nbmst}-${shdon}-${resultCode}.zip`;
+    const taxCodeForName = companyTaxCode || nbmst;
+    const zipFileName = `${taxCodeForName}-${shdon}-${resultCode}.zip`;
     const zipPath = path.join(outputDir, zipFileName);
 
     // Skip if already downloaded

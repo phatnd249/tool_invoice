@@ -380,11 +380,17 @@ export class InvoiceDownloadService {
         const invCompanyName = companyFolder || sellerTaxCode;
         const invoiceTargetDir = resolveTargetDir(baseDir, invCompanyName, type, invoiceDate);
 
+        // Xác định companyTaxCode dựa vào loại hoá đơn
+        // SELL: MST người bán là công ty đang login, BUY: MST người mua là công ty đang login
+        const companyTaxCode: string = type === 'SELL'
+          ? (inv.nbmst || '')
+          : (inv.nmmst || inv.nmuamst || '');
+
         // Thử download ZIP
         let zipPath: string | null = null;
         try {
           zipPath = await withRetry(
-            () => downloaderService.downloadInvoiceZip(inv, token, invoiceTargetDir, type),
+            () => downloaderService.downloadInvoiceZip(inv, token, invoiceTargetDir, type, companyTaxCode),
             { maxRetries: 2, baseDelayMs: 2000, maxDelayMs: 8000, logger: ctxLog.warn.bind(ctxLog) },
           );
           if (zipPath) {
@@ -434,7 +440,7 @@ export class InvoiceDownloadService {
               const detailItems = detailJson.hdhhdvu || detailJson.cttkhac || [];
               await invoicePersistenceService.saveInvoiceItemsFromDetail(invoiceId, detailItems);
 
-              await pdfGenerationService.generateFromDetail(invoiceId, detailJson, inv, invoiceTargetDir);
+              await pdfGenerationService.generateFromDetail(invoiceId, detailJson, inv, invoiceTargetDir, companyTaxCode);
             }
           } catch (detailErr: any) {
             ctxLog.warn({ err: detailErr, invoiceNumber: invNum },

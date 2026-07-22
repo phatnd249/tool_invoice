@@ -63,6 +63,7 @@ export class PdfGenerationService {
     detailJson: Record<string, any>,
     inv: Record<string, any>,
     targetDir: string,
+    companyTaxCode?: string,
   ): Promise<string | null> {
     try {
       // Build HTML từ JSON
@@ -74,7 +75,8 @@ export class PdfGenerationService {
         return null;
       }
 
-      const pdfFileName = getPdfFileNameFromInv(inv);
+      const taxCode = companyTaxCode || inv.nbmst || 'UNKNOWN';
+      const pdfFileName = getPdfFileNameFromInv(taxCode, inv);
       const pdfPath = path.join(targetDir, pdfFileName);
       const cacheHtmlPath = previewService.getCachePath(invoiceId);
 

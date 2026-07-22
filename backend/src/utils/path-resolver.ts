@@ -25,16 +25,17 @@ export function resolveTargetDir(
  * Sinh tên file ZIP từ thông tin invoice GDT.
  * Format: {companyTaxCode}-{invoiceNumber}-{ResultCode}.zip
  */
-export function getZipFileName(inv: {
-  nbmst?: string;
-  shdon?: string | number;
-  ttxly?: number;
-  tthai?: number;
-  khhdon?: string;
-}): string {
+export function getZipFileName(
+  companyTaxCode: string,
+  inv: {
+    shdon?: string | number;
+    ttxly?: number;
+    tthai?: number;
+    khhdon?: string;
+  },
+): string {
   const resultCode = getResultCode(inv);
-  const mst = inv.nbmst || 'UNKNOWN';
-  return `${mst}-${inv.shdon}-${resultCode}.zip`;
+  return `${companyTaxCode}-${inv.shdon}-${resultCode}.zip`;
 }
 
 /**
@@ -47,14 +48,16 @@ export function getPdfFileNameFromZip(zipPath: string): string {
 /**
  * Sinh tên file PDF từ thông tin invoice GDT.
  */
-export function getPdfFileNameFromInv(inv: {
-  nbmst?: string;
-  shdon?: string | number;
-  ttxly?: number;
-  tthai?: number;
-  khhdon?: string;
-}): string {
-  return getZipFileName(inv).replace(/\.zip$/, '.pdf');
+export function getPdfFileNameFromInv(
+  companyTaxCode: string,
+  inv: {
+    shdon?: string | number;
+    ttxly?: number;
+    tthai?: number;
+    khhdon?: string;
+  },
+): string {
+  return getZipFileName(companyTaxCode, inv).replace(/\.zip$/, '.pdf');
 }
 
 /**
