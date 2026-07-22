@@ -98,11 +98,10 @@ export class InvoiceDownloadService {
     const baseDir = params.outputDir || process.env.INVOICES_DIR || path.join(process.cwd(), 'invoices');
     const dateChunks = downloaderService.splitDateRange(params.startDate, params.endDate);
 
-    // ── Health Check GDT ──
+    // ── Health Check GDT (global — 1 lần cho tất cả company) ──
     if (!params.skipHealthCheck) {
-      const mst = company?.taxCode || downloaderService.getMstFromToken(token) || '';
       try {
-        const healthResult = await gdtHealthService.checkAll(token, mst);
+        const healthResult = await gdtHealthService.checkAll(token);
         ctxLog.info(
           { overall: healthResult.overall, summary: healthResult.summary },
           'GDT health check result',

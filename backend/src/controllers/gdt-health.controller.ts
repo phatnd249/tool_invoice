@@ -17,10 +17,12 @@ export class GdtHealthController {
   /**
    * GET /api/gdt/health
    *
+   * Health check là **global** — tất cả company dùng chung hệ thống GDT,
+   * kết quả được cache 30s.
+   *
    * Query params:
-   *   - companyId (optional): ID công ty để lấy token từ DB
+   *   - companyId (optional): ID công ty để lấy token từ DB (dùng check token validity)
    *   - token     (optional): Token GDT truyền trực tiếp
-   *   - mst       (optional): MST, dùng cho cache key
    */
   static async check(req: AuthRequest, res: Response): Promise<void> {
     const { companyId, token: queryToken, mst: queryMst } = req.query;

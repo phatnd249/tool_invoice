@@ -128,14 +128,25 @@ export default function InvoiceDownloader() {
       }));
 
       // Log kết quả health check
+      let healthMsg = `[Health] ${companyName}: GDT `;
       if (data.overall === 'healthy') {
-        addLog(`[Health] ${companyName}: GDT đang hoạt động tốt ✅`, 'success');
+        healthMsg += 'hoạt động tốt ✅';
+        addLog(healthMsg, 'success');
       } else if (data.overall === 'degraded') {
-        addLog(`[Health] ${companyName}: ${data.summary}`, 'warning');
+        healthMsg += `hoạt động không ổn định — ${data.summary}`;
+        addLog(healthMsg, 'warning');
         toast.warning(`[${companyName}] ${data.summary}`, { duration: 5000 });
       } else if (data.overall === 'unhealthy') {
-        addLog(`[Health] ${companyName}: ${data.summary}`, 'error');
+        healthMsg += `không khả dụng — ${data.summary}`;
+        addLog(healthMsg, 'error');
         toast.error(`[${companyName}] ${data.summary}`, { duration: 8000 });
+      }
+
+      // Thêm log về token status nếu có
+      if (data.tokenStatus === 'expired') {
+        addLog(`[Health] ${companyName}: Token GDT đã hết hạn, cần đăng nhập lại`, 'warning');
+      } else if (data.tokenStatus === 'missing') {
+        addLog(`[Health] ${companyName}: Không có token GDT — chỉ kiểm tra kết nối mạng`, 'info');
       }
 
       return data;

@@ -1,11 +1,11 @@
 /**
  * GDT Health Check Service
  *
- * Kiểm tra sức khoẻ các API GDT (Tổng cục Thuế) trước khi bắt đầu download pipeline.
- * Gọi request tối thiểu (size=1, 1 ngày gần nhất) với timeout ngắn (15s),
- * đo latency, và trả về trạng thái tổng hợp.
+ * Kiểm tra sức khoẻ các API GDT (Tổng cục Thuế) — tất cả company đều dùng chung hệ thống GDT,
+ * chỉ khác token xác thực. Vì vậy health check là **global**, không phải per-company.
  *
- * Cache kết quả trong 30s để tránh spam GDT.
+ * Cache kết quả trong thời gian ngắn (mặc định 30s) để tránh spam GDT.
+ * Token chỉ dùng để kiểm tra token validity (không ảnh hưởng đến cache health global).
  */
 
 import axios from 'axios';
@@ -32,26 +32,26 @@ export interface GdtHealthCheckResult {
 }
 
 export interface GdtHealthResult {
+  /** Trạng thái tổng thể của hệ thống GDT (global, không phụ thuộc company) */
   overall: 'healthy' | 'degraded' | 'unhealthy';
+  /** Mô tả ngắn gọn tình trạng */
   summary: string;
+  /** Kết quả kiểm tra từng endpoint */
   checks: GdtHealthCheckResult[];
+  /** Trạng thái token (nếu có token trong request) */
+  tokenStatus?: 'valid' | 'expired' | 'invalid' | 'missing';
+  /** Thời gian thực hiện health check */
   timestamp: string;
 }
 
-// ─── Cache ───────────────────────────────────────────────────────
+// ─── Cache (global — 1 entry duy nhất) ──────────────────────────
 
 interface CacheEntry {
   result: GdtHealthResult;
   timestamp: number;
 }
 
-const healthCache = new Map<string, CacheEntry>();
-
-function getCacheKey(token: string, mst: string): string {
-  // Dùng hash đơn giản để phân biệt theo token (tránh lộ token trong key)
-  const tokenHash = token ? token.slice(-8) : 'no-token';
-  return `${mst || 'anonymous'}:${tokenHash}`;
-}
+let cachedResult: CacheEntry | null = null;
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -81,24 +81,31 @@ function classifyLatency(latencyMs: number, httpStatus: number | null): 'ok' | '
 
 export class GdtHealthService {
   /**
-   * Kiểm tra sức khoẻ tất cả API GDT.
+   * Kiểm tra sức khoẻ hệ thống GDT.
    *
-   * @param token Token GDT (có thể null để chỉ check network connectivity)
-   * @param mst   MST của doanh nghiệp (dùng cho cache key, query sample)
+   * Kết quả health check là **global** (cache chung 1 entry) vì tất cả company
+   * đều dùng chung hệ thống GDT. Token được truyền kèm để kiểm tra token validity
+   * nhưng không ảnh hưởng đến cache.
+   *
+   * @param token Token GDT (optional) — dùng để kiểm tra token validity
+   * @param _mst  MST (không còn dùng cho cache, giữ param để tương thích)
    * @returns Kết quả health check tổng hợp
    */
-  async checkAll(token: string | null, mst: string): Promise<GdtHealthResult> {
-    const cacheKey = getCacheKey(token || '', mst);
+  async checkAll(token: string | null, _mst?: string): Promise<GdtHealthResult> {
     const now = Date.now();
 
-    // Kiểm tra cache
-    const cached = healthCache.get(cacheKey);
-    if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
-      log.debug({ cacheKey, age: now - cached.timestamp }, 'Returning cached GDT health result');
-      return cached.result;
+    // Cache global — chỉ 1 entry duy nhất cho toàn bộ hệ thống GDT
+    if (cachedResult && (now - cachedResult.timestamp) < CACHE_TTL_MS) {
+      log.debug({ age: now - cachedResult.timestamp }, 'Returning cached GDT health result');
+      // Nếu có token, kiểm tra token validity dựa trên kết quả có sẵn
+      if (token) {
+        const tokenStatus = this._checkTokenValidity(token, cachedResult.result);
+        return { ...cachedResult.result, tokenStatus };
+      }
+      return cachedResult.result;
     }
 
-    log.info({ mst, hasToken: !!token }, 'Running GDT health check...');
+    log.info({ hasToken: !!token }, 'Running GDT health check...');
 
     const headers: Record<string, string> = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -180,17 +187,21 @@ export class GdtHealthService {
       summary = `GDT không khả dụng: ${errorCount}/${total} endpoint lỗi. Không thể tải hoá đơn ngay lúc này.`;
     }
 
+    // Kiểm tra token validity nếu có token
+    const tokenStatus = this._checkTokenValidity(token, { checks, overall });
+
     const result: GdtHealthResult = {
       overall,
       summary,
       checks,
+      tokenStatus,
       timestamp: new Date().toISOString(),
     };
 
-    // Lưu cache
-    healthCache.set(cacheKey, { result, timestamp: Date.now() });
+    // Lưu cache global
+    cachedResult = { result, timestamp: Date.now() };
 
-    log.info({ overall, okCount, slowCount, errorCount }, 'GDT health check completed');
+    log.info({ overall, okCount, slowCount, errorCount, tokenStatus }, 'GDT health check completed');
 
     return result;
   }
@@ -261,15 +272,34 @@ export class GdtHealthService {
   }
 
   /**
-   * Xoá cache health check (dùng cho test hoặc khi token hết hạn).
+   * Kiểm tra token validity từ kết quả health check.
+   * Nếu có endpoint nào trả về 401 (Unauthorized), token đã hết hạn hoặc không hợp lệ.
    */
-  clearCache(token?: string, mst?: string): void {
-    if (token && mst) {
-      healthCache.delete(getCacheKey(token, mst));
-    } else {
-      healthCache.clear();
-    }
-    log.debug('GDT health cache cleared');
+  private _checkTokenValidity(
+    token: string | null,
+    result: { checks: GdtHealthCheckResult[]; overall: string },
+  ): 'valid' | 'expired' | 'invalid' | 'missing' {
+    if (!token) return 'missing';
+
+    // Kiểm tra nếu bất kỳ endpoint nào trả về 401
+    const has401 = result.checks.some((c) => c.httpStatus === 401);
+    if (has401) return 'expired';
+
+    // Nếu có endpoint trả về 403 hoặc các lỗi auth khác
+    const hasAuthError = result.checks.some(
+      (c) => c.httpStatus === 403 || (c.message && c.message.toLowerCase().includes('unauthorized')),
+    );
+    if (hasAuthError) return 'invalid';
+
+    return 'valid';
+  }
+
+  /**
+   * Xoá cache global health check.
+   */
+  clearCache(): void {
+    cachedResult = null;
+    log.debug('GDT health check cache cleared');
   }
 }
 
