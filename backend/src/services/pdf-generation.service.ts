@@ -37,6 +37,8 @@ export class PdfGenerationService {
         return null;
       }
 
+      // Tên PDF từ ZIP: nếu ZIP đã có version (vd: taxCode-invNum-K-v1.zip)
+      // thì PDF tự động mang tên tương ứng (taxCode-invNum-K-v1.pdf)
       const pdfFileName = path.basename(zipPath, '.zip') + '.pdf';
       let pdfPath = path.join(targetDir, pdfFileName);
 
@@ -47,8 +49,12 @@ export class PdfGenerationService {
           fs.unlinkSync(pdfPath);
         }
       } else if (overwriteMode === 'NEW_VERSION' && version && version > 0) {
-        // Dùng version đồng bộ với ZIP
-        pdfPath = getVersionedFilePath(pdfPath, version);
+        // Với NEW_VERSION: ZIP đã có version trong tên (do downloader xử lý),
+        // PDF dùng tên tương ứng từ ZIP, không cần gọi getVersionedFilePath nữa.
+        // Chỉ cần đảm bảo không có file trùng (nếu có thì ghi đè)
+        if (fs.existsSync(pdfPath)) {
+          fs.unlinkSync(pdfPath);
+        }
       } else {
         // SKIP: kiểm tra nếu PDF đã tồn tại thì không tạo lại
         if (fs.existsSync(pdfPath)) {
@@ -108,6 +114,7 @@ export class PdfGenerationService {
           fs.unlinkSync(pdfPath);
         }
       } else if (overwriteMode === 'NEW_VERSION' && version && version > 0) {
+        // Với NEW_VERSION: thêm version vào tên PDF gốc (chưa có version)
         pdfPath = getVersionedFilePath(pdfPath, version);
       } else {
         // SKIP: nếu PDF đã tồn tại thì không tạo lại
