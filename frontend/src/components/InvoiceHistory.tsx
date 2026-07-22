@@ -82,6 +82,9 @@ interface DownloadHistory {
   log?: string | null;
   countDownloaded: number;
   username?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  totalInvoices?: number | null;
 }
 
 interface Company {
@@ -579,7 +582,10 @@ export default function InvoiceHistory() {
                     <span className="inline-flex items-center">Thời Gian{renderSortIcon('downloadDate')}</span>
                   </TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort('taxCode')}>
-                    <span className="inline-flex items-center">MST{renderSortIcon('taxCode')}</span>
+                    <span className="inline-flex items-center">Doanh Nghiệp{renderSortIcon('taxCode')}</span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none">
+                    <span className="inline-flex items-center">Khoảng Thời Gian</span>
                   </TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort('invoiceType')}>
                     <span className="inline-flex items-center">Loại Quét{renderSortIcon('invoiceType')}</span>
@@ -591,30 +597,43 @@ export default function InvoiceHistory() {
                     <span className="inline-flex items-center justify-center">Trạng Thái{renderSortIcon('status')}</span>
                   </TableHead>
                   <TableHead className="text-center cursor-pointer select-none" onClick={() => handleSort('countDownloaded')}>
-                    <span className="inline-flex items-center justify-center">Số Lượng{renderSortIcon('countDownloaded')}</span>
+                    <span className="inline-flex items-center justify-center">Đã Tải{renderSortIcon('countDownloaded')}</span>
+                  </TableHead>
+                  <TableHead className="text-center">
+                    <span className="inline-flex items-center justify-center">Tổng HĐ</span>
                   </TableHead>
                   <TableHead className="text-center">Nhật Ký</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading && histories.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-12"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-12"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
                 ) : histories.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Không tìm thấy lịch sử tải nào.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Không tìm thấy lịch sử tải nào.</TableCell></TableRow>
                 ) : (
-                  histories.map(h => (
-                    <TableRow key={h.id}>
-                      <TableCell className="text-xs">{new Date(h.downloadDate).toLocaleString('vi-VN')}</TableCell>
-                      <TableCell className="font-mono font-semibold select-all">{h.taxCode}</TableCell>
-                      <TableCell className="text-xs">{h.invoiceType === 'SELL' ? 'Bán ra' : h.invoiceType === 'BUY' ? 'Mua vào' : h.invoiceType}</TableCell>
-                      <TableCell><Badge variant="secondary">{h.username || 'Cron'}</Badge></TableCell>
-                      <TableCell className="text-center">{statusBadge(h.status)}</TableCell>
-                      <TableCell className="text-center font-bold">{h.countDownloaded}</TableCell>
-                      <TableCell className="text-center">
-                        <Button variant="ghost" size="icon" onClick={() => setSelectedHistory(h)}><FileText className="h-4 w-4" /></Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  histories.map(h => {
+                    const matchedCompany = companies.find(c => c.taxCode === h.taxCode);
+                    const companyDisplay = matchedCompany ? `${matchedCompany.name} (${h.taxCode})` : h.taxCode;
+                    return (
+                      <TableRow key={h.id}>
+                        <TableCell className="text-xs whitespace-nowrap">{new Date(h.downloadDate).toLocaleString('vi-VN')}</TableCell>
+                        <TableCell className="max-w-[220px] truncate text-xs" title={companyDisplay}>{companyDisplay}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {h.startDate && h.endDate
+                            ? `${new Date(h.startDate).toLocaleDateString('vi-VN')} → ${new Date(h.endDate).toLocaleDateString('vi-VN')}`
+                            : '—'}
+                        </TableCell>
+                        <TableCell className="text-xs">{h.invoiceType === 'SELL' ? 'Bán ra' : h.invoiceType === 'BUY' ? 'Mua vào' : h.invoiceType}</TableCell>
+                        <TableCell><Badge variant="secondary">{h.username || 'Cron'}</Badge></TableCell>
+                        <TableCell className="text-center">{statusBadge(h.status)}</TableCell>
+                        <TableCell className="text-center font-bold">{h.countDownloaded}</TableCell>
+                        <TableCell className="text-center">{h.totalInvoices ?? '—'}</TableCell>
+                        <TableCell className="text-center">
+                          <Button variant="ghost" size="icon" onClick={() => setSelectedHistory(h)}><FileText className="h-4 w-4" /></Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

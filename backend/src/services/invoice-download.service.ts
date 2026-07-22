@@ -114,6 +114,9 @@ export class InvoiceDownloadService {
           status: 'FAILED',
           log: `GDT API Query failed: ${queryResult.error}`,
           countDownloaded: 0,
+          startDate: params.startDate,
+          endDate: params.endDate,
+          totalInvoices: 0,
           userId: params.userId,
           username: params.usernameLabel,
         }, ctxLog);
@@ -145,6 +148,9 @@ export class InvoiceDownloadService {
         status: typeStatus,
         log: errors.length > 0 ? errors.join('\n') : 'Download completed successfully.',
         countDownloaded: successCount,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        totalInvoices: invoices.length,
         userId: params.userId,
         username: params.usernameLabel,
       }, ctxLog);
@@ -502,6 +508,9 @@ export class InvoiceDownloadService {
       status: string;
       log: string;
       countDownloaded: number;
+      startDate?: Date | null;
+      endDate?: Date | null;
+      totalInvoices?: number | null;
       userId?: number | null;
       username?: string | null;
     },

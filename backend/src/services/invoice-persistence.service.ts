@@ -295,6 +295,9 @@ export class InvoicePersistenceService {
     countDownloaded: number;
     userId?: number | null;
     username?: string | null;
+    startDate?: Date | null;
+    endDate?: Date | null;
+    totalInvoices?: number | null;
   }): Promise<void> {
     await prisma.downloadHistory.create({
       data: {
@@ -305,6 +308,9 @@ export class InvoicePersistenceService {
         countDownloaded: params.countDownloaded,
         userId: params.userId ?? null,
         username: params.username ?? null,
+        startDate: params.startDate ?? null,
+        endDate: params.endDate ?? null,
+        totalInvoices: params.totalInvoices ?? null,
       },
     });
   }

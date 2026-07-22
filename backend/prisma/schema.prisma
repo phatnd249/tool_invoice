@@ -133,6 +133,10 @@ model DownloadHistory {
   userId          Int?
   user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   username        String?
+
+  startDate       DateTime? // Ngày bắt đầu khoảng thời gian tải
+  endDate         DateTime? // Ngày kết thúc khoảng thời gian tải
+  totalInvoices   Int?      // Tổng số hoá đơn từ kết quả query GDT
 }
 
 model Schedule {
