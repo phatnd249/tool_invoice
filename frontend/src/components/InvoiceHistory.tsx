@@ -86,6 +86,12 @@ interface DownloadHistory {
   username?: string | null;
 }
 
+interface Company {
+  id: number;
+  taxCode: string;
+  name: string;
+}
+
 interface PaginatedResponse<T> {
   data: T[];
   page: number;
@@ -141,6 +147,9 @@ export default function InvoiceHistory() {
   const [sortField, setSortField] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
+  const [companyFilter, setCompanyFilter] = useState('');
+  const [companies, setCompanies] = useState<Company[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportingModule7, setExportingModule7] = useState(false);
@@ -153,12 +162,15 @@ export default function InvoiceHistory() {
 
   // ── Fetch ──
 
-  const fetchInvoices = useCallback(async (p: number, s: number, q: string, type: string, sf: string, sd: 'asc' | 'desc') => {
+  const fetchInvoices = useCallback(async (p: number, s: number, q: string, type: string, companyTaxCode: string, sf: string, sd: 'asc' | 'desc') => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(p), size: String(s), ...(q && { search: q }), ...(type && { type }) });
       if (sf) params.set('sortBy', sf);
       params.set('sortDir', sd);
+      if (companyTaxCode && type) {
+        params.set(type === 'SELL' ? 'sellerTaxCode' : 'buyerTaxCode', companyTaxCode);
+      }
       const response = await axios.get<PaginatedResponse<Invoice>>(`${API_BASE_URL}/api/invoices?${params}`);
       setInvoices(response.data.data);
       setTotal(response.data.total);
@@ -188,10 +200,25 @@ export default function InvoiceHistory() {
     }
   }, []);
 
+  // ── Fetch companies ──
+
+  const fetchCompanies = useCallback(async () => {
+    try {
+      const res = await axios.get<Company[]>(`${API_BASE_URL}/api/companies`);
+      setCompanies(res.data);
+    } catch (err) {
+      console.error('Failed to fetch companies:', err);
+    }
+  }, []);
+
   useEffect(() => {
-    if (subTab === 'invoices') fetchInvoices(page, size, searchText, filterType, sortField, sortDir);
+    fetchCompanies();
+  }, [fetchCompanies]);
+
+  useEffect(() => {
+    if (subTab === 'invoices') fetchInvoices(page, size, searchText, filterType, companyFilter, sortField, sortDir);
     else fetchHistories(page, size, searchText, filterStatus, sortField, sortDir);
-  }, [page, size, subTab, filterType, filterStatus, sortField, sortDir]); // eslint-disable-line
+  }, [page, size, subTab, filterType, filterStatus, companyFilter, sortField, sortDir]); // eslint-disable-line
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -199,7 +226,12 @@ export default function InvoiceHistory() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [searchText]);
 
-  useEffect(() => { setPage(0); }, [filterType, filterStatus, sortField, sortDir]);
+  useEffect(() => {
+    setPage(0);
+    setCompanyFilter('');
+  }, [filterType, filterStatus]); // eslint-disable-line
+
+  useEffect(() => { setPage(0); }, [sortField, sortDir]);
 
   // ── Sort handler ──
 
@@ -356,6 +388,20 @@ export default function InvoiceHistory() {
               </Select>
             )}
 
+            {subTab === 'invoices' && filterType && (
+              <Select value={companyFilter} onValueChange={v => setCompanyFilter(v)}>
+                <SelectTrigger className="w-[240px]">
+                  <SelectValue placeholder={filterType === 'SELL' ? 'Công ty bán' : 'Công ty mua'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Tất cả công ty</SelectItem>
+                  {companies.map(c => (
+                    <SelectItem key={c.taxCode} value={c.taxCode}>{c.name} ({c.taxCode})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
             <div className="relative flex-1 min-w-[200px] max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -368,7 +414,7 @@ export default function InvoiceHistory() {
             </div>
 
             <Button variant="outline" size="icon" onClick={() => {
-              if (subTab === 'invoices') fetchInvoices(page, size, searchText, filterType, sortField, sortDir);
+              if (subTab === 'invoices') fetchInvoices(page, size, searchText, filterType, companyFilter, sortField, sortDir);
               else fetchHistories(page, size, searchText, filterStatus, sortField, sortDir);
             }}>
               <RotateCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
