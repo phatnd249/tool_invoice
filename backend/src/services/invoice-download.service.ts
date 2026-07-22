@@ -1,6 +1,7 @@
 // backend/src/services/invoice-download.service.ts
 // Service orchestration chính cho pipeline tải và lưu hoá đơn.
 // Được cả REST controller và SSE controller gọi đến.
+// Hỗ trợ job tracking qua download-job.service.ts để SSE reconnect khi reload.
 
 import * as path from 'path';
 import * as fs from 'fs';
@@ -10,6 +11,7 @@ import { ExcelService } from './excel.service.js';
 import { AuthService } from './auth.service.js';
 import { invoicePersistenceService } from './invoice-persistence.service.js';
 import { pdfGenerationService } from './pdf-generation.service.js';
+import { downloadJobService } from './download-job.service.js';
 import prisma from '../utils/db.js';
 import { withRetry } from '../utils/rate-limiter.js';
 import { createLogger, generateCorrelationId } from '../logger/index.js';
@@ -39,6 +41,8 @@ export interface DownloadPipelineParams {
   userId?: number;
   usernameLabel?: string;
   overwriteMode?: 'SKIP' | 'OVERWRITE' | 'NEW_VERSION';
+  jobId?: string; // ID của DownloadJob để ghi tiến trình vào DB
+  abortSignal?: AbortSignal; // Signal để huỷ job
   onProgress?: (progress: DownloadProgress) => void;
 }
 
@@ -73,23 +77,36 @@ export class InvoiceDownloadService {
   ): Promise<DownloadPipelineResult> {
     const cid = correlationId || generateCorrelationId();
     const ctxLog = createLogger('InvoiceDownloadService', cid);
+    const { jobId, abortSignal } = params;
+
     ctxLog.info(
       {
         startDate: params.startDate.toISOString(),
         endDate: params.endDate.toISOString(),
         invoiceType: params.invoiceType,
         companyId: params.companyId,
+        jobId,
       },
       'Bắt đầu pipeline tải hoá đơn',
     );
 
+    // Kiểm tra abort trước khi bắt đầu
+    if (abortSignal?.aborted) {
+      await this._markJobFailed(jobId, 'Job đã bị huỷ trước khi bắt đầu.', ctxLog);
+      return { successCount: 0, errors: ['Job đã bị huỷ trước khi bắt đầu.'], parsedInvoices: [], status: 'FAILED' };
+    }
+
     // ── Phase 1: Resolve token và company ──
+    await this._addJobLog(jobId, 'Đang xác thực thông tin doanh nghiệp...', 'info');
     const resolved = await this._resolveAuthentication(params, ctxLog);
     if (!resolved.token) {
+      await this._markJobFailed(jobId, resolved.error!, ctxLog);
       return { successCount: 0, errors: [resolved.error!], parsedInvoices: [], status: 'FAILED' };
     }
 
     const { token, company, companyFolder } = resolved;
+    await this._addJobLog(jobId, `Đã xác thực thành công: ${company?.name || companyFolder}`, 'success');
+
     const types: Array<'BUY' | 'SELL'> = params.invoiceType === 'BOTH'
       ? ['BUY', 'SELL']
       : [params.invoiceType === 'BUY' ? 'BUY' : 'SELL'];
@@ -101,14 +118,28 @@ export class InvoiceDownloadService {
     const allErrors: string[] = [];
     const allParsedList: ParsedInvoice[] = [];
 
+    // Set job RUNNING
+    if (jobId) {
+      await downloadJobService.start(jobId);
+    }
+
     // ── Phase 2: Process từng loại (BUY / SELL) ──
     for (const type of types) {
+      // Kiểm tra abort giữa các phase
+      if (abortSignal?.aborted) {
+        ctxLog.warn({ type }, 'Job bị huỷ giữa chừng');
+        allErrors.push(`Job bị huỷ khi đang xử lý ${type}`);
+        break;
+      }
+
       ctxLog.info({ type }, `Bắt đầu xử lý loại hoá đơn ${type}`);
+      await this._addJobLog(jobId, `Bắt đầu xử lý ${type === 'SELL' ? 'hoá đơn bán ra' : 'hoá đơn mua vào'}...`, 'info');
 
       // 2a. Query invoices
       const queryResult = await this._queryInvoices(type, dateChunks, token, ctxLog);
       if (!queryResult.invoices) {
         allErrors.push(`Query ${type}: ${queryResult.error}`);
+        await this._addJobLog(jobId, `Lỗi query ${type}: ${queryResult.error}`, 'error');
         await this._recordDownloadHistory({
           taxCode: company?.taxCode || '',
           invoiceType: type,
@@ -126,13 +157,22 @@ export class InvoiceDownloadService {
 
       const invoices = queryResult.invoices;
       ctxLog.info({ type, count: invoices.length }, `Tìm thấy ${invoices.length} hoá đơn`);
+      await this._addJobLog(jobId, `Tìm thấy ${invoices.length} hoá đơn ${type === 'SELL' ? 'bán ra' : 'mua vào'}`, 'info');
+
+      // Set total cho job
+      if (jobId) {
+        // Tính tổng số invoice từ tất cả type cho progress bar
+        const currentTotal = totalSuccessCount + invoices.length;
+        await downloadJobService.updateProgress(jobId, 0, currentTotal, type);
+      }
 
       // 2b. Download Excel reports cho từng chunk
       await this._downloadExcelReports(dateChunks, type, token, baseDir, companyFolder, ctxLog);
 
       // 2c. Download từng invoice
       const { successCount, errors, parsedList } = await this._processInvoices(
-        invoices, type, token, baseDir, companyFolder, params.saveToDb, params.overwriteMode, params.onProgress, ctxLog,
+        invoices, type, token, baseDir, companyFolder, params.saveToDb, params.overwriteMode,
+        params.onProgress, ctxLog, jobId, abortSignal,
       );
 
       totalSuccessCount += successCount;
@@ -156,6 +196,11 @@ export class InvoiceDownloadService {
         username: params.usernameLabel,
       }, ctxLog);
 
+      await this._addJobLog(jobId,
+        `${type === 'SELL' ? 'Bán ra' : 'Mua vào'}: ${successCount}/${invoices.length} hoá đơn thành công`,
+        successCount === invoices.length ? 'success' : errors.length > 0 ? 'warning' : 'info',
+      );
+
       // 2e. Cập nhật download count cho company
       if (company && successCount > 0) {
         try {
@@ -169,9 +214,22 @@ export class InvoiceDownloadService {
       }
     }
 
+    // Kiểm tra abort trước phase 3
+    if (abortSignal?.aborted) {
+      await this._updateJobCancelled(jobId, totalSuccessCount, allErrors.length, ctxLog);
+      return {
+        successCount: totalSuccessCount,
+        errors: [...allErrors, 'Job đã bị huỷ.'],
+        parsedInvoices: allParsedList,
+        status: totalSuccessCount > 0 ? 'PARTIAL' : 'FAILED',
+      };
+    }
+
     // ── Phase 3: Tạo Excel report tổng hợp ──
     if (allParsedList.length > 0) {
+      await this._addJobLog(jobId, 'Đang tạo báo cáo Excel tổng hợp...', 'info');
       await this._generateSummaryExcel(allParsedList, baseDir, companyFolder, ctxLog);
+      await this._addJobLog(jobId, 'Đã tạo báo cáo Excel tổng hợp.', 'success');
     }
 
     const finalStatus = totalSuccessCount > 0
@@ -182,6 +240,22 @@ export class InvoiceDownloadService {
       { successCount: totalSuccessCount, errorCount: allErrors.length, status: finalStatus },
       'Pipeline hoàn tất',
     );
+
+    // Cập nhật job complete
+    if (jobId) {
+      if (finalStatus === 'FAILED') {
+        await downloadJobService.fail(jobId, allErrors[0] || 'Thất bại không rõ nguyên nhân');
+      } else {
+        await downloadJobService.complete(jobId, totalSuccessCount, allErrors.length);
+      }
+      // Ghi log cuối cùng
+      const finalMsg = finalStatus === 'SUCCESS'
+        ? `✅ Hoàn thành: Đã tải ${totalSuccessCount} hoá đơn.`
+        : finalStatus === 'PARTIAL'
+          ? `⚠️ Hoàn thành: ${totalSuccessCount} hoá đơn thành công, ${allErrors.length} lỗi.`
+          : `❌ Thất bại: ${allErrors[0] || 'Không thể tải hoá đơn.'}`;
+      await this._addJobLog(jobId, finalMsg, finalStatus === 'SUCCESS' ? 'success' : finalStatus === 'PARTIAL' ? 'warning' : 'error');
+    }
 
     return {
       successCount: totalSuccessCount,
@@ -194,6 +268,40 @@ export class InvoiceDownloadService {
   // ═══════════════════════════════════════════════════════════
   //  Private Methods
   // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Helper: ghi log vào job nếu có jobId.
+   */
+  private async _addJobLog(jobId: string | undefined, message: string, type: 'info' | 'error' | 'warning' | 'system' | 'success' = 'info'): Promise<void> {
+    if (jobId) {
+      await downloadJobService.addLog(jobId, message, type);
+    }
+  }
+
+  /**
+   * Helper: mark job failed.
+   */
+  private async _markJobFailed(jobId: string | undefined, errorMessage: string, ctxLog: any): Promise<void> {
+    if (jobId) {
+      await downloadJobService.fail(jobId, errorMessage);
+      await this._addJobLog(jobId, `❌ ${errorMessage}`, 'error');
+    }
+  }
+
+  /**
+   * Helper: update job khi bị cancel.
+   */
+  private async _updateJobCancelled(
+    jobId: string | undefined,
+    successCount: number,
+    errorCount: number,
+    ctxLog: any,
+  ): Promise<void> {
+    if (jobId) {
+      await downloadJobService.cancel(jobId);
+      await this._addJobLog(jobId, `⚠️ Job đã bị huỷ. Đã tải ${successCount} hoá đơn.`, 'warning');
+    }
+  }
 
   /**
    * Phase 1: Xác thực và resolve token/company.
@@ -342,8 +450,6 @@ export class InvoiceDownloadService {
 
   /**
    * Phase 2c: Xử lý từng invoice trong danh sách.
-   * Với mỗi invoice: download ZIP -> parse XML -> save DB -> generate PDF
-   * Nếu không có ZIP: fallback detail API -> save DB -> generate PDF fallback
    */
   private async _processInvoices(
     invoices: any[],
@@ -355,6 +461,8 @@ export class InvoiceDownloadService {
     overwriteMode: DownloadPipelineParams['overwriteMode'],
     onProgress: DownloadPipelineParams['onProgress'],
     ctxLog: ReturnType<typeof createLogger>,
+    jobId?: string,
+    abortSignal?: AbortSignal,
   ): Promise<{ successCount: number; errors: string[]; parsedList: ParsedInvoice[] }> {
     const total = invoices.length;
     let successCount = 0;
@@ -362,6 +470,13 @@ export class InvoiceDownloadService {
     const parsedList: ParsedInvoice[] = [];
 
     for (let i = 0; i < total; i++) {
+      // Kiểm tra abort trước mỗi invoice
+      if (abortSignal?.aborted) {
+        ctxLog.warn({ processed: i, total }, 'Job bị huỷ trong khi xử lý invoices');
+        errors.push(`Job bị huỷ sau ${i} hoá đơn`);
+        break;
+      }
+
       const inv = invoices[i];
       const current = i + 1;
       const invNum = String(inv.shdon || 'unknown');
@@ -370,11 +485,17 @@ export class InvoiceDownloadService {
         `[${current}/${total}] Hoá đơn ${invNum}: đang xử lý...`,
       );
 
+      // Gửi progress qua cả callback truyền thống lẫn job tracking
       onProgress?.({
         type, current, total, invoiceNumber: invNum,
         message: `[${current}/${total}] Hoá đơn ${invNum}: đang xử lý...`,
         level: 'info',
       });
+
+      // Cập nhật job progress trong DB
+      if (jobId) {
+        await downloadJobService.updateProgress(jobId, current, total, type, `Đang xử lý hoá đơn ${current}/${total}`);
+      }
 
       try {
         const invoiceDate = parseGdtDate(inv.tdlap);
@@ -382,8 +503,6 @@ export class InvoiceDownloadService {
         const invCompanyName = companyFolder || sellerTaxCode;
         const invoiceTargetDir = resolveTargetDir(baseDir, invCompanyName, type, invoiceDate);
 
-        // Xác định companyTaxCode dựa vào loại hoá đơn
-        // SELL: MST người bán là công ty đang login, BUY: MST người mua là công ty đang login
         const companyTaxCode: string = type === 'SELL'
           ? (inv.nbmst || '')
           : (inv.nmmst || inv.nmuamst || '');
@@ -408,11 +527,12 @@ export class InvoiceDownloadService {
           errors.push(`[${type}] Invoice ${invNum}: ${downloadErr.message}`);
         }
 
-        // ── Case A: Có ZIP -> parse XML + save ──
+        // ── Case A: Có ZIP ──
         if (zipPath) {
           const parsed = parserService.extractAndParseZip(zipPath, invoiceTargetDir);
           if (!parsed) {
             errors.push(`[${type}] Invoice ${invNum}: Không thể giải nén hoặc parse XML.`);
+            if (jobId) await downloadJobService.addError(jobId, `[${type}] Invoice ${invNum}: Không thể giải nén hoặc parse XML.`);
             continue;
           }
 
@@ -453,7 +573,6 @@ export class InvoiceDownloadService {
             );
           }
 
-          // Tạo ParsedInvoice fallback cho Excel report
           const parsedFallback = this._buildParsedFallback(inv, detailJson, invoiceDate);
           parsedList.push(parsedFallback);
           successCount++;
@@ -469,6 +588,7 @@ export class InvoiceDownloadService {
           `[${current}/${total}] Hoá đơn ${invNum}: lỗi - ${err.message}`,
         );
         errors.push(`[${type}] Invoice ${invNum}: ${err.message}`);
+        if (jobId) await downloadJobService.addError(jobId, `[${type}] Invoice ${invNum}: ${err.message}`);
         onProgress?.({
           type, current, total, invoiceNumber: invNum,
           message: `[${current}/${total}] Hoá đơn ${invNum}: lỗi - ${err.message}`,

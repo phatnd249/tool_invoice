@@ -20,6 +20,7 @@ model User {
   updatedAt        DateTime          @updatedAt
   companies        UserCompany[]
   downloadHistories DownloadHistory[]
+  downloadJobs      DownloadJob[]
   feedbacks        Feedback[]
 }
 
@@ -48,6 +49,7 @@ model Company {
   updatedAt      DateTime          @updatedAt
   scheduleCompanies ScheduleCompany[]
   users          UserCompany[]
+  downloadJobs   DownloadJob[]
 }
 
 model UserCompany {
@@ -167,6 +169,41 @@ model ScheduleCompany {
 model Setting {
   key   String @id
   value String
+}
+
+model DownloadJob {
+  id              String    @id @default(uuid())
+  companyId       Int?
+  companyName     String?
+  taxCode         String?
+  userId          Int?
+  username        String?
+
+  startDate       DateTime?
+  endDate         DateTime?
+  invoiceType     String    // "BUY" | "SELL" | "BOTH"
+  overwriteMode   String    @default("SKIP")
+
+  status          String    @default("PENDING")  // PENDING | RUNNING | COMPLETED | FAILED | CANCELLED
+  progressCurrent Int       @default(0)
+  progressTotal   Int       @default(0)
+  progressMessage String?
+  progressType    String?   // "BUY" | "SELL" (đang xử lý loại nào)
+
+  successCount    Int       @default(0)
+  errorCount      Int       @default(0)
+  errors          String?   // JSON string của mảng lỗi (tối đa 20 lỗi gần nhất)
+
+  logs            String?   // JSON string của mảng log entries [{time, message, type}]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  company         Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([status, createdAt])
 }
 
 model Feedback {

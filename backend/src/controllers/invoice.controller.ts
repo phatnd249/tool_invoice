@@ -6,6 +6,7 @@ import { AuthRequest } from '../middleware/auth.middleware.js';
 import { AuthService } from '../services/auth.service.js';
 import { PreviewService } from '../services/preview.service.js';
 import { invoiceDownloadService, DownloadProgress } from '../services/invoice-download.service.js';
+import { downloadJobService, jobEventBus } from '../services/download-job.service.js';
 import { invoicePersistenceService } from '../services/invoice-persistence.service.js';
 import { pdfGenerationService } from '../services/pdf-generation.service.js';
 import { DownloaderService } from '../services/downloader.service.js';
@@ -22,10 +23,15 @@ const excelService = new ExcelService();
 const authService = new AuthService();
 const previewService = new PreviewService();
 
+// Map lưu AbortController cho mỗi job, để hỗ trợ cancel
+const jobAbortControllers = new Map<string, AbortController>();
+
+// Map lưu company name theo companyId cho việc tạo job
+const companyNameCache = new Map<number, { name: string; taxCode: string }>();
+
 export class InvoiceController {
   /**
    * POST /api/invoices/check-existing
-   * Kiểm tra hoá đơn đã tồn tại trong DB cho một công ty và khoảng thời gian.
    */
   public static async checkExistingInvoices(req: AuthRequest, res: Response): Promise<void> {
     const { companyId, startDate, endDate, invoiceType = 'SELL' } = req.body;
@@ -40,7 +46,6 @@ export class InvoiceController {
     }
 
     try {
-      // Parse dates
       let start: Date, end: Date;
       try {
         start = parseDateString(startDate);
@@ -50,19 +55,16 @@ export class InvoiceController {
         return;
       }
 
-      // Get company
       const company = await prisma.company.findUnique({ where: { id: Number(companyId) } });
       if (!company) {
         res.status(404).json({ error: `Không tìm thấy doanh nghiệp với ID ${companyId}.` });
         return;
       }
 
-      // Normalize MST: một số MST trong DB không lưu số 0 đầu tiên
       const normalizedMst = company.taxCode.startsWith('0')
         ? company.taxCode.slice(1)
         : company.taxCode;
 
-      // Build where clause — dùng cả MST gốc và đã normalize
       const types: string[] = invoiceType === 'BOTH' ? ['BUY', 'SELL'] : [invoiceType];
       const whereClause: any = {
         invoiceDate: { gte: start, lte: end },
@@ -92,7 +94,7 @@ export class InvoiceController {
 
   /**
    * POST /api/invoices/download
-   * Triggers querying GDT portal, downloading zip files, parsing XML, and saving to database
+   * Tạo job và chạy pipeline bất đồng bộ. Trả về jobId để frontend theo dõi.
    */
   public static async downloadInvoices(req: AuthRequest, res: Response): Promise<void> {
     const { startDate, endDate, companyId, token, username, password, invoiceType = 'SELL', saveToDb = true, outputDir, geminiApiKey, overwriteMode = 'SKIP' } = req.body;
@@ -123,10 +125,41 @@ export class InvoiceController {
       return;
     }
 
-    log.info({ startDate, endDate, companyId, invoiceType, overwriteMode, userId: req.user.id }, 'downloadInvoices started');
+    // Lấy thông tin company để tạo job
+    let companyName: string | undefined;
+    let taxCode: string | undefined;
+    if (companyId) {
+      const company = await prisma.company.findUnique({ where: { id: Number(companyId) } });
+      if (company) {
+        companyName = company.name;
+        taxCode = company.taxCode;
+        companyNameCache.set(Number(companyId), { name: company.name, taxCode: company.taxCode });
+      }
+    } else if (username) {
+      companyName = username;
+      taxCode = username;
+    }
 
-    // Run pipeline
-    const result = await invoiceDownloadService.run({
+    // Tạo job trong DB
+    const jobId = await downloadJobService.create({
+      companyId: companyId ? Number(companyId) : undefined,
+      companyName,
+      taxCode,
+      userId: req.user.id,
+      username: req.user.username,
+      startDate: start,
+      endDate: end,
+      invoiceType: invoiceType as 'BUY' | 'SELL' | 'BOTH',
+      overwriteMode,
+    });
+
+    log.info({ jobId, startDate, endDate, companyId, invoiceType, overwriteMode, userId: req.user.id }, 'downloadInvoices job created');
+
+    // Trả về jobId ngay lập tức
+    res.json({ jobId, message: 'Job đã được tạo. Theo dõi tiến trình qua SSE stream.' });
+
+    // Chạy pipeline bất đồng bộ (không await)
+    InvoiceController._runPipelineAsync(jobId, {
       startDate: start,
       endDate: end,
       companyId: companyId ? Number(companyId) : undefined,
@@ -141,37 +174,60 @@ export class InvoiceController {
       usernameLabel: req.user.username,
       overwriteMode: overwriteMode as 'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
     });
-
-    log.info({ successCount: result.successCount, status: result.status }, 'downloadInvoices completed');
-
-    res.json({
-      message: `Tải hoàn tất: ${result.successCount} hóa đơn (${result.status === 'PARTIAL' ? 'có lỗi' : result.status === 'FAILED' ? 'thất bại' : 'thành công'}).`,
-      status: result.status,
-      count: result.successCount,
-      errors: result.errors.length > 0 ? result.errors : undefined,
-      data: result.parsedInvoices.map((p) => ({
-        invoiceNumber: p.invoiceNumber,
-        invoiceDate: p.invoiceDate,
-        sellerName: p.sellerName,
-        buyerName: p.buyerName,
-        totalAmount: p.totalAmount,
-      })),
-    });
   }
 
   /**
-   * GET /api/invoices/download/stream
-   * Download invoices with SSE progress events.
+   * GET /api/invoices/download/stream/:jobId
+   * SSE endpoint theo dõi tiến trình của một job cụ thể.
+   * Hỗ trợ reconnect: nếu job đã kết thúc, gửi ngay trạng thái cuối.
    */
   public static async downloadInvoicesStream(req: AuthRequest, res: Response): Promise<void> {
-    const { startDate, endDate, companyId, invoiceType = 'SELL', overwriteMode = 'SKIP' } = req.query as Record<string, string>;
+    const { jobId } = req.params;
 
-    if (!startDate || !endDate) {
-      res.status(400).json({ error: 'Missing required parameters: startDate, endDate' });
+    if (!jobId) {
+      res.status(400).json({ error: 'Missing required parameter: jobId' });
       return;
     }
-    if (!req.user) {
-      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+
+    // ── Tự xác thực token từ query param (vì EventSource không hỗ trợ custom headers) ──
+    const tokenFromQuery = req.query.token as string;
+    let authenticatedUserId: number | undefined;
+    let authenticatedRole: string | undefined;
+
+    if (req.user) {
+      // Nếu có req.user (middleware authen), dùng luôn
+      authenticatedUserId = req.user.id;
+      authenticatedRole = req.user.role;
+    } else if (tokenFromQuery) {
+      // Xác thực qua query param token
+      try {
+        const { verifyToken } = await import('../middleware/auth.middleware.js');
+        const decoded = verifyToken(tokenFromQuery) as { id: number; role: string } | null;
+        if (decoded) {
+          authenticatedUserId = decoded.id;
+          authenticatedRole = decoded.role;
+        }
+      } catch {
+        // Token không hợp lệ
+      }
+    }
+
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Yêu cầu xác thực. Vui lòng cung cấp token qua header Authorization hoặc query param ?token=...' });
+      return;
+    }
+
+    // Lấy job từ DB
+    const job = await downloadJobService.getById(jobId);
+
+    if (!job) {
+      res.status(404).json({ error: 'Không tìm thấy job này.' });
+      return;
+    }
+
+    // Kiểm tra quyền truy cập
+    if (authenticatedRole !== 'ADMIN' && job.userId !== authenticatedUserId) {
+      res.status(403).json({ error: 'Bạn không có quyền theo dõi job này.' });
       return;
     }
 
@@ -190,75 +246,269 @@ export class InvoiceController {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
-    // Parse dates
-    let start: Date, end: Date;
-    try {
-      start = parseDateString(startDate);
-      end = parseDateString(endDate);
-    } catch (e: any) {
-      sendEvent('error', { message: e.message });
+    // ── Nếu job đã kết thúc, gửi ngay trạng thái cuối ──
+    if (job.status === 'COMPLETED') {
+      const logs = JSON.parse(job.logs || '[]');
+      for (const logEntry of logs) {
+        sendEvent('log', { time: logEntry.time, message: logEntry.message, type: logEntry.type });
+      }
+      sendEvent('done', {
+        message: `Đã tải thành công ${job.successCount} hoá đơn.`,
+        successCount: job.successCount,
+        errorCount: job.errorCount,
+        errors: JSON.parse(job.errors || '[]').slice(0, 20),
+      });
       res.end();
       return;
     }
 
-    // Run pipeline with SSE progress
-    const result = await invoiceDownloadService.run({
-      startDate: start,
-      endDate: end,
-      companyId: companyId ? Number(companyId) : undefined,
-      invoiceType: (invoiceType as any) || 'SELL',
-      saveToDb: true,
-      userId: req.user.id,
-      usernameLabel: req.user.username,
-      overwriteMode: overwriteMode as 'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
-      onProgress: (progress: DownloadProgress) => {
-        if (aborted) return;
-        sendEvent('progress', {
-          type: progress.type,
-          current: progress.current,
-          total: progress.total,
-          invoiceNumber: progress.invoiceNumber,
-        });
-        sendEvent('log', {
-          time: new Date().toISOString(),
-          message: progress.message || '',
-          type: progress.level || 'info',
-        });
-      },
-    });
-
-    if (aborted) {
-      sendEvent('log', { time: new Date().toISOString(), message: 'Kết nối bị ngắt bởi người dùng.', type: 'warning' });
+    if (job.status === 'FAILED') {
+      const logs = JSON.parse(job.logs || '[]');
+      for (const logEntry of logs) {
+        sendEvent('log', { time: logEntry.time, message: logEntry.message, type: logEntry.type });
+      }
+      sendEvent('error', { message: job.progressMessage || 'Job thất bại.' });
       res.end();
       return;
     }
 
-    sendEvent('done', {
-      message: result.successCount > 0
-        ? `Đã tải thành công ${result.successCount} hoá đơn.`
-        : 'Không có hoá đơn nào được tải.',
-      successCount: result.successCount,
-      errorCount: result.errors.length,
-      errors: result.errors.slice(0, 20),
-    });
+    if (job.status === 'CANCELLED') {
+      sendEvent('log', { time: new Date().toISOString(), message: 'Job đã bị huỷ.', type: 'warning' });
+      sendEvent('done', { message: 'Job đã bị huỷ.', successCount: job.successCount, errorCount: job.errorCount });
+      res.end();
+      return;
+    }
 
-    res.end();
+    // ── Job đang chạy (RUNNING / PENDING): subscribe vào EventEmitter ──
+    // Gửi trạng thái hiện tại trước
+    if (job.status === 'RUNNING') {
+      sendEvent('progress', {
+        type: job.progressType || '',
+        current: job.progressCurrent,
+        total: job.progressTotal,
+      });
+      // Gửi các log đã có
+      const existingLogs = JSON.parse(job.logs || '[]');
+      for (const logEntry of existingLogs) {
+        sendEvent('log', { time: logEntry.time, message: logEntry.message, type: logEntry.type });
+      }
+    } else {
+      // PENDING
+      sendEvent('log', { time: new Date().toISOString(), message: 'Job đang chờ xử lý...', type: 'info' });
+    }
+
+    // Subscribe vào event bus
+    const onProgress = (data: any) => {
+      if (aborted) return;
+      sendEvent('progress', {
+        type: data.type || '',
+        current: data.current,
+        total: data.total,
+      });
+    };
+
+    const onLog = (data: any) => {
+      if (aborted) return;
+      sendEvent('log', { time: data.time, message: data.message, type: data.type || 'info' });
+    };
+
+    const onDone = (data: any) => {
+      if (aborted) return;
+      sendEvent('done', {
+        message: data.successCount > 0
+          ? `Đã tải thành công ${data.successCount} hoá đơn.`
+          : 'Không có hoá đơn nào được tải.',
+        successCount: data.successCount,
+        errorCount: data.errorCount || 0,
+      });
+      res.end();
+    };
+
+    const onError = (data: any) => {
+      if (aborted) return;
+      sendEvent('error', { message: data.message || 'Có lỗi xảy ra.' });
+      res.end();
+    };
+
+    const onCancelled = (data: any) => {
+      if (aborted) return;
+      sendEvent('log', { time: new Date().toISOString(), message: data.message || 'Job đã bị huỷ.', type: 'warning' });
+      sendEvent('done', { message: 'Job đã bị huỷ.', successCount: 0, errorCount: 0 });
+      res.end();
+    };
+
+    jobEventBus.on(`job:${jobId}:progress`, onProgress);
+    jobEventBus.on(`job:${jobId}:log`, onLog);
+    jobEventBus.on(`job:${jobId}:done`, onDone);
+    jobEventBus.on(`job:${jobId}:error`, onError);
+    jobEventBus.on(`job:${jobId}:cancelled`, onCancelled);
+
+    // Cleanup khi client disconnect
+    req.on('close', () => {
+      aborted = true;
+      jobEventBus.off(`job:${jobId}:progress`, onProgress);
+      jobEventBus.off(`job:${jobId}:log`, onLog);
+      jobEventBus.off(`job:${jobId}:done`, onDone);
+      jobEventBus.off(`job:${jobId}:error`, onError);
+      jobEventBus.off(`job:${jobId}:cancelled`, onCancelled);
+    });
   }
 
-  // Whitelist các field cho phép sort (tránh injection)
-  private static readonly INVOICE_SORT_FIELDS = new Set([
-    'invoiceNumber', 'invoiceDate', 'templateSymbol', 'invoiceSymbol',
-    'sellerName', 'sellerTaxCode', 'buyerName', 'buyerTaxCode',
-    'totalBeforeTax', 'taxAmount', 'totalAmount', 'invoiceStatus',
-  ]);
+  /**
+   * GET /api/invoices/download/jobs
+   * Lấy danh sách jobs của user (active + recent).
+   */
+  public static async getDownloadJobs(req: AuthRequest, res: Response): Promise<void> {
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
 
-  private static readonly HISTORY_SORT_FIELDS = new Set([
-    'downloadDate', 'taxCode', 'invoiceType', 'status', 'countDownloaded', 'username',
-  ]);
+    try {
+      const { status, limit } = req.query;
+
+      const jobs = await downloadJobService.getRecentJobs({
+        userId: req.user.role === 'ADMIN' ? undefined : req.user.id,
+        limit: limit ? parseInt(String(limit), 10) : 20,
+        status: status ? String(status) : undefined,
+      });
+
+      // Parse JSON fields before sending
+      const parsed = jobs.map((job) => ({
+        ...job,
+        logs: JSON.parse(job.logs || '[]'),
+        errors: JSON.parse(job.errors || '[]'),
+      }));
+
+      res.json(parsed);
+    } catch (error: any) {
+      log.error({ err: error }, 'Error getting download jobs');
+      res.status(500).json({ error: 'Lỗi khi lấy danh sách job.', details: error.message });
+    }
+  }
+
+  /**
+   * GET /api/invoices/download/jobs/:id
+   * Lấy chi tiết một job.
+   */
+  public static async getDownloadJobById(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
+    try {
+      const job = await downloadJobService.getById(id);
+      if (!job) {
+        res.status(404).json({ error: 'Không tìm thấy job.' });
+        return;
+      }
+
+      // Kiểm tra quyền
+      if (req.user.role !== 'ADMIN' && job.userId !== req.user.id) {
+        res.status(403).json({ error: 'Bạn không có quyền xem job này.' });
+        return;
+      }
+
+      res.json({
+        ...job,
+        logs: JSON.parse(job.logs || '[]'),
+        errors: JSON.parse(job.errors || '[]'),
+      });
+    } catch (error: any) {
+      log.error({ err: error, jobId: id }, 'Error getting job by id');
+      res.status(500).json({ error: 'Lỗi khi lấy thông tin job.', details: error.message });
+    }
+  }
+
+  /**
+   * POST /api/invoices/download/jobs/:id/cancel
+   * Huỷ một job đang chạy.
+   */
+  public static async cancelDownloadJob(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
+    try {
+      const job = await downloadJobService.getById(id);
+      if (!job) {
+        res.status(404).json({ error: 'Không tìm thấy job.' });
+        return;
+      }
+
+      // Kiểm tra quyền
+      if (req.user.role !== 'ADMIN' && job.userId !== req.user.id) {
+        res.status(403).json({ error: 'Bạn không có quyền huỷ job này.' });
+        return;
+      }
+
+      if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') {
+        res.status(400).json({ error: 'Job đã kết thúc, không thể huỷ.' });
+        return;
+      }
+
+      // Huỷ abort controller
+      const abortController = jobAbortControllers.get(id);
+      if (abortController) {
+        abortController.abort();
+        jobAbortControllers.delete(id);
+      }
+
+      // Cập nhật status trong DB
+      await downloadJobService.cancel(id);
+
+      log.info({ jobId: id, userId: req.user.id }, 'Job cancelled by user');
+      res.json({ message: 'Đã huỷ job thành công.' });
+    } catch (error: any) {
+      log.error({ err: error, jobId: id }, 'Error cancelling job');
+      res.status(500).json({ error: 'Lỗi khi huỷ job.', details: error.message });
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  Private Helpers
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Chạy pipeline bất đồng bộ với job tracking.
+   */
+  private static async _runPipelineAsync(jobId: string, params: any): Promise<void> {
+    const abortController = new AbortController();
+    jobAbortControllers.set(jobId, abortController);
+
+    try {
+      await downloadJobService.addLog(jobId, '🚀 Bắt đầu tải hoá đơn...', 'info');
+      await downloadJobService.addLog(jobId, `Khoảng thời gian: ${params.startDate.toLocaleDateString('vi-VN')} → ${params.endDate.toLocaleDateString('vi-VN')}`, 'info');
+
+      // Inject jobId và abortSignal vào params
+      params.jobId = jobId;
+      params.abortSignal = abortController.signal;
+
+      const result = await invoiceDownloadService.run(params);
+
+      log.info({ jobId, successCount: result.successCount, status: result.status }, 'Async pipeline completed');
+    } catch (err: any) {
+      log.error({ err, jobId }, 'Async pipeline unexpected error');
+
+      // Chỉ update job nếu chưa được update bởi pipeline
+      const job = await downloadJobService.getById(jobId);
+      if (job && (job.status === 'RUNNING' || job.status === 'PENDING')) {
+        await downloadJobService.fail(jobId, `Lỗi không mong đợi: ${err.message}`);
+        await downloadJobService.addLog(jobId, `❌ Lỗi hệ thống: ${err.message}`, 'error');
+      }
+    } finally {
+      jobAbortControllers.delete(jobId);
+    }
+  }
+
+  // ─── Các methods còn lại được giữ nguyên ───
 
   /**
    * GET /api/invoices
-   * Retrieve list of saved invoices with filters and sorting
    */
   public static async getInvoices(req: AuthRequest, res: Response): Promise<void> {
     const {
@@ -287,7 +537,6 @@ export class InvoiceController {
     if (type) whereClause.type = String(type);
     if (sellerTaxCode) {
       const raw = String(sellerTaxCode);
-      // Bỏ ký tự '0' đầu tiên nếu có, vì một số dữ liệu MST không lưu số 0 đầu
       const normalized = raw.startsWith('0') ? raw.slice(1) : raw;
       whereClause.sellerTaxCode = { contains: normalized };
     }
@@ -315,7 +564,6 @@ export class InvoiceController {
       }
     }
 
-    // Staff permission filter
     if (req.user.role !== 'ADMIN') {
       const assignedCompanies = await prisma.userCompany.findMany({
         where: { userId: req.user.id },
@@ -337,7 +585,6 @@ export class InvoiceController {
       }
     }
 
-    // Build orderBy từ sort params
     const orderField = InvoiceController.INVOICE_SORT_FIELDS.has(String(sortBy))
       ? String(sortBy)
       : 'invoiceDate';
@@ -365,7 +612,6 @@ export class InvoiceController {
 
   /**
    * POST /api/invoices/export
-   * Export invoices to Excel XLSX report
    */
   public static async exportInvoices(req: AuthRequest, res: Response): Promise<void> {
     const { invoiceIds } = req.body;
@@ -436,7 +682,6 @@ export class InvoiceController {
 
   /**
    * POST /api/invoices/export-module7
-   * Export Module 7 Excel report
    */
   public static async exportModule7(req: AuthRequest, res: Response): Promise<void> {
     const { invoiceIds } = req.body;
@@ -508,7 +753,6 @@ export class InvoiceController {
 
   /**
    * GET /api/invoices/:id/xml
-   * Download raw XML file
    */
   public static async downloadXml(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
@@ -533,7 +777,6 @@ export class InvoiceController {
 
   /**
    * GET /api/invoices/:id/zip
-   * Download raw ZIP file
    */
   public static async downloadZip(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
@@ -561,7 +804,6 @@ export class InvoiceController {
 
   /**
    * GET /api/invoices/:id/pdf
-   * Download raw PDF file
    */
   public static async downloadPdf(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
@@ -578,13 +820,11 @@ export class InvoiceController {
       let targetPdfPath = invoice.pdfPath;
 
       if (!targetPdfPath || !fs.existsSync(targetPdfPath)) {
-        // Generate PDF dynamically
         try {
           const html = await previewService.getPreviewHtml(id);
           if (!html) { res.status(404).json({ error: 'Không thể tạo bản thể hiện HTML.' }); return; }
 
           const cacheHtmlPath = previewService.getCachePath(id);
-          // Dùng MST của công ty sở hữu hoá đơn (SELL → seller, BUY → buyer)
           const taxCodeForName = invoice.type === 'BUY' ? (invoice.buyerTaxCode || invoice.sellerTaxCode) : (invoice.sellerTaxCode || invoice.buyerTaxCode);
           const pdfFileName = invoice.invoiceNumber
             ? `${taxCodeForName}-${invoice.invoiceNumber}-${getResultCode({ khhdon: invoice.invoiceSymbol, ttxly: invoice.processStatus ?? undefined, tthai: invoice.invoiceStatus ?? undefined })}.pdf`
@@ -613,7 +853,6 @@ export class InvoiceController {
 
   /**
    * GET /api/invoices/:id/preview
-   * Preview invoice HTML
    */
   public static async previewInvoice(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
@@ -679,7 +918,6 @@ export class InvoiceController {
 
   /**
    * GET /api/invoices/download-history
-   * Retrieve audit logs and download stats history
    */
   public static async getDownloadHistory(req: AuthRequest, res: Response): Promise<void> {
     const { page: pageParam, size: sizeParam, search, status, sortBy, sortDir } = req.query;
@@ -710,7 +948,6 @@ export class InvoiceController {
         }
       }
 
-      // Build orderBy cho download history
       const orderField = InvoiceController.HISTORY_SORT_FIELDS.has(String(sortBy))
         ? String(sortBy)
         : 'downloadDate';
@@ -735,13 +972,19 @@ export class InvoiceController {
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  Private Helpers
+  //  Static Helpers
   // ═══════════════════════════════════════════════════════════
 
-  /**
-   * Kiểm tra quyền truy cập company của user (non-admin).
-   * Trả về null nếu OK, hoặc object { error, status } nếu từ chối.
-   */
+  private static readonly INVOICE_SORT_FIELDS = new Set([
+    'invoiceNumber', 'invoiceDate', 'templateSymbol', 'invoiceSymbol',
+    'sellerName', 'sellerTaxCode', 'buyerName', 'buyerTaxCode',
+    'totalBeforeTax', 'taxAmount', 'totalAmount', 'invoiceStatus',
+  ]);
+
+  private static readonly HISTORY_SORT_FIELDS = new Set([
+    'downloadDate', 'taxCode', 'invoiceType', 'status', 'countDownloaded', 'username',
+  ]);
+
   private static async _checkCompanyAccess(
     req: AuthRequest,
     companyId?: string | number,
@@ -766,9 +1009,6 @@ export class InvoiceController {
     return hasAccess ? null : { error: 'Bạn không có quyền truy cập doanh nghiệp này.', status: 403 };
   }
 
-  /**
-   * Kiểm tra quyền truy cập invoice của user (non-admin).
-   */
   private static async _checkInvoiceAccess(
     req: AuthRequest,
     invoice: { sellerTaxCode: string; buyerTaxCode: string },

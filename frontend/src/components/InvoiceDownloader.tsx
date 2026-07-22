@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Play, Terminal, Trash2, ChevronDown, ChevronRight, Building2,
   MapPin, PhoneCall, User, CheckCircle2, Loader2, XCircle, Check,
-  Activity, Wifi, WifiOff, RefreshCw,
+  Activity, Wifi, WifiOff, RefreshCw, Ban, History, List,
 } from 'lucide-react';
 import OverwriteConfirmDialog, { type OverwriteMode } from './OverwriteConfirmDialog';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ interface Company {
 interface LogEntry {
   time: string;
   message: string;
-  type: 'info' | 'error' | 'warning' | 'system';
+  type: 'info' | 'error' | 'warning' | 'system' | 'success';
 }
 
 interface ProgressState {
@@ -48,11 +48,72 @@ interface ProgressState {
   total: number;
   current: number;
   message?: string;
+  jobId?: string; // Lưu jobId để có thể reconnect
 }
 
 interface GdtHealthStatus {
   overall: 'healthy' | 'degraded' | 'unhealthy' | 'checking' | 'unknown';
   summary: string;
+}
+
+interface DownloadJob {
+  id: string;
+  companyId: number | null;
+  companyName: string | null;
+  status: string;
+  progressCurrent: number;
+  progressTotal: number;
+  progressMessage: string | null;
+  successCount: number;
+  errorCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+
+/**
+ * Kết nối SSE stream cho một job cụ thể.
+ * Trả về hàm cleanup để ngắt kết nối.
+ */
+function connectJobSSE(
+  jobId: string,
+  token: string,
+  callbacks: {
+    onProgress: (data: any) => void;
+    onLog: (data: any) => void;
+    onDone: (data: any) => void;
+    onError: (data: any) => void;
+  },
+): () => void {
+  const baseUrl = API_BASE_URL || '';
+  // EventSource không hỗ trợ custom headers, nên truyền token qua query param
+  const url = `${baseUrl}/api/invoices/download/stream/${jobId}?token=${encodeURIComponent(token)}`;
+  const eventSource = new EventSource(url);
+
+  eventSource.addEventListener('progress', (event) => {
+    try { callbacks.onProgress(JSON.parse(event.data)); } catch {}
+  });
+
+  eventSource.addEventListener('log', (event) => {
+    try { callbacks.onLog(JSON.parse(event.data)); } catch {}
+  });
+
+  eventSource.addEventListener('done', (event) => {
+    try { callbacks.onDone(JSON.parse(event.data)); } catch {}
+    eventSource.close();
+  });
+
+  eventSource.addEventListener('error', (event) => {
+    try {
+      if (event.data) callbacks.onError(JSON.parse(event.data));
+    } catch {}
+    eventSource.close();
+  });
+
+  return () => {
+    eventSource.close();
+  };
 }
 
 // ── Main Component ─────────────────────────────────────────────
@@ -61,13 +122,16 @@ export default function InvoiceDownloader() {
   const [companiesLoading, setCompaniesLoading] = useState(false);
   const [expandedCompanyId, setExpandedCompanyId] = useState<number | null>(null);
   const [progressMap, setProgressMap] = useState<Record<number, ProgressState>>({});
-  const abortRef = useRef<Record<number, AbortController>>({});
   const [logs, setLogs] = useState<LogEntry[]>([
     { time: new Date().toLocaleTimeString(), message: 'Sẵn sàng nhận lệnh tải...', type: 'system' },
   ]);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const sseCleanupRef = useRef<Record<number, () => void>>({});
+  // Lưu jobId đang active theo companyId để hỗ trợ reconnect
+  const activeJobIdsRef = useRef<Record<number, string>>({});
 
+  // Auto scroll log
   useEffect(() => {
     if (autoScroll && logContainerRef.current) {
       const el = logContainerRef.current;
@@ -96,9 +160,9 @@ export default function InvoiceDownloader() {
 
   useEffect(() => { fetchCompanies(); }, [fetchCompanies]);
 
-  const addLog = (message: string, type: LogEntry['type'] = 'info') => {
+  const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), message, type }]);
-  };
+  }, []);
 
   const clearLogs = () => {
     setLogs([{ time: new Date().toLocaleTimeString(), message: 'Bảng Log đã được làm sạch.', type: 'system' }]);
@@ -128,7 +192,6 @@ export default function InvoiceDownloader() {
         [companyId]: { overall: data.overall, summary: data.summary },
       }));
 
-      // Log kết quả health check
       let healthMsg = `[Health] ${companyName}: GDT `;
       if (data.overall === 'healthy') {
         healthMsg += 'hoạt động tốt ✅';
@@ -143,7 +206,6 @@ export default function InvoiceDownloader() {
         toast.error(`[${companyName}] ${data.summary}`, { duration: 8000 });
       }
 
-      // Thêm log về token status nếu có
       if (data.tokenStatus === 'expired') {
         addLog(`[Health] ${companyName}: Token GDT đã hết hạn, cần đăng nhập lại`, 'warning');
       } else if (data.tokenStatus === 'missing') {
@@ -163,12 +225,11 @@ export default function InvoiceDownloader() {
     }
   }, [companies, addLog]);
 
-  // Khi expand company, tự động health check
+  // Khi expand company, tự động health check và kiểm tra job đang chạy
   const handleToggleAccordion = (companyId: number) => {
     const isExpanding = expandedCompanyId !== companyId;
     toggleAccordion(companyId);
     if (isExpanding) {
-      // Check cache: nếu đã check gần đây (30s) thì không gọi lại
       const existing = gdtHealthMap[companyId];
       if (!existing || existing.overall === 'unknown' || existing.overall === 'checking') {
         performHealthCheck(companyId);
@@ -176,112 +237,218 @@ export default function InvoiceDownloader() {
     }
   };
 
+  /**
+   * Tạo job download mới và kết nối SSE.
+   */
   const startDownload = async (companyId: number, startDate: string, endDate: string, invoiceType: string, overwriteMode?: string) => {
-    if (abortRef.current[companyId]) {
-      abortRef.current[companyId].abort();
+    const companyName = companies.find(c => c.id === companyId)?.name || `#${companyId}`;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      addLog(`[${companyName}] Lỗi: Chưa đăng nhập.`, 'error');
+      toast.error('Vui lòng đăng nhập lại.');
+      return;
     }
 
-    const abortController = new AbortController();
-    abortRef.current[companyId] = abortController;
-
-    const token = localStorage.getItem('token');
-    const baseUrl = API_BASE_URL || '';
-    let url = `${baseUrl}/api/invoices/download/stream?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}&companyId=${companyId}&invoiceType=${invoiceType}&token=${encodeURIComponent(token || '')}`;
-    if (overwriteMode) {
-      url += `&overwriteMode=${overwriteMode}`;
+    // Cleanup SSE cũ nếu có
+    if (sseCleanupRef.current[companyId]) {
+      sseCleanupRef.current[companyId]();
+      delete sseCleanupRef.current[companyId];
     }
 
     setProgressMap(prev => ({ ...prev, [companyId]: { status: 'connecting', total: 0, current: 0 } }));
-    addLog(`[${companies.find(c => c.id === companyId)?.name}] Bắt đầu tải hoá đơn...`, 'info');
+    addLog(`[${companyName}] Đang tạo job tải hoá đơn...`, 'info');
 
     try {
-      const response = await fetch(url, { signal: abortController.signal });
+      // Bước 1: Gọi POST /download để tạo job
+      const res = await axios.post(
+        `${API_BASE_URL}/api/invoices/download`,
+        {
+          companyId,
+          startDate,
+          endDate,
+          invoiceType,
+          overwriteMode: overwriteMode || 'SKIP',
+          saveToDb: true,
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `HTTP ${response.status}`);
-      }
+      const { jobId } = res.data;
+      if (!jobId) throw new Error('Không nhận được jobId từ server.');
 
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      activeJobIdsRef.current[companyId] = jobId;
+      addLog(`[${companyName}] Job #${jobId.slice(0, 8)} đã được tạo.`, 'info');
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // Bước 2: Kết nối SSE stream
+      sseCleanupRef.current[companyId] = connectJobSSE(
+        jobId,
+        token,
+        {
+          onProgress: (data) => {
+            setProgressMap(prev => {
+              const existing = prev[companyId];
+              return {
+                ...prev,
+                [companyId]: {
+                  ...existing,
+                  status: 'downloading',
+                  current: data.current,
+                  total: data.total,
+                  jobId,
+                },
+              };
+            });
+          },
+          onLog: (data) => {
+            addLog(`[${companyName}] ${data.message}`, data.type || 'info');
+          },
+          onDone: (data) => {
+            setProgressMap(prev => ({
+              ...prev,
+              [companyId]: {
+                status: 'done',
+                total: data.successCount,
+                current: data.successCount,
+                message: data.message,
+                jobId,
+              },
+            }));
+            addLog(`[${companyName}] ✅ ${data.message}`, data.errorCount > 0 ? 'warning' : 'success');
+            delete activeJobIdsRef.current[companyId];
+          },
+          onError: (data) => {
+            setProgressMap(prev => ({
+              ...prev,
+              [companyId]: { status: 'error', total: 0, current: 0, message: data.message },
+            }));
+            addLog(`[${companyName}] ❌ ${data.message}`, 'error');
+            delete activeJobIdsRef.current[companyId];
+          },
+        },
+      );
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        let currentEvent = '';
-        let currentData = '';
-
-        for (const line of lines) {
-          if (line.startsWith('event: ')) currentEvent = line.slice(7).trim();
-          else if (line.startsWith('data: ')) currentData = line.slice(6).trim();
-          else if (line === '' && currentEvent && currentData) {
-            try {
-              const data = JSON.parse(currentData);
-
-              switch (currentEvent) {
-                case 'log':
-                  addLog(`[SSE] ${data.message}`, data.type || 'info');
-                  break;
-                case 'total':
-                  setProgressMap(prev => ({ ...prev, [companyId]: { status: 'downloading', total: data.total, current: 0 } }));
-                  addLog(`[SSE] Tổng cộng ${data.total} hoá đơn cần tải.`, 'info');
-                  break;
-                case 'progress':
-                  setProgressMap(prev => {
-                    const existing = prev[companyId];
-                    return { ...prev, [companyId]: { ...existing, status: 'downloading', current: data.current, total: data.total } };
-                  });
-                  break;
-                case 'excel_report':
-                  try {
-                    const byteCharacters = atob(data.data);
-                    const byteNumbers = new Array(byteCharacters.length);
-                    for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
-                    const byteArray = new Uint8Array(byteNumbers);
-                    const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = data.filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
-                    addLog('[SSE] Đã tự động tải xuống file Excel báo cáo tổng hợp.', 'info');
-                  } catch (err) {
-                    addLog(`[SSE] Lỗi tải file Excel: ${err}`, 'error');
-                  }
-                  break;
-                case 'done':
-                  setProgressMap(prev => ({ ...prev, [companyId]: { status: 'done', total: data.successCount, current: data.successCount, message: data.message } }));
-                  addLog(`[SSE] Hoàn thành: ${data.message}`, data.errorCount > 0 ? 'warning' : 'info');
-                  break;
-                case 'error':
-                  setProgressMap(prev => ({ ...prev, [companyId]: { status: 'error', total: 0, current: 0, message: data.message } }));
-                  addLog(`[SSE] Lỗi: ${data.message}`, 'error');
-                  break;
-              }
-            } catch { /* ignore parse errors */ }
-            currentEvent = '';
-            currentData = '';
-          }
-        }
-      }
+      // Cập nhật trạng thái kết nối
+      setProgressMap(prev => {
+        const existing = prev[companyId];
+        return { ...prev, [companyId]: { ...existing, status: 'downloading', jobId } };
+      });
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        addLog(`[${companies.find(c => c.id === companyId)?.name}] Đã huỷ tải.`, 'warning');
-        return;
-      }
-      setProgressMap(prev => ({ ...prev, [companyId]: { status: 'error', total: 0, current: 0, message: err.message } }));
-      addLog(`[SSE] Lỗi kết nối: ${err.message}`, 'error');
+      const msg = err.response?.data?.error || err.message || 'Lỗi không xác định';
+      setProgressMap(prev => ({ ...prev, [companyId]: { status: 'error', total: 0, current: 0, message: msg } }));
+      addLog(`[${companyName}] ❌ ${msg}`, 'error');
+      toast.error(`[${companyName}] ${msg}`);
     }
   };
+
+  /**
+   * Huỷ job đang chạy.
+   */
+  const cancelDownload = async (companyId: number) => {
+    const jobId = activeJobIdsRef.current[companyId];
+    if (!jobId) return;
+
+    const companyName = companies.find(c => c.id === companyId)?.name || `#${companyId}`;
+    const token = localStorage.getItem('token');
+
+    try {
+      await axios.post(
+        `${API_BASE_URL}/api/invoices/download/jobs/${jobId}/cancel`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      addLog(`[${companyName}] Đã yêu cầu huỷ job.`, 'warning');
+    } catch (err: any) {
+      addLog(`[${companyName}] Lỗi khi huỷ job: ${err.message}`, 'error');
+    }
+  };
+
+  /**
+   * Kiểm tra job đang chạy khi component mount (hỗ trợ reconnect sau reload).
+   */
+  useEffect(() => {
+    const checkActiveJobs = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/invoices/download/jobs`, {
+          params: { status: 'RUNNING', limit: 10 },
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const runningJobs: DownloadJob[] = res.data;
+        if (runningJobs.length === 0) {
+          addLog('Không có job tải nào đang chạy.', 'system');
+          return;
+        }
+
+        addLog(`Phát hiện ${runningJobs.length} job đang chạy từ trước.`, 'system');
+
+        // Reconnect cho từng job
+        for (const job of runningJobs) {
+          if (!job.companyId) continue;
+
+          const cid = job.companyId;
+          addLog(`[${job.companyName || `#${cid}`}] Đang kết nối lại job ${job.id.slice(0, 8)}...`, 'system');
+
+          activeJobIdsRef.current[cid] = job.id;
+
+          setProgressMap(prev => ({
+            ...prev,
+            [cid]: {
+              status: 'downloading',
+              total: job.progressTotal,
+              current: job.progressCurrent,
+              jobId: job.id,
+            },
+          }));
+
+          // Cleanup old SSE
+          if (sseCleanupRef.current[cid]) {
+            sseCleanupRef.current[cid]();
+          }
+
+          sseCleanupRef.current[cid] = connectJobSSE(job.id, token, {
+            onProgress: (data) => {
+              setProgressMap(prev => {
+                const existing = prev[cid];
+                return { ...prev, [cid]: { ...existing, status: 'downloading', current: data.current, total: data.total } };
+              });
+            },
+            onLog: (data) => {
+              const companyName = companies.find(c => c.id === cid)?.name || job.companyName || `#${cid}`;
+              addLog(`[${companyName}] ${data.message}`, data.type || 'info');
+            },
+            onDone: (data) => {
+              setProgressMap(prev => ({ ...prev, [cid]: { status: 'done', total: data.successCount, current: data.successCount, message: data.message } }));
+              addLog(`[${job.companyName || `#${cid}`}] ✅ ${data.message}`, data.errorCount > 0 ? 'warning' : 'success');
+              delete activeJobIdsRef.current[cid];
+            },
+            onError: (data) => {
+              setProgressMap(prev => ({ ...prev, [cid]: { status: 'error', total: 0, current: 0, message: data.message } }));
+              addLog(`[${job.companyName || `#${cid}`}] ❌ ${data.message}`, 'error');
+              delete activeJobIdsRef.current[cid];
+            },
+          });
+        }
+      } catch (err) {
+        // Lỗi khi kiểm tra job (có thể chưa có job nào)
+        console.debug('No active jobs found or error checking:', err);
+      }
+    };
+
+    // Kiểm tra job active sau khi load companies
+    if (companies.length > 0) {
+      checkActiveJobs();
+    }
+  }, [companies.length, addLog]);
+
+  // Cleanup SSE khi unmount
+  useEffect(() => {
+    return () => {
+      Object.values(sseCleanupRef.current).forEach(cleanup => cleanup());
+    };
+  }, []);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -315,8 +482,10 @@ export default function InvoiceDownloader() {
               addLog={addLog}
               progress={progressMap[company.id] || { status: 'idle', total: 0, current: 0 }}
               onStartDownload={startDownload}
+              onCancelDownload={cancelDownload}
               gdtHealth={gdtHealthMap[company.id]}
               onHealthCheck={() => performHealthCheck(company.id)}
+              isReconnected={!!activeJobIdsRef.current[company.id]}
             />
           ))
         )}
@@ -349,6 +518,7 @@ export default function InvoiceDownloader() {
               else if (log.type === 'warning') { color = 'text-yellow-400'; icon = '⚠'; }
               else if (log.type === 'system') { color = 'text-muted-foreground'; icon = '■'; }
               else if (log.type === 'info') icon = '›';
+              else if (log.type === 'success') { color = 'text-emerald-400'; icon = '✓'; }
 
               return (
                 <div key={idx} className={`leading-relaxed ${color} animate-fade-in`}>
@@ -377,7 +547,8 @@ export default function InvoiceDownloader() {
 
 // ── Company Card ───────────────────────────────────────────────
 function CompanyCard({
-  company, isExpanded, onToggle, addLog: _addLog, progress, onStartDownload, gdtHealth, onHealthCheck,
+  company, isExpanded, onToggle, addLog: _addLog, progress, onStartDownload, onCancelDownload,
+  gdtHealth, onHealthCheck, isReconnected,
 }: {
   company: Company;
   isExpanded: boolean;
@@ -385,12 +556,13 @@ function CompanyCard({
   addLog: (message: string, type: LogEntry['type']) => void;
   progress: ProgressState;
   onStartDownload: (companyId: number, startDate: string, endDate: string, invoiceType: string, overwriteMode?: string) => void;
+  onCancelDownload: (companyId: number) => void;
   gdtHealth?: GdtHealthStatus;
   onHealthCheck: () => void;
+  isReconnected?: boolean;
 }) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [invoiceType, setInvoiceType] = useState('BOTH');
-  // Overwrite dialog state
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
   const [pendingDownloadParams, setPendingDownloadParams] = useState<{
     formattedStart: string;
@@ -419,14 +591,12 @@ function CompanyCard({
       return;
     }
 
-    // Nếu GDT không khả dụng, cảnh báo trước khi tải
     if (gdtHealth?.overall === 'unhealthy') {
       toast.warning(`[${company.name}] GDT đang không khả dụng. Tải có thể thất bại.`, {
         duration: 5000,
       });
     }
 
-    // Kiểm tra hoá đơn tồn tại trước khi tải
     setIsCheckingExisting(true);
     addLog(`[${company.name}] Đang kiểm tra hoá đơn đã tải trước đó...`, 'info');
 
@@ -446,20 +616,17 @@ function CompanyCard({
       const data = res.data;
 
       if (data.hasExisting) {
-        // Có hoá đơn tồn tại → show dialog
         setExistingCount(data.count);
         setPendingDownloadParams({ formattedStart, formattedEnd });
         setShowOverwriteDialog(true);
         addLog(`[${company.name}] Phát hiện ${data.count} hoá đơn đã tải trước đó.`, 'warning');
       } else {
-        // Không có → tải bình thường
         addLog(`[${company.name}] Không có hoá đơn nào đã tải trước đó.`, 'info');
         onStartDownload(company.id, formattedStart, formattedEnd, invoiceType);
       }
     } catch (err: any) {
       const msg = err.response?.data?.error || err.message || 'Lỗi kiểm tra hoá đơn';
       addLog(`[${company.name}] Lỗi kiểm tra: ${msg}`, 'error');
-      // Fallback: vẫn cho tải dù không kiểm tra được
       addLog(`[${company.name}] Tiến hành tải bình thường...`, 'info');
       onStartDownload(company.id, formattedStart, formattedEnd, invoiceType);
     } finally {
@@ -467,9 +634,6 @@ function CompanyCard({
     }
   };
 
-  /**
-   * Xử lý khi user chọn option trong overwrite dialog
-   */
   const handleOverwriteConfirm = (mode: OverwriteMode) => {
     setShowOverwriteDialog(false);
 
@@ -560,6 +724,13 @@ function CompanyCard({
               <p className="text-xs text-muted-foreground font-mono">MST: {company.taxCode}</p>
             </div>
             {healthBadge()}
+            {/* Badge hiển thị job đang chạy */}
+            {isReconnected && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                <Activity className="w-3 h-3 animate-pulse" />
+                Đang tải
+              </span>
+            )}
           </div>
         </div>
         <div className="shrink-0 ml-3">
@@ -601,7 +772,7 @@ function CompanyCard({
               </div>
             )}
 
-            {/* GDT Health Detail (chỉ hiện khi có lỗi hoặc chậm) */}
+            {/* GDT Health Detail */}
             {gdtHealth && (gdtHealth.overall === 'degraded' || gdtHealth.overall === 'unhealthy') && gdtHealth.summary && (
               <div className={`text-xs p-2 rounded-lg border ${
                 gdtHealth.overall === 'unhealthy'
@@ -609,6 +780,14 @@ function CompanyCard({
                   : 'bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-950/30 dark:border-yellow-800 dark:text-yellow-400'
               }`}>
                 {gdtHealth.overall === 'unhealthy' ? '🔴' : '🟡'} {gdtHealth.summary}
+              </div>
+            )}
+
+            {/* Reconnected notification */}
+            {isReconnected && (
+              <div className="text-xs p-2 rounded-lg border bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-400">
+                <History className="w-3 h-3 inline mr-1" />
+                Job đã được kết nối lại sau khi reload. Tiến trình đang tiếp tục.
               </div>
             )}
 
@@ -669,50 +848,46 @@ function CompanyCard({
               </div>
 
               <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={onHealthCheck}
-                  disabled={isDownloading || gdtHealth?.overall === 'checking'}
-                  className="flex-1"
-                  title="Kiểm tra kết nối GDT"
-                >
-                  {gdtHealth?.overall === 'checking' ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Đang kiểm tra...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Kiểm tra kết nối
-                    </>
-                  )}
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isDownloading}
-                  className="flex-[2]"
-                >
-                  {isDownloading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Đang tải...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-4 w-4" />
-                      Tải Hóa Đơn
-                    </>
-                  )}
-                </Button>
+                {isDownloading ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => onCancelDownload(company.id)}
+                    className="flex-1"
+                  >
+                    <Ban className="mr-2 h-4 w-4" />
+                    Huỷ tải
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={onHealthCheck}
+                      disabled={gdtHealth?.overall === 'checking'}
+                      className="flex-1"
+                    >
+                      {gdtHealth?.overall === 'checking' ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang kiểm tra...</>
+                      ) : (
+                        <><RefreshCw className="mr-2 h-4 w-4" />Kiểm tra kết nối</>
+                      )}
+                    </Button>
+                    <Button type="submit" disabled={isDownloading} className="flex-[2]">
+                      {isCheckingExisting ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang kiểm tra...</>
+                      ) : (
+                        <><Play className="mr-2 h-4 w-4" />Tải Hóa Đơn</>
+                      )}
+                    </Button>
+                  </>
+                )}
               </div>
             </form>
           </CardContent>
         </>
       )}
 
-      {/* Overwrite Confirm Dialog */}
       <OverwriteConfirmDialog
         open={showOverwriteDialog}
         onOpenChange={setShowOverwriteDialog}
@@ -722,7 +897,6 @@ function CompanyCard({
         existingCount={existingCount}
         onConfirm={handleOverwriteConfirm}
       />
-
     </Card>
   );
 }

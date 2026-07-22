@@ -11,6 +11,18 @@ export interface AuthRequest extends Request {
   };
 }
 
+/**
+ * Kiểm tra và giải mã token, trả về payload nếu hợp lệ.
+ * Dùng cho các trường hợp tự xác thực (SSE endpoint không qua middleware).
+ */
+export function verifyToken(token: string): { id: number; username: string; role: string } | null {
+  try {
+    return jwt.verify(token, JWT_SECRET) as any;
+  } catch {
+    return null;
+  }
+}
+
 export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers['authorization'];
   const queryToken = req.query.token as string | undefined;
