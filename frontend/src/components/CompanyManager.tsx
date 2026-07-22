@@ -365,7 +365,7 @@ export default function CompanyManager() {
                   <TableHead className="max-w-[180px]">Địa chỉ</TableHead>
                   <TableHead>Chế Độ</TableHead>
                   <TableHead>Tình trạng</TableHead>
-                  <TableHead className="text-right">Số Lần Tải</TableHead>
+                  <TableHead className="text-right">Số HĐ Đã Tải</TableHead>
                   <TableHead>Ngày Tạo</TableHead>
                   <TableHead className="text-center">Thao Tác</TableHead>
                 </TableRow>
