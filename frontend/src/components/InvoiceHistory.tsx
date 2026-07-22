@@ -391,7 +391,9 @@ export default function InvoiceHistory() {
             {subTab === 'invoices' && filterType && (
               <Select value={companyFilter} onValueChange={v => setCompanyFilter(v)}>
                 <SelectTrigger className="w-[240px]">
-                  <SelectValue placeholder={filterType === 'SELL' ? 'Công ty bán' : 'Công ty mua'} />
+                  <SelectValue placeholder={filterType === 'SELL' ? 'Công ty bán' : 'Công ty mua'}>
+                    {companyFilter ? companies.find(c => c.taxCode === companyFilter)?.name : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Tất cả công ty</SelectItem>
