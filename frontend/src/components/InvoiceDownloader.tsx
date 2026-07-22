@@ -111,7 +111,9 @@ export default function InvoiceDownloader() {
 
   const performHealthCheck = useCallback(async (companyId: number) => {
     const token = localStorage.getItem('token');
+    const companyName = companies.find(c => c.id === companyId)?.name || `#${companyId}`;
     setGdtHealthMap(prev => ({ ...prev, [companyId]: { overall: 'checking', summary: 'Đang kiểm tra GDT...' } }));
+    addLog(`[Health] ${companyName}: Đang kiểm tra kết nối GDT...`, 'info');
 
     try {
       const res = await axios.get(`${API_BASE_URL}/api/gdt/health`, {
@@ -119,10 +121,23 @@ export default function InvoiceDownloader() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = res.data;
+
       setGdtHealthMap(prev => ({
         ...prev,
         [companyId]: { overall: data.overall, summary: data.summary },
       }));
+
+      // Log kết quả health check
+      if (data.overall === 'healthy') {
+        addLog(`[Health] ${companyName}: GDT đang hoạt động tốt ✅`, 'success');
+      } else if (data.overall === 'degraded') {
+        addLog(`[Health] ${companyName}: ${data.summary}`, 'warning');
+        toast.warning(`[${companyName}] ${data.summary}`, { duration: 5000 });
+      } else if (data.overall === 'unhealthy') {
+        addLog(`[Health] ${companyName}: ${data.summary}`, 'error');
+        toast.error(`[${companyName}] ${data.summary}`, { duration: 8000 });
+      }
+
       return data;
     } catch (err: any) {
       const msg = err.response?.data?.summary || err.message || 'Không thể kiểm tra GDT';
@@ -130,9 +145,11 @@ export default function InvoiceDownloader() {
         ...prev,
         [companyId]: { overall: 'unknown', summary: msg },
       }));
+      addLog(`[Health] ${companyName}: ${msg}`, 'error');
+      toast.error(`[${companyName}] Không thể kiểm tra GDT: ${msg}`, { duration: 8000 });
       return null;
     }
-  }, []);
+  }, [companies, addLog]);
 
   // Khi expand company, tự động health check
   const handleToggleAccordion = (companyId: number) => {

@@ -16,7 +16,8 @@ const log = createLogger('GdtHealthService');
 // ─── Constants ───────────────────────────────────────────────────
 
 const GDT_BASE = 'https://hoadondientu.gdt.gov.vn';
-const HEALTH_TIMEOUT = parseInt(process.env.GDT_HEALTH_TIMEOUT_MS || '15000', 10);
+const HEALTH_TIMEOUT = parseInt(process.env.GDT_HEALTH_TIMEOUT_MS || '8000', 10);
+const HEALTH_TIMEOUT_SECONDS = HEALTH_TIMEOUT / 1000;
 const CACHE_TTL_MS = parseInt(process.env.GDT_HEALTH_CACHE_TTL || '30000', 10);
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -205,11 +206,17 @@ export class GdtHealthService {
     const startTime = Date.now();
 
     try {
+      // Dùng AbortSignal để đảm bảo timeout chính xác
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), HEALTH_TIMEOUT);
+
       const response = await axios.get(url, {
         headers,
-        timeout: HEALTH_TIMEOUT,
+        signal: controller.signal,
         validateStatus: () => true, // Không throw trên HTTP error
       });
+
+      clearTimeout(timeoutId);
 
       const latencyMs = Date.now() - startTime;
       const httpStatus = response.status;
@@ -235,9 +242,9 @@ export class GdtHealthService {
       const latencyMs = Date.now() - startTime;
 
       let message = error.message || 'Unknown error';
-      if (error.code === 'ECONNABORTED' || message.includes('timeout')) {
-        // Abort do timeout (AbortSignal hoặc axios timeout)
-        message = `Request timeout sau ${(HEALTH_TIMEOUT / 1000).toFixed(0)}s — GDT không phản hồi`;
+      if (error.code === 'ECONNABORTED' || error.name === 'AbortError' || message.includes('timeout') || message.includes('aborted')) {
+        // Abort do timeout (AbortSignal)
+        message = `Request timeout sau ${HEALTH_TIMEOUT_SECONDS.toFixed(0)}s — GDT không phản hồi`;
       } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
         message = `Không thể kết nối đến GDT (${error.code})`;
       }
