@@ -9,18 +9,36 @@ import { getResultCode } from '../utils/gdt-format.js';
 const log = createLogger('DownloaderService');
 
 /**
- * Wrapper for axios.get with automatic retry and exponential backoff for 429 errors.
+ * Wrapper for axios.get with automatic retry and exponential backoff for 429, 5xx, and Timeout/Network errors.
  */
 async function axiosGetWithRetry(url: string, config: any, retries: number = 3, delayMs: number = 1000): Promise<any> {
   for (let i = 0; i < retries; i++) {
-    const response = await axios.get(url, config);
-    if (response.status === 429) {
-      log.warn({ url, delayMs, attempt: i + 1, retries }, 'Rate limit (429) hit, retrying...');
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-      delayMs *= 2;
-      continue;
+    try {
+      const response = await axios.get(url, config);
+      const status = response.status;
+      if (status === 429 || (status >= 500 && status <= 599)) {
+        if (i < retries - 1) {
+          log.warn({ url, status, delayMs, attempt: i + 1, retries }, `HTTP ${status} returned from server, retrying in ${delayMs}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          delayMs *= 2;
+          continue;
+        }
+      }
+      return response;
+    } catch (err: any) {
+      const isTimeout = err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT' || (err.message && err.message.toLowerCase().includes('timeout'));
+      const status = err?.response?.status;
+      const isRetryable = isTimeout || !status || status === 429 || (status >= 500 && status <= 599);
+
+      if (i < retries - 1 && isRetryable) {
+        const reason = isTimeout ? 'Timeout' : (status ? `HTTP ${status}` : err.code || err.message);
+        log.warn({ url, reason, delayMs, attempt: i + 1, retries, err: err.message }, `Request failed (${reason}), retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        delayMs *= 2;
+        continue;
+      }
+      throw err;
     }
-    return response;
   }
   return axios.get(url, config);
 }
