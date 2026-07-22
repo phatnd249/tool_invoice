@@ -336,7 +336,7 @@ export default function InvoiceHistory() {
   const statusBadge = (status: string) => {
     switch (status) {
       case 'SUCCESS': return <Badge className="bg-green-500/10 text-green-600 border-green-300 hover:bg-green-500/10">Thành công</Badge>;
-      case 'PARTIAL': return <Badge variant="secondary">Một phần</Badge>;
+      case 'PARTIAL': return <Badge variant="destructive">Có HĐ lỗi</Badge>;
       case 'FAILED': return <Badge variant="destructive">Thất bại</Badge>;
       default: return <Badge variant="outline">{status}</Badge>;
     }
