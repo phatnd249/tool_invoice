@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Users, UserPlus, Shield, Trash2, Lock, Unlock, Edit2, X, Check, Loader2, CheckSquare, Square } from 'lucide-react';
+import { Users, UserPlus, Shield, Trash2, Lock, Unlock, Edit2, Check, Loader2, CheckSquare, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+
 import {
   Dialog,
   DialogContent,

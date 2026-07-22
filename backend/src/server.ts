@@ -22,6 +22,7 @@ import userRoutes from './routes/user.routes.js';
 import feedbackRoutes from './routes/feedback.routes.js';
 import masothueRoutes from './routes/masothue.routes.js';
 import scheduleRoutes from './routes/schedule.routes.js';
+import gdtHealthRoutes from './routes/gdt-health.routes.js';
 import { AuthController } from './controllers/auth.controller.js';
 import { schedulerService } from './services/scheduler.service.js';
 import { handleElectronIpcMessage } from './utils/electron-ipc.js';
@@ -49,6 +50,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/feedbacks', feedbackRoutes);
 app.use('/api/masothue', masothueRoutes);
 app.use('/api/schedules', scheduleRoutes);
+app.use('/api/gdt', gdtHealthRoutes);
 
 // Basic health check route
 app.get('/health', async (req: Request, res: Response) => {

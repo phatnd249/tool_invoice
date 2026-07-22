@@ -3,10 +3,11 @@ import axios from 'axios';
 import {
   Play, Terminal, Trash2, ChevronDown, ChevronRight, Building2,
   MapPin, PhoneCall, User, CheckCircle2, Loader2, XCircle, Check,
+  Activity, Wifi, WifiOff, RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
   Select,
@@ -16,8 +17,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
+
 import { DateRangePicker } from '@/components/ui/date-range-picker';
+import type { DateRange } from 'react-day-picker';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../config';
 
@@ -45,6 +47,11 @@ interface ProgressState {
   total: number;
   current: number;
   message?: string;
+}
+
+interface GdtHealthStatus {
+  overall: 'healthy' | 'degraded' | 'unhealthy' | 'checking' | 'unknown';
+  summary: string;
 }
 
 // ── Main Component ─────────────────────────────────────────────
@@ -98,6 +105,46 @@ export default function InvoiceDownloader() {
 
   const toggleAccordion = (companyId: number) => {
     setExpandedCompanyId(prev => (prev === companyId ? null : companyId));
+  };
+
+  const [gdtHealthMap, setGdtHealthMap] = useState<Record<number, GdtHealthStatus>>({});
+
+  const performHealthCheck = useCallback(async (companyId: number) => {
+    const token = localStorage.getItem('token');
+    setGdtHealthMap(prev => ({ ...prev, [companyId]: { overall: 'checking', summary: 'Đang kiểm tra GDT...' } }));
+
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/gdt/health`, {
+        params: { companyId },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = res.data;
+      setGdtHealthMap(prev => ({
+        ...prev,
+        [companyId]: { overall: data.overall, summary: data.summary },
+      }));
+      return data;
+    } catch (err: any) {
+      const msg = err.response?.data?.summary || err.message || 'Không thể kiểm tra GDT';
+      setGdtHealthMap(prev => ({
+        ...prev,
+        [companyId]: { overall: 'unknown', summary: msg },
+      }));
+      return null;
+    }
+  }, []);
+
+  // Khi expand company, tự động health check
+  const handleToggleAccordion = (companyId: number) => {
+    const isExpanding = expandedCompanyId !== companyId;
+    toggleAccordion(companyId);
+    if (isExpanding) {
+      // Check cache: nếu đã check gần đây (30s) thì không gọi lại
+      const existing = gdtHealthMap[companyId];
+      if (!existing || existing.overall === 'unknown' || existing.overall === 'checking') {
+        performHealthCheck(companyId);
+      }
+    }
   };
 
   const startDownload = async (companyId: number, startDate: string, endDate: string, invoiceType: string) => {
@@ -232,10 +279,12 @@ export default function InvoiceDownloader() {
               key={company.id}
               company={company}
               isExpanded={expandedCompanyId === company.id}
-              onToggle={() => toggleAccordion(company.id)}
+              onToggle={() => handleToggleAccordion(company.id)}
               addLog={addLog}
               progress={progressMap[company.id] || { status: 'idle', total: 0, current: 0 }}
               onStartDownload={startDownload}
+              gdtHealth={gdtHealthMap[company.id]}
+              onHealthCheck={() => performHealthCheck(company.id)}
             />
           ))
         )}
@@ -296,7 +345,7 @@ export default function InvoiceDownloader() {
 
 // ── Company Card ───────────────────────────────────────────────
 function CompanyCard({
-  company, isExpanded, onToggle, addLog, progress, onStartDownload,
+  company, isExpanded, onToggle, addLog: _addLog, progress, onStartDownload, gdtHealth, onHealthCheck,
 }: {
   company: Company;
   isExpanded: boolean;
@@ -304,8 +353,10 @@ function CompanyCard({
   addLog: (message: string, type: LogEntry['type']) => void;
   progress: ProgressState;
   onStartDownload: (companyId: number, startDate: string, endDate: string, invoiceType: string) => void;
+  gdtHealth?: GdtHealthStatus;
+  onHealthCheck: () => void;
 }) {
-  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [invoiceType, setInvoiceType] = useState('BOTH');
 
   const formatDatePayload = (d: Date | undefined) => {
@@ -326,26 +377,80 @@ function CompanyCard({
       return;
     }
 
+    // Nếu GDT không khả dụng, cảnh báo trước khi tải
+    if (gdtHealth?.overall === 'unhealthy') {
+      toast.warning(`[${company.name}] GDT đang không khả dụng. Tải có thể thất bại.`, {
+        duration: 5000,
+      });
+    }
+
     onStartDownload(company.id, formattedStart, formattedEnd, invoiceType);
   };
 
   const isDownloading = progress.status === 'connecting' || progress.status === 'downloading';
   const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
+  // ── GDT Health Badge ──
+  const healthBadge = () => {
+    if (!gdtHealth) return null;
+
+    switch (gdtHealth.overall) {
+      case 'healthy':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+            <Wifi className="w-3 h-3" />
+            GDT OK
+          </span>
+        );
+      case 'degraded':
+        return (
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+            title={gdtHealth.summary}
+          >
+            <Activity className="w-3 h-3" />
+            GDT Chậm
+          </span>
+        );
+      case 'unhealthy':
+        return (
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+            title={gdtHealth.summary}
+          >
+            <WifiOff className="w-3 h-3" />
+            GDT Lỗi
+          </span>
+        );
+      case 'checking':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Đang kiểm tra...
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <Card>
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-5 hover:bg-muted/30 transition-colors cursor-pointer text-left"
+        className="w-full flex items-center justify-between px-5 py-3 hover:bg-muted/30 transition-colors cursor-pointer text-left"
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
             <Building2 className="w-5 h-5 text-primary" />
           </div>
-          <div className="min-w-0">
-            <p className="font-semibold text-sm truncate">{company.name}</p>
-            <p className="text-xs text-muted-foreground font-mono">MST: {company.taxCode}</p>
+          <div className="min-w-0 flex items-center gap-2">
+            <div>
+              <p className="font-semibold text-sm truncate">{company.name}</p>
+              <p className="text-xs text-muted-foreground font-mono">MST: {company.taxCode}</p>
+            </div>
+            {healthBadge()}
           </div>
         </div>
         <div className="shrink-0 ml-3">
@@ -384,6 +489,17 @@ function CompanyCard({
                     <span className="text-green-500 font-medium">{company.status}</span>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* GDT Health Detail (chỉ hiện khi có lỗi hoặc chậm) */}
+            {gdtHealth && (gdtHealth.overall === 'degraded' || gdtHealth.overall === 'unhealthy') && gdtHealth.summary && (
+              <div className={`text-xs p-2 rounded-lg border ${
+                gdtHealth.overall === 'unhealthy'
+                  ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400'
+                  : 'bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-950/30 dark:border-yellow-800 dark:text-yellow-400'
+              }`}>
+                {gdtHealth.overall === 'unhealthy' ? '🔴' : '🟡'} {gdtHealth.summary}
               </div>
             )}
 
@@ -430,7 +546,7 @@ function CompanyCard({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor={`type-${company.id}`}>Loại hóa đơn</Label>
-                  <Select value={invoiceType} onValueChange={setInvoiceType} disabled={isDownloading}>
+                  <Select value={invoiceType} onValueChange={v => setInvoiceType(v ?? 'BOTH')} disabled={isDownloading}>
                     <SelectTrigger id={`type-${company.id}`}>
                       <SelectValue />
                     </SelectTrigger>
@@ -443,23 +559,45 @@ function CompanyCard({
                 </div>
               </div>
 
-              <Button
-                type="submit"
-                disabled={isDownloading}
-                className="w-full"
-              >
-                {isDownloading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Đang tải...
-                  </>
-                ) : (
-                  <>
-                    <Play className="mr-2 h-4 w-4" />
-                    Tải Hóa Đơn
-                  </>
-                )}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onHealthCheck}
+                  disabled={isDownloading || gdtHealth?.overall === 'checking'}
+                  className="flex-1"
+                  title="Kiểm tra kết nối GDT"
+                >
+                  {gdtHealth?.overall === 'checking' ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Đang kiểm tra...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Kiểm tra GDT
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isDownloading}
+                  className="flex-[2]"
+                >
+                  {isDownloading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Đang tải...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="mr-2 h-4 w-4" />
+                      Tải Hóa Đơn
+                    </>
+                  )}
+                </Button>
+              </div>
             </form>
           </CardContent>
         </>

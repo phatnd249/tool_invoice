@@ -5,7 +5,6 @@ import {
   CloudDownload,
   History,
   CalendarDays,
-  Menu,
   Key,
   Building2,
   Users,
@@ -20,7 +19,6 @@ import {
 import { useTheme } from './context/ThemeContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
   Sidebar,
@@ -40,13 +38,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
+
 import {
   Dialog,
   DialogContent,
@@ -89,7 +81,7 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<Tab>('download');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const [authError, setAuthError] = useState('');
 
   // Feedback states

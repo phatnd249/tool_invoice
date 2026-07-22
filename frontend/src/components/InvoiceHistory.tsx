@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { FileDown, FileArchive, FileSpreadsheet, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw, Filter, List, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { FileDown, FileArchive, FileSpreadsheet, ShieldAlert, X, FileText, Eye, Loader2, ChevronLeft, ChevronRight, RotateCw, List, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+
 import {
   Select,
   SelectContent,
@@ -17,7 +17,6 @@ import {
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
@@ -26,8 +25,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -365,7 +362,7 @@ export default function InvoiceHistory() {
         <CardContent className="p-4 md:p-6 space-y-3 overflow-visible">
           <div className="flex flex-wrap items-center gap-3">
             {subTab === 'invoices' ? (
-              <Select value={filterType} onValueChange={v => setFilterType(v)}>
+              <Select value={filterType} onValueChange={v => setFilterType(v ?? '')}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Tất cả hóa đơn" />
                 </SelectTrigger>
@@ -376,7 +373,7 @@ export default function InvoiceHistory() {
                 </SelectContent>
               </Select>
             ) : (
-              <Select value={filterStatus} onValueChange={v => setFilterStatus(v)}>
+              <Select value={filterStatus} onValueChange={v => setFilterStatus(v ?? '')}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Tất cả trạng thái" />
                 </SelectTrigger>
