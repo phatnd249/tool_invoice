@@ -24,11 +24,78 @@ const previewService = new PreviewService();
 
 export class InvoiceController {
   /**
+   * POST /api/invoices/check-existing
+   * Kiểm tra hoá đơn đã tồn tại trong DB cho một công ty và khoảng thời gian.
+   */
+  public static async checkExistingInvoices(req: AuthRequest, res: Response): Promise<void> {
+    const { companyId, startDate, endDate, invoiceType = 'SELL' } = req.body;
+
+    if (!companyId || !startDate || !endDate) {
+      res.status(400).json({ error: 'Missing required parameters: companyId, startDate, endDate' });
+      return;
+    }
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
+    try {
+      // Parse dates
+      let start: Date, end: Date;
+      try {
+        start = parseDateString(startDate);
+        end = parseDateString(endDate);
+      } catch {
+        res.status(400).json({ error: 'Invalid date format. Expected dd/MM/yyyy.' });
+        return;
+      }
+
+      // Get company
+      const company = await prisma.company.findUnique({ where: { id: Number(companyId) } });
+      if (!company) {
+        res.status(404).json({ error: `Không tìm thấy doanh nghiệp với ID ${companyId}.` });
+        return;
+      }
+
+      // Normalize MST: một số MST trong DB không lưu số 0 đầu tiên
+      const normalizedMst = company.taxCode.startsWith('0')
+        ? company.taxCode.slice(1)
+        : company.taxCode;
+
+      // Build where clause — dùng cả MST gốc và đã normalize
+      const types: string[] = invoiceType === 'BOTH' ? ['BUY', 'SELL'] : [invoiceType];
+      const whereClause: any = {
+        invoiceDate: { gte: start, lte: end },
+        type: { in: types },
+        OR: [
+          { sellerTaxCode: company.taxCode },
+          { sellerTaxCode: normalizedMst },
+          { buyerTaxCode: company.taxCode },
+          { buyerTaxCode: normalizedMst },
+        ],
+      };
+
+      const count = await prisma.invoice.count({ where: whereClause });
+
+      res.json({
+        hasExisting: count > 0,
+        count,
+        message: count > 0
+          ? `Đã tìm thấy ${count} hóa đơn trong khoảng thời gian từ ${startDate} đến ${endDate} của doanh nghiệp ${company.name}.`
+          : `Không tìm thấy hóa đơn nào trong khoảng thời gian này.`,
+      });
+    } catch (error: any) {
+      log.error({ err: error }, 'Error checking existing invoices');
+      res.status(500).json({ error: 'Lỗi khi kiểm tra hoá đơn tồn tại.', details: error.message });
+    }
+  }
+
+  /**
    * POST /api/invoices/download
    * Triggers querying GDT portal, downloading zip files, parsing XML, and saving to database
    */
   public static async downloadInvoices(req: AuthRequest, res: Response): Promise<void> {
-    const { startDate, endDate, companyId, token, username, password, invoiceType = 'SELL', saveToDb = true, outputDir, geminiApiKey } = req.body;
+    const { startDate, endDate, companyId, token, username, password, invoiceType = 'SELL', saveToDb = true, outputDir, geminiApiKey, overwriteMode = 'SKIP' } = req.body;
 
     if (!startDate || !endDate) {
       res.status(400).json({ error: 'Missing required parameters: startDate, endDate' });
@@ -56,7 +123,7 @@ export class InvoiceController {
       return;
     }
 
-    log.info({ startDate, endDate, companyId, invoiceType, userId: req.user.id }, 'downloadInvoices started');
+    log.info({ startDate, endDate, companyId, invoiceType, overwriteMode, userId: req.user.id }, 'downloadInvoices started');
 
     // Run pipeline
     const result = await invoiceDownloadService.run({
@@ -72,6 +139,7 @@ export class InvoiceController {
       outputDir,
       userId: req.user.id,
       usernameLabel: req.user.username,
+      overwriteMode: overwriteMode as 'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
     });
 
     log.info({ successCount: result.successCount, status: result.status }, 'downloadInvoices completed');
@@ -96,7 +164,7 @@ export class InvoiceController {
    * Download invoices with SSE progress events.
    */
   public static async downloadInvoicesStream(req: AuthRequest, res: Response): Promise<void> {
-    const { startDate, endDate, companyId, invoiceType = 'SELL' } = req.query as Record<string, string>;
+    const { startDate, endDate, companyId, invoiceType = 'SELL', overwriteMode = 'SKIP' } = req.query as Record<string, string>;
 
     if (!startDate || !endDate) {
       res.status(400).json({ error: 'Missing required parameters: startDate, endDate' });
@@ -142,6 +210,7 @@ export class InvoiceController {
       saveToDb: true,
       userId: req.user.id,
       usernameLabel: req.user.username,
+      overwriteMode: overwriteMode as 'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
       onProgress: (progress: DownloadProgress) => {
         if (aborted) return;
         sendEvent('progress', {
@@ -518,7 +587,7 @@ export class InvoiceController {
           // Dùng MST của công ty sở hữu hoá đơn (SELL → seller, BUY → buyer)
           const taxCodeForName = invoice.type === 'BUY' ? (invoice.buyerTaxCode || invoice.sellerTaxCode) : (invoice.sellerTaxCode || invoice.buyerTaxCode);
           const pdfFileName = invoice.invoiceNumber
-            ? `${taxCodeForName}-${invoice.invoiceNumber}-${getResultCode({ khhdon: invoice.invoiceSymbol, ttxly: invoice.processStatus, tthai: invoice.invoiceStatus })}.pdf`
+            ? `${taxCodeForName}-${invoice.invoiceNumber}-${getResultCode({ khhdon: invoice.invoiceSymbol, ttxly: invoice.processStatus ?? undefined, tthai: invoice.invoiceStatus ?? undefined })}.pdf`
             : `invoice_${id}.pdf`;
 
           targetPdfPath = path.join(path.dirname(cacheHtmlPath), pdfFileName);

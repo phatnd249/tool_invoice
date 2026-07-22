@@ -5,6 +5,7 @@ import {
   MapPin, PhoneCall, User, CheckCircle2, Loader2, XCircle, Check,
   Activity, Wifi, WifiOff, RefreshCw,
 } from 'lucide-react';
+import OverwriteConfirmDialog, { type OverwriteMode } from './OverwriteConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -175,7 +176,7 @@ export default function InvoiceDownloader() {
     }
   };
 
-  const startDownload = async (companyId: number, startDate: string, endDate: string, invoiceType: string) => {
+  const startDownload = async (companyId: number, startDate: string, endDate: string, invoiceType: string, overwriteMode?: string) => {
     if (abortRef.current[companyId]) {
       abortRef.current[companyId].abort();
     }
@@ -185,7 +186,10 @@ export default function InvoiceDownloader() {
 
     const token = localStorage.getItem('token');
     const baseUrl = API_BASE_URL || '';
-    const url = `${baseUrl}/api/invoices/download/stream?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}&companyId=${companyId}&invoiceType=${invoiceType}&token=${encodeURIComponent(token || '')}`;
+    let url = `${baseUrl}/api/invoices/download/stream?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}&companyId=${companyId}&invoiceType=${invoiceType}&token=${encodeURIComponent(token || '')}`;
+    if (overwriteMode) {
+      url += `&overwriteMode=${overwriteMode}`;
+    }
 
     setProgressMap(prev => ({ ...prev, [companyId]: { status: 'connecting', total: 0, current: 0 } }));
     addLog(`[${companies.find(c => c.id === companyId)?.name}] Bắt đầu tải hoá đơn...`, 'info');
@@ -380,12 +384,22 @@ function CompanyCard({
   onToggle: () => void;
   addLog: (message: string, type: LogEntry['type']) => void;
   progress: ProgressState;
-  onStartDownload: (companyId: number, startDate: string, endDate: string, invoiceType: string) => void;
+  onStartDownload: (companyId: number, startDate: string, endDate: string, invoiceType: string, overwriteMode?: string) => void;
   gdtHealth?: GdtHealthStatus;
   onHealthCheck: () => void;
 }) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [invoiceType, setInvoiceType] = useState('BOTH');
+  // Overwrite dialog state
+  const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
+  const [pendingDownloadParams, setPendingDownloadParams] = useState<{
+    formattedStart: string;
+    formattedEnd: string;
+  } | null>(null);
+  const [existingCount, setExistingCount] = useState(0);
+  const [isCheckingExisting, setIsCheckingExisting] = useState(false);
+
+  const addLog = _addLog;
 
   const formatDatePayload = (d: Date | undefined) => {
     if (!d) return '';
@@ -395,7 +409,7 @@ function CompanyCard({
     return `${dd}/${mm}/${yyyy}`;
   };
 
-  const handleDownload = (e: React.FormEvent) => {
+  const handleDownload = async (e: React.FormEvent) => {
     e.preventDefault();
     const formattedStart = formatDatePayload(dateRange?.from);
     const formattedEnd = formatDatePayload(dateRange?.to);
@@ -412,10 +426,77 @@ function CompanyCard({
       });
     }
 
-    onStartDownload(company.id, formattedStart, formattedEnd, invoiceType);
+    // Kiểm tra hoá đơn tồn tại trước khi tải
+    setIsCheckingExisting(true);
+    addLog(`[${company.name}] Đang kiểm tra hoá đơn đã tải trước đó...`, 'info');
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.post(
+        `${API_BASE_URL}/api/invoices/check-existing`,
+        {
+          companyId: company.id,
+          startDate: formattedStart,
+          endDate: formattedEnd,
+          invoiceType,
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      const data = res.data;
+
+      if (data.hasExisting) {
+        // Có hoá đơn tồn tại → show dialog
+        setExistingCount(data.count);
+        setPendingDownloadParams({ formattedStart, formattedEnd });
+        setShowOverwriteDialog(true);
+        addLog(`[${company.name}] Phát hiện ${data.count} hoá đơn đã tải trước đó.`, 'warning');
+      } else {
+        // Không có → tải bình thường
+        addLog(`[${company.name}] Không có hoá đơn nào đã tải trước đó.`, 'info');
+        onStartDownload(company.id, formattedStart, formattedEnd, invoiceType);
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || 'Lỗi kiểm tra hoá đơn';
+      addLog(`[${company.name}] Lỗi kiểm tra: ${msg}`, 'error');
+      // Fallback: vẫn cho tải dù không kiểm tra được
+      addLog(`[${company.name}] Tiến hành tải bình thường...`, 'info');
+      onStartDownload(company.id, formattedStart, formattedEnd, invoiceType);
+    } finally {
+      setIsCheckingExisting(false);
+    }
   };
 
-  const isDownloading = progress.status === 'connecting' || progress.status === 'downloading';
+  /**
+   * Xử lý khi user chọn option trong overwrite dialog
+   */
+  const handleOverwriteConfirm = (mode: OverwriteMode) => {
+    setShowOverwriteDialog(false);
+
+    if (mode === 'SKIP') {
+      addLog(`[${company.name}] Người dùng chọn bỏ qua, không tải lại.`, 'info');
+      toast.info(`[${company.name}] Đã bỏ qua tải hoá đơn.`);
+      return;
+    }
+
+    if (!pendingDownloadParams) return;
+
+    const overwriteStr = mode === 'OVERWRITE' ? 'OVERWRITE' : 'NEW_VERSION';
+    const modeLabel = mode === 'OVERWRITE' ? 'Ghi đè' : 'Tạo bản sao';
+    addLog(`[${company.name}] Người dùng chọn "${modeLabel}".`, 'info');
+
+    onStartDownload(
+      company.id,
+      pendingDownloadParams.formattedStart,
+      pendingDownloadParams.formattedEnd,
+      invoiceType,
+      overwriteStr,
+    );
+
+    setPendingDownloadParams(null);
+  };
+
+  const isDownloading = progress.status === 'connecting' || progress.status === 'downloading' || isCheckingExisting;
   const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
   // ── GDT Health Badge ──
@@ -630,6 +711,18 @@ function CompanyCard({
           </CardContent>
         </>
       )}
+
+      {/* Overwrite Confirm Dialog */}
+      <OverwriteConfirmDialog
+        open={showOverwriteDialog}
+        onOpenChange={setShowOverwriteDialog}
+        companyName={company.name}
+        startDate={pendingDownloadParams?.formattedStart || ''}
+        endDate={pendingDownloadParams?.formattedEnd || ''}
+        existingCount={existingCount}
+        onConfirm={handleOverwriteConfirm}
+      />
+
     </Card>
   );
 }

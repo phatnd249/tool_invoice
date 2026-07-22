@@ -5,6 +5,7 @@ import { withRetry } from '../utils/rate-limiter.js';
 import { createLogger } from '../logger/index.js';
 import { formatGdtError, extractResponseBody } from '../utils/gdt-errors.js';
 import { getResultCode } from '../utils/gdt-format.js';
+import { findNextVersion, getVersionedFilePath, removeAllRelatedFiles } from '../utils/file-version.js';
 
 const log = createLogger('DownloaderService');
 
@@ -246,7 +247,8 @@ export class DownloaderService {
     outputDir: string,
     invoiceType: 'BUY' | 'SELL' = 'SELL',
     companyTaxCode?: string,
-  ): Promise<string> {
+    overwriteMode?: 'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
+  ): Promise<{ zipPath: string; version?: number }> {
     const nbmst = invoice.nbmst;
     const khmshdon = invoice.khmshdon;
     const khhdon = invoice.khhdon;
@@ -261,9 +263,28 @@ export class DownloaderService {
     const zipFileName = `${taxCodeForName}-${shdon}-${resultCode}.zip`;
     const zipPath = path.join(outputDir, zipFileName);
 
-    // Skip if already downloaded
-    if (fs.existsSync(zipPath) && fs.statSync(zipPath).size > 0) {
-      return zipPath;
+    // Xử lý theo overwriteMode
+    let finalZipPath = zipPath;
+    let version: number | undefined;
+
+    if (overwriteMode === 'OVERWRITE') {
+      // Ghi đè: xoá file cũ trước khi tải mới
+      if (fs.existsSync(zipPath)) {
+        removeAllRelatedFiles(zipPath);
+        log.info({ zipPath }, 'Overwrite mode: đã xoá các file cũ');
+      }
+    } else if (overwriteMode === 'NEW_VERSION') {
+      // Tạo bản sao: tìm version tiếp theo nếu file đã tồn tại
+      if (fs.existsSync(zipPath) && fs.statSync(zipPath).size > 0) {
+        version = findNextVersion(zipPath);
+        finalZipPath = getVersionedFilePath(zipPath, version);
+        log.info({ original: zipPath, final: finalZipPath, version }, 'New-version mode: tạo file version mới');
+      }
+    } else {
+      // SKIP (mặc định): skip nếu file đã tồn tại
+      if (fs.existsSync(zipPath) && fs.statSync(zipPath).size > 0) {
+        return { zipPath, version: undefined };
+      }
     }
 
     const isSco = invoice._sourceApi === 'sco-query' || String(khhdon).toUpperCase().startsWith('M');
@@ -285,8 +306,9 @@ export class DownloaderService {
       });
 
       if (response.status === 200) {
-        fs.writeFileSync(zipPath, response.data);
-        return zipPath;
+        fs.writeFileSync(finalZipPath, response.data);
+        log.info({ zipPath: finalZipPath, invoiceNumber: shdon }, 'Đã tải ZIP thành công');
+        return { zipPath: finalZipPath, version };
       }
 
       // Non-200 — parse và throw message thân thiện
@@ -300,6 +322,9 @@ export class DownloaderService {
         error.message.includes('không còn tồn tại') ||
         error.message.includes('GDT trả về lỗi')
       )) {
+        if (version) {
+          throw new Error(`[v${version}] ${error.message}`);
+        }
         throw error;
       }
 
@@ -307,10 +332,16 @@ export class DownloaderService {
         const responseBody = extractResponseBody(error.response.data);
         log.error({ invoiceNumber: shdon, status: error.response.status, url: exportUrl, responseBody }, 'GDT error for invoice');
         const friendlyMessage = formatGdtError(responseBody, String(shdon), error.response.status);
+        if (version) {
+          throw new Error(`[v${version}] ${friendlyMessage}`);
+        }
         throw new Error(friendlyMessage);
       }
 
       log.error({ invoiceNumber: shdon, err: error.message }, 'Failed to download ZIP');
+      if (version) {
+        throw new Error(`[v${version}] Lỗi mạng khi tải hoá đơn ${shdon}: ${error.message}`);
+      }
       throw new Error(`Lỗi mạng khi tải hoá đơn ${shdon}: ${error.message}`);
     }
   }

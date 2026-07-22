@@ -8,6 +8,7 @@ import { PreviewService } from './preview.service.js';
 import { generatePdfViaElectron } from '../utils/electron-ipc.js';
 import { createLogger } from '../logger/index.js';
 import { getPdfFileNameFromInv } from '../utils/path-resolver.js';
+import { getVersionedFilePath, removeAllRelatedFiles } from '../utils/file-version.js';
 import { invoicePersistenceService } from './invoice-persistence.service.js';
 
 const log = createLogger('PdfGenerationService');
@@ -26,6 +27,8 @@ export class PdfGenerationService {
     invoiceId: string,
     zipPath: string,
     targetDir: string,
+    overwriteMode?: 'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
+    version?: number,
   ): Promise<string | null> {
     try {
       const html = await previewService.getPreviewHtml(invoiceId);
@@ -35,10 +38,28 @@ export class PdfGenerationService {
       }
 
       const pdfFileName = path.basename(zipPath, '.zip') + '.pdf';
-      const pdfPath = path.join(targetDir, pdfFileName);
+      let pdfPath = path.join(targetDir, pdfFileName);
+
+      // Điều chỉnh đường dẫn PDF theo overwriteMode
+      if (overwriteMode === 'OVERWRITE') {
+        // Xoá PDF cũ nếu tồn tại
+        if (fs.existsSync(pdfPath)) {
+          fs.unlinkSync(pdfPath);
+        }
+      } else if (overwriteMode === 'NEW_VERSION' && version && version > 0) {
+        // Dùng version đồng bộ với ZIP
+        pdfPath = getVersionedFilePath(pdfPath, version);
+      } else {
+        // SKIP: kiểm tra nếu PDF đã tồn tại thì không tạo lại
+        if (fs.existsSync(pdfPath)) {
+          log.info({ pdfPath }, 'PDF đã tồn tại, bỏ qua (SKIP mode)');
+          return pdfPath;
+        }
+      }
+
       const cacheHtmlPath = previewService.getCachePath(invoiceId);
 
-      log.info({ invoiceId, pdfFileName }, 'Đang tạo PDF từ ZIP...');
+      log.info({ invoiceId, pdfFileName, pdfPath }, 'Đang tạo PDF từ ZIP...');
       await this._renderHtmlToPdf(cacheHtmlPath, pdfPath);
 
       await invoicePersistenceService.updatePdfPath(invoiceId, pdfPath);
@@ -64,6 +85,8 @@ export class PdfGenerationService {
     inv: Record<string, any>,
     targetDir: string,
     companyTaxCode?: string,
+    overwriteMode?: 'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
+    version?: number,
   ): Promise<string | null> {
     try {
       // Build HTML từ JSON
@@ -76,11 +99,27 @@ export class PdfGenerationService {
       }
 
       const taxCode = companyTaxCode || inv.nbmst || 'UNKNOWN';
-      const pdfFileName = getPdfFileNameFromInv(taxCode, inv);
-      const pdfPath = path.join(targetDir, pdfFileName);
+      let pdfFileName = getPdfFileNameFromInv(taxCode, inv);
+      let pdfPath = path.join(targetDir, pdfFileName);
+
+      // Điều chỉnh đường dẫn PDF theo overwriteMode
+      if (overwriteMode === 'OVERWRITE') {
+        if (fs.existsSync(pdfPath)) {
+          fs.unlinkSync(pdfPath);
+        }
+      } else if (overwriteMode === 'NEW_VERSION' && version && version > 0) {
+        pdfPath = getVersionedFilePath(pdfPath, version);
+      } else {
+        // SKIP: nếu PDF đã tồn tại thì không tạo lại
+        if (fs.existsSync(pdfPath)) {
+          log.info({ pdfPath }, 'PDF đã tồn tại, bỏ qua (SKIP mode)');
+          return pdfPath;
+        }
+      }
+
       const cacheHtmlPath = previewService.getCachePath(invoiceId);
 
-      log.info({ invoiceId, pdfFileName }, 'Đang tạo PDF từ detail API (fallback)...');
+      log.info({ invoiceId, pdfFileName, pdfPath }, 'Đang tạo PDF từ detail API (fallback)...');
       await this._renderHtmlToPdf(cacheHtmlPath, pdfPath);
 
       await invoicePersistenceService.updatePdfPath(invoiceId, pdfPath);

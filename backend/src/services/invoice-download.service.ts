@@ -38,6 +38,7 @@ export interface DownloadPipelineParams {
   outputDir?: string;
   userId?: number;
   usernameLabel?: string;
+  overwriteMode?: 'SKIP' | 'OVERWRITE' | 'NEW_VERSION';
   onProgress?: (progress: DownloadProgress) => void;
 }
 
@@ -131,7 +132,7 @@ export class InvoiceDownloadService {
 
       // 2c. Download từng invoice
       const { successCount, errors, parsedList } = await this._processInvoices(
-        invoices, type, token, baseDir, companyFolder, params.saveToDb, params.onProgress, ctxLog,
+        invoices, type, token, baseDir, companyFolder, params.saveToDb, params.overwriteMode, params.onProgress, ctxLog,
       );
 
       totalSuccessCount += successCount;
@@ -351,6 +352,7 @@ export class InvoiceDownloadService {
     baseDir: string,
     companyFolder: string,
     saveToDb: boolean,
+    overwriteMode: DownloadPipelineParams['overwriteMode'],
     onProgress: DownloadPipelineParams['onProgress'],
     ctxLog: ReturnType<typeof createLogger>,
   ): Promise<{ successCount: number; errors: string[]; parsedList: ParsedInvoice[] }> {
@@ -388,13 +390,16 @@ export class InvoiceDownloadService {
 
         // Thử download ZIP
         let zipPath: string | null = null;
+        let zipVersion: number | undefined;
         try {
-          zipPath = await withRetry(
-            () => downloaderService.downloadInvoiceZip(inv, token, invoiceTargetDir, type, companyTaxCode),
+          const result = await withRetry(
+            () => downloaderService.downloadInvoiceZip(inv, token, invoiceTargetDir, type, companyTaxCode, overwriteMode),
             { maxRetries: 2, baseDelayMs: 2000, maxDelayMs: 8000, logger: ctxLog.warn.bind(ctxLog) },
           );
+          zipPath = result.zipPath;
+          zipVersion = result.version;
           if (zipPath) {
-            ctxLog.info({ invoiceNumber: invNum }, `[${current}/${total}] Hoá đơn ${invNum}: đã tải ZIP`);
+            ctxLog.info({ invoiceNumber: invNum, version: zipVersion }, `[${current}/${total}] Hoá đơn ${invNum}: đã tải ZIP`);
           }
         } catch (downloadErr: any) {
           ctxLog.warn({ invoiceNumber: invNum, err: downloadErr.message },
@@ -418,7 +423,7 @@ export class InvoiceDownloadService {
 
           if (saveToDb) {
             const { invoiceId } = await invoicePersistenceService.upsertInvoice(parsed, type);
-            await pdfGenerationService.generateFromZip(invoiceId, zipPath, invoiceTargetDir);
+            await pdfGenerationService.generateFromZip(invoiceId, zipPath, invoiceTargetDir, overwriteMode, zipVersion);
           }
 
           onProgress?.({
@@ -440,7 +445,7 @@ export class InvoiceDownloadService {
               const detailItems = detailJson.hdhhdvu || detailJson.cttkhac || [];
               await invoicePersistenceService.saveInvoiceItemsFromDetail(invoiceId, detailItems);
 
-              await pdfGenerationService.generateFromDetail(invoiceId, detailJson, inv, invoiceTargetDir, companyTaxCode);
+              await pdfGenerationService.generateFromDetail(invoiceId, detailJson, inv, invoiceTargetDir, companyTaxCode, overwriteMode, zipVersion);
             }
           } catch (detailErr: any) {
             ctxLog.warn({ err: detailErr, invoiceNumber: invNum },
