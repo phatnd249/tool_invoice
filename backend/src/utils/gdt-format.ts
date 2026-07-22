@@ -22,15 +22,7 @@ export function getResultCode(inv: {
   if (baseCode === 'K' && inv.ttxly === 5) baseCode = 'C';
   if (baseCode === 'K' && inv.ttxly === 8) baseCode = 'M';
 
-  const tthai = inv.tthai;
-  let suffix = 'GOC';
-  if (tthai == 2) suffix = 'TT';
-  else if (tthai == 3) suffix = 'DC';
-  else if (tthai == 4) suffix = 'BTT';
-  else if (tthai == 5) suffix = 'BDC';
-  else if (tthai == 6) suffix = 'HUY';
-
-  return `${baseCode} - ${suffix}`;
+  return baseCode;
 }
 
 /**

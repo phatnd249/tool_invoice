@@ -516,7 +516,7 @@ export class InvoiceController {
 
           const cacheHtmlPath = previewService.getCachePath(id);
           const pdfFileName = invoice.invoiceNumber
-            ? `${invoice.sellerTaxCode}-${String(invoice.templateSymbol || '').replace(/[^a-zA-Z0-9]/g, '')}-${String(invoice.invoiceSymbol || '').replace(/[^a-zA-Z0-9]/g, '')}-${invoice.invoiceNumber}-${getResultCode({ khhdon: invoice.invoiceSymbol, ttxly: invoice.processStatus, tthai: invoice.invoiceStatus })}.pdf`
+            ? `${invoice.sellerTaxCode}-${invoice.invoiceNumber}-${getResultCode({ khhdon: invoice.invoiceSymbol, ttxly: invoice.processStatus, tthai: invoice.invoiceStatus })}.pdf`
             : `invoice_${id}.pdf`;
 
           targetPdfPath = path.join(path.dirname(cacheHtmlPath), pdfFileName);

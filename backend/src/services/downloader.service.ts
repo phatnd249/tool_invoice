@@ -238,7 +238,7 @@ export class DownloaderService {
     }
 
     const resultCode = getResultCode(invoice);
-    const zipFileName = `${nbmst}-${String(khmshdon).replace(/[^a-zA-Z0-9]/g, '')}-${String(khhdon).replace(/[^a-zA-Z0-9]/g, '')}-${shdon}-${resultCode}.zip`;
+    const zipFileName = `${nbmst}-${shdon}-${resultCode}.zip`;
     const zipPath = path.join(outputDir, zipFileName);
 
     // Skip if already downloaded
