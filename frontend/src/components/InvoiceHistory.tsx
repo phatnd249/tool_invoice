@@ -34,6 +34,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../config';
+import CompanyAutocomplete from '@/components/CompanyAutocomplete';
 
 interface InvoiceItem {
   id: number;
@@ -359,9 +360,9 @@ export default function InvoiceHistory() {
         </TabsList>
       </Tabs>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4 md:p-6">
+      {/* Filters - Row 1: type/status, search, actions */}
+      <Card className="overflow-visible">
+        <CardContent className="p-4 md:p-6 space-y-3 overflow-visible">
           <div className="flex flex-wrap items-center gap-3">
             {subTab === 'invoices' ? (
               <Select value={filterType} onValueChange={v => setFilterType(v)}>
@@ -384,22 +385,6 @@ export default function InvoiceHistory() {
                   <SelectItem value="SUCCESS">Thành công</SelectItem>
                   <SelectItem value="PARTIAL">Một phần</SelectItem>
                   <SelectItem value="FAILED">Thất bại</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-
-            {subTab === 'invoices' && filterType && (
-              <Select value={companyFilter} onValueChange={v => setCompanyFilter(v)}>
-                <SelectTrigger className="w-[240px]">
-                  <SelectValue placeholder={filterType === 'SELL' ? 'Công ty bán' : 'Công ty mua'}>
-                    {companyFilter ? companies.find(c => c.taxCode === companyFilter)?.name : undefined}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Tất cả công ty</SelectItem>
-                  {companies.map(c => (
-                    <SelectItem key={c.taxCode} value={c.taxCode}>{c.name} ({c.taxCode})</SelectItem>
-                  ))}
                 </SelectContent>
               </Select>
             )}
@@ -435,6 +420,29 @@ export default function InvoiceHistory() {
               </>
             )}
           </div>
+
+          {/* Filters - Row 2: company autocomplete */}
+          {subTab === 'invoices' && filterType && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Label className="text-sm text-muted-foreground whitespace-nowrap">
+                {filterType === 'SELL' ? 'Công ty bán:' : 'Công ty mua:'}
+              </Label>
+              <div className="w-[360px]">
+                <CompanyAutocomplete
+                  companies={companies}
+                  value={companyFilter}
+                  onChange={v => setCompanyFilter(v)}
+                  placeholder={filterType === 'SELL' ? 'Nhập tên hoặc MST công ty bán...' : 'Nhập tên hoặc MST công ty mua...'}
+                />
+              </div>
+              {companyFilter && (
+                <Button variant="ghost" size="sm" onClick={() => setCompanyFilter('')} className="h-8 text-xs gap-1">
+                  <X className="h-3 w-3" />
+                  Bỏ lọc
+                </Button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
