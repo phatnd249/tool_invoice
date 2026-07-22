@@ -26,8 +26,6 @@ const log = createLogger('InvoiceDownloadService');
 // ─── Type Definitions ──────────────────────────────────────────
 
 export interface DownloadPipelineParams {
-  /** Bỏ qua health check GDT trước khi chạy pipeline */
-  skipHealthCheck?: boolean;
   startDate: Date;
   endDate: Date;
   companyId?: number;
@@ -97,44 +95,6 @@ export class InvoiceDownloadService {
 
     const baseDir = params.outputDir || process.env.INVOICES_DIR || path.join(process.cwd(), 'invoices');
     const dateChunks = downloaderService.splitDateRange(params.startDate, params.endDate);
-
-    // ── Health Check GDT (global — 1 lần cho tất cả company) ──
-    if (!params.skipHealthCheck) {
-      try {
-        const healthResult = await gdtHealthService.checkAll(token);
-        ctxLog.info(
-          { overall: healthResult.overall, summary: healthResult.summary },
-          'GDT health check result',
-        );
-
-        if (healthResult.overall === 'unhealthy') {
-          const errorMsg = `GDT không khả dụng: ${healthResult.summary}`;
-          ctxLog.error(errorMsg);
-          params.onProgress?.({
-            type: 'health',
-            current: 0,
-            total: 0,
-            message: errorMsg,
-            level: 'error',
-          });
-          return { successCount: 0, errors: [errorMsg], parsedInvoices: [], status: 'FAILED' };
-        }
-
-        if (healthResult.overall === 'degraded') {
-          ctxLog.warn({ summary: healthResult.summary }, 'GDT degraded — continuing with caution');
-          params.onProgress?.({
-            type: 'health',
-            current: 0,
-            total: 0,
-            message: `⚠️ ${healthResult.summary}`,
-            level: 'warn',
-          });
-        }
-      } catch (healthErr: any) {
-        // Health check lỗi không block pipeline, chỉ log warning
-        ctxLog.warn({ err: healthErr.message }, 'GDT health check failed (non-blocking)');
-      }
-    }
 
     let totalSuccessCount = 0;
     const allErrors: string[] = [];
