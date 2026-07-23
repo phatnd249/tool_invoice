@@ -1,6 +1,29 @@
 // backend/src/utils/gdt-format.ts
 // Các hàm helper liên quan đến định dạng dữ liệu từ GDT portal
 
+// Mapping: processStatus -> mã kết quả
+const PROCESS_STATUS_FILE_MAP: Record<number, string> = {
+  0: 'K',
+  1: 'K',
+  2: 'K',
+  3: 'K',
+  4: 'K',
+  5: 'C',
+  6: 'K',
+  7: 'K',
+  8: 'M',
+};
+
+// Mapping: invoiceStatus -> mã trạng thái
+const INVOICE_STATUS_FILE_MAP: Record<number, string> = {
+  1: '',
+  2: 'TT',
+  3: 'DC',
+  4: 'BTT',
+  5: 'BDC',
+  6: 'HUY',
+};
+
 /**
  * Xác định mã kết quả từ thông tin hoá đơn GDT.
  * Dùng để đặt tên file ZIP/PDF.
@@ -23,6 +46,27 @@ export function getResultCode(inv: {
   if (baseCode === 'K' && inv.ttxly === 8) baseCode = 'M';
 
   return baseCode;
+}
+
+/**
+ * Sinh mã đặt tên file kết hợp cả kết quả kiểm tra và trạng thái hoá đơn.
+ * Format: {kqkt}-{tt} (bỏ dấu - nếu tt rỗng)
+ *
+ * Ví dụ: C, C-TT, C-DC, K, K-HUY, M
+ */
+export function getStatusFileCode(inv: {
+  khhdon?: string;
+  ttxly?: number;
+  tthai?: number;
+}): string {
+  const resultCode = getResultCode(inv);
+
+  const invoiceCode = inv.tthai !== undefined && inv.tthai !== null
+    ? INVOICE_STATUS_FILE_MAP[inv.tthai] ?? '?'
+    : '';
+
+  if (resultCode && invoiceCode) return `${resultCode}-${invoiceCode}`;
+  return resultCode || invoiceCode || 'K';
 }
 
 /**

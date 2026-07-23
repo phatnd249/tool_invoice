@@ -13,7 +13,7 @@ import { DownloaderService } from '../services/downloader.service.js';
 import { ExcelService } from '../services/excel.service.js';
 import { ParserService, ParsedInvoice } from '../services/parser.service.js';
 import { createLogger } from '../logger/index.js';
-import { parseDateString, getResultCode, getTthaiString, getTtxlyString } from '../utils/gdt-format.js';
+import { parseDateString, getStatusFileCode, getTthaiString, getTtxlyString } from '../utils/gdt-format.js';
 import { resolveTargetDir, cleanCompanyName } from '../utils/path-resolver.js';
 
 const log = createLogger('InvoiceController');
@@ -827,7 +827,7 @@ export class InvoiceController {
           const cacheHtmlPath = previewService.getCachePath(id);
           const taxCodeForName = invoice.type === 'BUY' ? (invoice.buyerTaxCode || invoice.sellerTaxCode) : (invoice.sellerTaxCode || invoice.buyerTaxCode);
           const pdfFileName = invoice.invoiceNumber
-            ? `${taxCodeForName}-${invoice.invoiceNumber}-${getResultCode({ khhdon: invoice.invoiceSymbol, ttxly: invoice.processStatus ?? undefined, tthai: invoice.invoiceStatus ?? undefined })}.pdf`
+            ? `${taxCodeForName}-${invoice.invoiceNumber}-${getStatusFileCode({ khhdon: invoice.invoiceSymbol, ttxly: invoice.processStatus ?? undefined, tthai: invoice.invoiceStatus ?? undefined })}.pdf`
             : `invoice_${id}.pdf`;
 
           targetPdfPath = path.join(path.dirname(cacheHtmlPath), pdfFileName);

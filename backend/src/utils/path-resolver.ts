@@ -2,7 +2,7 @@
 // Xử lý đường dẫn lưu file và tên file
 
 import * as path from 'path';
-import { getResultCode } from './gdt-format.js';
+import { getStatusFileCode } from './gdt-format.js';
 
 /**
  * Resolve thư mục đích để lưu invoice files.
@@ -23,7 +23,7 @@ export function resolveTargetDir(
 
 /**
  * Sinh tên file ZIP từ thông tin invoice GDT.
- * Format: {companyTaxCode}-{invoiceNumber}-{ResultCode}.zip
+ * Format: {companyTaxCode}-{invoiceNumber}-{StatusFileCode}.zip
  */
 export function getZipFileName(
   companyTaxCode: string,
@@ -34,8 +34,8 @@ export function getZipFileName(
     khhdon?: string;
   },
 ): string {
-  const resultCode = getResultCode(inv);
-  return `${companyTaxCode}-${inv.shdon}-${resultCode}.zip`;
+  const statusFileCode = getStatusFileCode(inv);
+  return `${companyTaxCode}-${inv.shdon}-${statusFileCode}.zip`;
 }
 
 /**

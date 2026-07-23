@@ -4,7 +4,7 @@ import * as path from 'path';
 import { withRetry } from '../utils/rate-limiter.js';
 import { createLogger } from '../logger/index.js';
 import { formatGdtError, extractResponseBody } from '../utils/gdt-errors.js';
-import { getResultCode } from '../utils/gdt-format.js';
+import { getStatusFileCode } from '../utils/gdt-format.js';
 import { findNextVersion, getVersionedFilePath, removeAllRelatedFiles } from '../utils/file-version.js';
 
 const log = createLogger('DownloaderService');
@@ -258,9 +258,9 @@ export class DownloaderService {
       throw new Error(`Thiếu thông tin hoá đơn (nbmst/shdon/khmshdon/khhdon) để tải ZIP.`);
     }
 
-    const resultCode = getResultCode(invoice);
+    const statusFileCode = getStatusFileCode(invoice);
     const taxCodeForName = companyTaxCode || nbmst;
-    const zipFileName = `${taxCodeForName}-${shdon}-${resultCode}.zip`;
+    const zipFileName = `${taxCodeForName}-${shdon}-${statusFileCode}.zip`;
     const zipPath = path.join(outputDir, zipFileName);
 
     // Xử lý theo overwriteMode
