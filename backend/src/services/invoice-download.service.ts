@@ -538,6 +538,11 @@ export class InvoiceDownloadService {
 
           parsed.zipPath = zipPath;
           parsed.xmlFile = path.join(invoiceTargetDir, parsed.xmlFile);
+
+          // Merge trạng thái từ kết quả query GDT (vì XML không chứa TThai/TTXLy)
+          if (inv.tthai !== undefined) parsed.invoiceStatus = Number(inv.tthai);
+          if (inv.ttxly !== undefined) parsed.processStatus = Number(inv.ttxly);
+
           parsedList.push(parsed);
           successCount++;
 
@@ -678,7 +683,8 @@ export class InvoiceDownloadService {
       totalAmount: Number(detailJson?.tgtttbso || inv.tgtttbso || 0),
       currency: String(detailJson?.dvtte || 'VND'),
       exchangeRate: Number(detailJson?.tgia || 1),
-      invoiceStatus: inv.tthai,
+      invoiceStatus: inv.tthai !== undefined ? Number(inv.tthai) : undefined,
+      processStatus: inv.ttxly !== undefined ? Number(inv.ttxly) : undefined,
       paymentMethod: String(detailJson?.htttoan || ''),
       xmlFile: '',
       zipPath: 'VIRTUAL_HTML',
