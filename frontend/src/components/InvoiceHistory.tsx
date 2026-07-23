@@ -663,34 +663,57 @@ export default function InvoiceHistory() {
               </div>
 
               {detailInvoice.items && detailInvoice.items.length > 0 ? (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-12 text-center">STT</TableHead>
-                        <TableHead>Tên hàng hóa</TableHead>
-                        <TableHead className="w-16 text-center">ĐVT</TableHead>
-                        <TableHead className="w-20 text-right">SL</TableHead>
-                        <TableHead className="w-28 text-right">Đơn giá</TableHead>
-                        <TableHead className="w-28 text-right">Thành tiền</TableHead>
-                        <TableHead className="w-18 text-center">Thuế suất</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {detailInvoice.items.map(item => (
-                        <TableRow key={item.id}>
-                          <TableCell className="text-center text-muted-foreground">{item.lineNumber || '-'}</TableCell>
-                          <TableCell className="max-w-[300px]">{item.name}</TableCell>
-                          <TableCell className="text-center">{item.unit || '-'}</TableCell>
-                          <TableCell className="text-right">{item.quantity != null ? Number(item.quantity).toLocaleString('vi-VN') : '-'}</TableCell>
-                          <TableCell className="text-right">{item.price != null ? Number(item.price).toLocaleString('vi-VN') : '-'}</TableCell>
-                          <TableCell className="text-right font-semibold">{Number(item.amount).toLocaleString('vi-VN')}</TableCell>
-                          <TableCell className="text-center"><Badge variant="outline">{item.taxRate || '0%'}</Badge></TableCell>
+                <>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12 text-center">STT</TableHead>
+                          <TableHead>Tên hàng hóa</TableHead>
+                          <TableHead className="w-16 text-center">ĐVT</TableHead>
+                          <TableHead className="w-20 text-right">SL</TableHead>
+                          <TableHead className="w-28 text-right">Đơn giá</TableHead>
+                          <TableHead className="w-28 text-right">Thành tiền</TableHead>
+                          <TableHead className="w-18 text-center">Thuế suất</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {detailInvoice.items.map(item => (
+                          <TableRow key={item.id}>
+                            <TableCell className="text-center text-muted-foreground">{item.lineNumber || '-'}</TableCell>
+                            <TableCell className="max-w-[200px] lg:max-w-[300px] truncate" title={item.name}>{item.name}</TableCell>
+                            <TableCell className="text-center">{item.unit || '-'}</TableCell>
+                            <TableCell className="text-right">{item.quantity != null ? Number(item.quantity).toLocaleString('vi-VN') : '-'}</TableCell>
+                            <TableCell className="text-right">{item.price != null ? Number(item.price).toLocaleString('vi-VN') : '-'}</TableCell>
+                            <TableCell className="text-right font-semibold">{Number(item.amount).toLocaleString('vi-VN')}</TableCell>
+                            <TableCell className="text-center"><Badge variant="outline">{item.taxRate || '0%'}</Badge></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {/* Mobile card list */}
+                  <div className="sm:hidden space-y-2">
+                    {detailInvoice.items.map(item => (
+                      <div key={item.id} className="rounded-lg border bg-card p-3 space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-semibold text-sm leading-tight flex-1">{item.name}</span>
+                          <Badge variant="outline" className="shrink-0 text-[10px]">{item.taxRate || '0%'}</Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          {item.lineNumber && <div><span className="font-medium text-foreground">STT:</span> {item.lineNumber}</div>}
+                          {item.unit && <div><span className="font-medium text-foreground">ĐVT:</span> {item.unit}</div>}
+                          {item.quantity != null && <div><span className="font-medium text-foreground">SL:</span> {Number(item.quantity).toLocaleString('vi-VN')}</div>}
+                          {item.price != null && <div><span className="font-medium text-foreground">Đơn giá:</span> {Number(item.price).toLocaleString('vi-VN')}</div>}
+                        </div>
+                        <div className="pt-1.5 border-t text-right text-sm font-bold">
+                          Thành tiền: {Number(item.amount).toLocaleString('vi-VN')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               ) : (
                 <div className="text-center py-12 text-muted-foreground">
                   <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -699,7 +722,7 @@ export default function InvoiceHistory() {
               )}
 
               {/* Tổng cộng */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
                 <div className="rounded-lg border bg-card p-3">
                   <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Tiền chưa thuế</p>
                   <p className="text-base font-bold mt-1">{formatNumber(detailInvoice.totalBeforeTax)}</p>
@@ -720,7 +743,7 @@ export default function InvoiceHistory() {
                   <p className="text-base font-bold mt-1 text-blue-600">{formatNumber(detailInvoice.taxAmount)}</p>
                   <p className="text-[10px] text-muted-foreground">Tổng cộng tiền thuế</p>
                 </div>
-                <div className="rounded-lg border bg-primary/5 border-primary/20 p-3 sm:col-span-3 lg:col-span-1">
+                <div className="rounded-lg border bg-primary/5 border-primary/20 p-3 col-span-2 sm:col-span-3 lg:col-span-1">
                   <p className="text-xs text-primary font-semibold uppercase tracking-wide">Tổng thanh toán</p>
                   <p className="text-lg font-bold mt-1 text-primary">{formatNumber(detailInvoice.totalAmount)}</p>
                   <p className="text-[10px] text-muted-foreground">Tiền thanh toán bằng số</p>
