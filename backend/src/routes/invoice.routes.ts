@@ -26,6 +26,10 @@ router.get('/download/jobs/:id', InvoiceController.getDownloadJobById as any);
 // Route to cancel a running download job
 router.post('/download/jobs/:id/cancel', InvoiceController.cancelDownloadJob as any);
 
+// Route to get audit logs and download stats history
+// Đặt trước /download/jobs/:id để tránh conflict
+router.get('/download-history', InvoiceController.getDownloadHistory as any);
+
 // Route to get all saved invoices with filters
 router.get('/', InvoiceController.getInvoices);
 
