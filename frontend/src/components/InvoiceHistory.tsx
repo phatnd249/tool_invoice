@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 import {
   Select,
@@ -128,6 +129,19 @@ const PROCESS_STATUS_MAP: Record<number, string> = {
   8: 'M',
 };
 
+// Mapping: kết quả kiểm tra (processStatus) -> diễn giải đầy đủ
+const PROCESS_STATUS_LABEL: Record<number, string> = {
+  0: 'Cục Thuế đã nhận',
+  1: 'Đang tiến hành kiểm tra điều kiện cấp mã',
+  2: 'CQT từ chối hóa đơn theo từng lần phát sinh',
+  3: 'Hóa đơn đủ điều kiện cấp mã',
+  4: 'Hóa đơn không đủ điều kiện cấp mã',
+  5: 'Đã cấp mã hóa đơn',
+  6: 'Cục Thuế đã nhận không mã',
+  7: 'Đã kiểm tra định kỳ HĐĐT không có mã',
+  8: 'Cục Thuế đã nhận hóa đơn có mã khởi tạo từ máy tính tiền',
+};
+
 // Mapping: trạng thái hoá đơn (invoiceStatus) -> chữ cái
 const INVOICE_STATUS_MAP: Record<number, string> = {
   1: '',
@@ -136,6 +150,16 @@ const INVOICE_STATUS_MAP: Record<number, string> = {
   4: 'BTT',
   5: 'BDC',
   6: 'HUY',
+};
+
+// Mapping: trạng thái hoá đơn (invoiceStatus) -> diễn giải đầy đủ
+const INVOICE_STATUS_LABEL: Record<number, string> = {
+  1: 'Hóa đơn mới',
+  2: 'Hóa đơn thay thế',
+  3: 'Hóa đơn điều chỉnh',
+  4: 'Hóa đơn đã bị thay thế',
+  5: 'Hóa đơn đã bị điều chỉnh',
+  6: 'Hóa đơn đã bị hủy',
 };
 
 function getStatusDisplayLabel(inv: Invoice): string {
@@ -157,6 +181,21 @@ function getStatusBadgeVariant(inv: Invoice): 'default' | 'secondary' | 'destruc
   if (inv.processStatus === 5) return 'default';
   if (inv.processStatus !== undefined && inv.processStatus !== null && inv.processStatus !== 5) return 'secondary';
   return 'outline';
+}
+
+function getStatusTooltip(inv: Invoice): string {
+  const processText = inv.processStatus !== undefined && inv.processStatus !== null
+    ? PROCESS_STATUS_LABEL[inv.processStatus]
+    : null;
+  const invoiceText = inv.invoiceStatus !== undefined && inv.invoiceStatus !== null
+    ? INVOICE_STATUS_LABEL[inv.invoiceStatus]
+    : null;
+
+  const parts: string[] = [];
+  if (processText) parts.push(`Kết quả KT: ${processText}`);
+  if (invoiceText) parts.push(`Trạng thái: ${invoiceText}`);
+
+  return parts.length > 0 ? parts.join('\n') : 'Không có thông tin';
 }
 
 const PAGE_SIZES = [10, 20, 50, 100];
@@ -567,7 +606,14 @@ export default function InvoiceHistory() {
                       <TableCell className="text-right text-xs">{formatNumber(inv.taxAmount)}</TableCell>
                       <TableCell className="text-right font-bold text-xs">{formatNumber(inv.totalAmount)}</TableCell>
                       <TableCell className="text-center">
-                        <Badge variant={getStatusBadgeVariant(inv)}>{getStatusDisplayLabel(inv)}</Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant={getStatusBadgeVariant(inv)}>{getStatusDisplayLabel(inv)}</Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" align="center" className="whitespace-pre-line">
+                            {getStatusTooltip(inv)}
+                          </TooltipContent>
+                        </Tooltip>
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
