@@ -61,6 +61,8 @@ interface Invoice {
   totalBeforeTax: number;
   taxAmount: number;
   totalAmount: number;
+  feeAmount?: number;
+  discountAmount?: number;
   currency?: string;
   exchangeRate?: number;
   paymentMethod?: string | null;
@@ -695,6 +697,35 @@ export default function InvoiceHistory() {
                   <p>Không có dữ liệu hàng hóa.</p>
                 </div>
               )}
+
+              {/* Tổng cộng */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Tiền chưa thuế</p>
+                  <p className="text-base font-bold mt-1">{formatNumber(detailInvoice.totalBeforeTax)}</p>
+                  <p className="text-[10px] text-muted-foreground">Tổng cộng thành tiền</p>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Chiết khấu</p>
+                  <p className="text-base font-bold mt-1 text-amber-600">{detailInvoice.discountAmount != null ? formatNumber(detailInvoice.discountAmount) : '—'}</p>
+                  <p className="text-[10px] text-muted-foreground">Chiết khấu thương mại</p>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Phí</p>
+                  <p className="text-base font-bold mt-1 text-orange-600">{detailInvoice.feeAmount != null ? formatNumber(detailInvoice.feeAmount) : '—'}</p>
+                  <p className="text-[10px] text-muted-foreground">Tổng tiền phí</p>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Tiền thuế</p>
+                  <p className="text-base font-bold mt-1 text-blue-600">{formatNumber(detailInvoice.taxAmount)}</p>
+                  <p className="text-[10px] text-muted-foreground">Tổng cộng tiền thuế</p>
+                </div>
+                <div className="rounded-lg border bg-primary/5 border-primary/20 p-3 sm:col-span-3 lg:col-span-1">
+                  <p className="text-xs text-primary font-semibold uppercase tracking-wide">Tổng thanh toán</p>
+                  <p className="text-lg font-bold mt-1 text-primary">{formatNumber(detailInvoice.totalAmount)}</p>
+                  <p className="text-[10px] text-muted-foreground">Tiền thanh toán bằng số</p>
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
