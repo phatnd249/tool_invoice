@@ -17,7 +17,6 @@ import { withRetry } from '../utils/rate-limiter.js';
 import { createLogger, generateCorrelationId } from '../logger/index.js';
 import { resolveTargetDir, cleanCompanyName } from '../utils/path-resolver.js';
 import { parseGdtDate } from '../utils/gdt-format.js';
-import { gdtHealthService } from './gdt-health.service.js';
 
 const downloaderService = new DownloaderService();
 const parserService = new ParserService();

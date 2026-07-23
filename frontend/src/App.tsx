@@ -108,12 +108,9 @@ export default function App() {
     }
   }, []);
 
-  // Health check tự động khi app mount (không force)
+  // Health check khi app mount (chỉ 1 lần, không auto refresh)
   useEffect(() => {
     checkGdtHealth(false);
-    // Refresh mỗi 60s (không force — nếu cache còn thì dùng cache)
-    const interval = setInterval(() => checkGdtHealth(false), 60000);
-    return () => clearInterval(interval);
   }, [checkGdtHealth]);
 
   // Feedback states
