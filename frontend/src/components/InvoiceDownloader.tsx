@@ -226,16 +226,9 @@ export default function InvoiceDownloader() {
     }
   }, [companies, addLog]);
 
-  // Khi expand company, tự động health check và kiểm tra job đang chạy
+  // Khi expand company, chỉ toggle accordion, không tự động health check GDT
   const handleToggleAccordion = (companyId: number) => {
-    const isExpanding = expandedCompanyId !== companyId;
     toggleAccordion(companyId);
-    if (isExpanding) {
-      const existing = gdtHealthMap[companyId];
-      if (!existing || existing.overall === 'unknown' || existing.overall === 'checking') {
-        performHealthCheck(companyId);
-      }
-    }
   };
 
   /**
