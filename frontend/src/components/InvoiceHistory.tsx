@@ -115,18 +115,48 @@ function formatInvoiceNumber(num: string): string {
   return String(num).padStart(8, '0');
 }
 
-function getInvoiceStatusLabel(inv: Invoice): { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' } | null {
-  if (inv.invoiceStatus !== undefined && inv.invoiceStatus !== null) {
-    switch (inv.invoiceStatus) {
-      case 1: return { label: 'Hoá đơn mới', variant: 'default' };
-      case 2: return { label: 'Thay thế', variant: 'secondary' };
-      case 3: return { label: 'Điều chỉnh', variant: 'outline' };
-      case 4: return { label: 'Đã bị thay thế', variant: 'outline' };
-      case 5: return { label: 'Đã bị điều chỉnh', variant: 'outline' };
-      case 6: return { label: 'Đã huỷ', variant: 'destructive' };
-    }
-  }
-  return null;
+// Mapping: kết quả kiểm tra (processStatus) -> chữ cái
+const PROCESS_STATUS_MAP: Record<number, string> = {
+  0: 'K',
+  1: 'K',
+  2: 'K',
+  3: 'K',
+  4: 'K',
+  5: 'C',
+  6: 'K',
+  7: 'K',
+  8: 'M',
+};
+
+// Mapping: trạng thái hoá đơn (invoiceStatus) -> chữ cái
+const INVOICE_STATUS_MAP: Record<number, string> = {
+  1: '',
+  2: 'TT',
+  3: 'DC',
+  4: 'BTT',
+  5: 'BDC',
+  6: 'HUY',
+};
+
+function getStatusDisplayLabel(inv: Invoice): string {
+  const processLabel = inv.processStatus !== undefined && inv.processStatus !== null
+    ? PROCESS_STATUS_MAP[inv.processStatus] ?? '?'
+    : null;
+  const invoiceLabel = inv.invoiceStatus !== undefined && inv.invoiceStatus !== null
+    ? INVOICE_STATUS_MAP[inv.invoiceStatus] ?? '?'
+    : null;
+
+  if (!processLabel && !invoiceLabel) return '—';
+  if (processLabel && invoiceLabel !== null && invoiceLabel !== '') return `${processLabel}-${invoiceLabel}`;
+  if (processLabel) return processLabel;
+  return invoiceLabel!;
+}
+
+function getStatusBadgeVariant(inv: Invoice): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (inv.invoiceStatus === 6) return 'destructive';
+  if (inv.processStatus === 5) return 'default';
+  if (inv.processStatus !== undefined && inv.processStatus !== null && inv.processStatus !== 5) return 'secondary';
+  return 'outline';
 }
 
 const PAGE_SIZES = [10, 20, 50, 100];
@@ -537,9 +567,7 @@ export default function InvoiceHistory() {
                       <TableCell className="text-right text-xs">{formatNumber(inv.taxAmount)}</TableCell>
                       <TableCell className="text-right font-bold text-xs">{formatNumber(inv.totalAmount)}</TableCell>
                       <TableCell className="text-center">
-                        {getInvoiceStatusLabel(inv) ? (
-                          <Badge variant={getInvoiceStatusLabel(inv)!.variant}>{getInvoiceStatusLabel(inv)!.label}</Badge>
-                        ) : <Badge variant="outline">—</Badge>}
+                        <Badge variant={getStatusBadgeVariant(inv)}>{getStatusDisplayLabel(inv)}</Badge>
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
