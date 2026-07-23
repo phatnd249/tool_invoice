@@ -15,8 +15,7 @@ import {
   Moon,
   Loader2,
   ChevronsUpDown,
-  Activity,
-  Wifi,
+
   WifiOff,
   RefreshCw,
   WifiHigh,

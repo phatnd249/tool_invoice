@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Play, Terminal, Trash2, ChevronDown, ChevronRight, Building2,
   MapPin, PhoneCall, User, CheckCircle2, Loader2, XCircle, Check,
-  Activity, Wifi, WifiOff, RefreshCw, Ban, History, List,
+  Activity, Wifi, WifiOff, RefreshCw, Ban, History,
 } from 'lucide-react';
 import OverwriteConfirmDialog, { type OverwriteMode } from './OverwriteConfirmDialog';
 import { Button } from '@/components/ui/button';
@@ -106,7 +106,8 @@ function connectJobSSE(
 
   eventSource.addEventListener('error', (event) => {
     try {
-      if (event.data) callbacks.onError(JSON.parse(event.data));
+      const msgEvent = event as MessageEvent;
+      if (msgEvent.data) callbacks.onError(JSON.parse(msgEvent.data));
     } catch {}
     eventSource.close();
   });
