@@ -216,7 +216,8 @@ export class ParserService {
       sellerPhone: this.getSafeText(this.findKeyRecursive(nBan, 'SDThoai')) || undefined,
 
       // Buyer
-      buyerName: this.getSafeText(this.findKeyRecursive(nMua, 'Ten')),
+      // Ưu tiên Ten (tên tổ chức), fallback HVTNMHang (tên cá nhân, không có MST)
+      buyerName: this.getSafeText(this.findKeyRecursive(nMua, 'Ten')) || this.getSafeText(this.findKeyRecursive(nMua, 'HVTNMHang')),
       buyerTaxCode: this.getSafeText(this.findKeyRecursive(nMua, 'MST')),
       buyerAddress: this.getSafeText(this.findKeyRecursive(nMua, 'DChi')) || undefined,
       buyerCustomerId: this.getSafeText(this.findKeyRecursive(nMua, 'MKHang')) || undefined,

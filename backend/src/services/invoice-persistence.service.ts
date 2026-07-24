@@ -156,7 +156,7 @@ export class InvoicePersistenceService {
       sellerName: String(inv.nbten || '').trim(),
       sellerTaxCode,
       sellerAddress: inv.nbdchi ? String(inv.nbdchi).trim() : null,
-      buyerName: String(inv.nmten || inv.nmuaten || '').trim(),
+      buyerName: String(inv.nmten || inv.nmuaten || inv.nmtnmua || '').trim(),
       buyerTaxCode,
       buyerAddress:
         inv.nmdchi || inv.nmuadchi
@@ -219,8 +219,8 @@ export class InvoicePersistenceService {
 
     if (detail.nbten) updateData.sellerName = String(detail.nbten).trim();
     if (detail.nbdchi) updateData.sellerAddress = String(detail.nbdchi).trim();
-    if (detail.nmten || detail.nmuaten)
-      updateData.buyerName = String(detail.nmten || detail.nmuaten).trim();
+    if (detail.nmten || detail.nmuaten || detail.nmtnmua)
+      updateData.buyerName = String(detail.nmten || detail.nmuaten || detail.nmtnmua).trim();
     if (detail.nmdchi || detail.nmuadchi)
       updateData.buyerAddress = String(detail.nmdchi || detail.nmuadchi).trim();
     if (detail.htttoan) updateData.paymentMethod = String(detail.htttoan).trim();

@@ -886,7 +886,7 @@ export function renderInvoiceTemplate(detail: any): string {
 <span>T&ecirc;n người mua:</span>
 </div>
 <div class="di-value">
-<div>${detail.nmuaten || detail.nmten || ''}</div>
+<div>${detail.nmuaten || detail.nmten || detail.nmtnmua || ''}</div>
 </div>
 </div>
 </li>

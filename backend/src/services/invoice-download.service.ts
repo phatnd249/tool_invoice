@@ -675,7 +675,7 @@ export class InvoiceDownloadService {
       sellerName: String(detailJson?.nbten || inv.nbten || ''),
       sellerAddress: String(detailJson?.nbdchi || inv.nbdchi || ''),
       buyerTaxCode: String(inv.nmmst || ''),
-      buyerName: String(detailJson?.nmten || detailJson?.nmuaten || inv.nmten || ''),
+      buyerName: String(detailJson?.nmten || detailJson?.nmuaten || detailJson?.nmtnmua || inv.nmten || inv.nmtnmua || ''),
       buyerAddress: String(detailJson?.nmdchi || detailJson?.nmuadchi || inv.nmdchi || ''),
       totalBeforeTax: Number(detailJson?.tgtcthue || inv.tgtcthue || 0),
       taxAmount: Number(detailJson?.tgtthue || inv.tgtthue || 0),
