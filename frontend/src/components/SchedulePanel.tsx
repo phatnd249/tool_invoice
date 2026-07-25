@@ -15,6 +15,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import {
   Table,
@@ -273,24 +280,27 @@ export default function SchedulePanel() {
                 <div className="bg-muted/30 rounded-lg p-3 space-y-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground w-12 shrink-0">Giờ</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={23}
-                      value={scheduleHour}
-                      onChange={e => setScheduleHour(Number(e.target.value))}
-                      className="w-16 text-center"
-                    />
+                    <Select value={String(scheduleHour)} onValueChange={v => setScheduleHour(Number(v))}>
+                      <SelectTrigger className="w-20">
+                        <SelectValue placeholder="Giờ" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <SelectItem key={i} value={String(i)}>{String(i).padStart(2, '0')}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <span className="text-muted-foreground">:</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={59}
-                      step={15}
-                      value={scheduleMinute}
-                      onChange={e => setScheduleMinute(Number(e.target.value))}
-                      className="w-16 text-center"
-                    />
+                    <Select value={String(scheduleMinute)} onValueChange={v => setScheduleMinute(Number(v))}>
+                      <SelectTrigger className="w-20">
+                        <SelectValue placeholder="Phút" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
+                          <SelectItem key={m} value={String(m)}>{String(m).padStart(2, '0')}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <span className="text-xs text-muted-foreground">(24h)</span>
                   </div>
 
