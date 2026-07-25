@@ -229,7 +229,8 @@ export default function CompanyManager() {
       toast.success('Làm mới token thành công!');
       await fetchCompanies();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Làm mới token thất bại');
+      const errMsg = err.response?.data?.details || err.response?.data?.error || 'Làm mới token thất bại';
+      toast.error(errMsg, { duration: 8000 });
     } finally {
       setRefreshingMap(prev => ({ ...prev, [id]: false }));
     }
