@@ -860,28 +860,13 @@ function CompanyCard({
                     Huỷ tải
                   </Button>
                 ) : (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={onHealthCheck}
-                      disabled={gdtHealth?.overall === 'checking'}
-                      className="flex-1"
-                    >
-                      {gdtHealth?.overall === 'checking' ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang kiểm tra...</>
-                      ) : (
-                        <><RefreshCw className="mr-2 h-4 w-4" />Kiểm tra kết nối</>
-                      )}
-                    </Button>
-                    <Button type="submit" disabled={isDownloading} className="flex-[2]">
-                      {isCheckingExisting ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang kiểm tra...</>
-                      ) : (
-                        <><Play className="mr-2 h-4 w-4" />Tải Hóa Đơn</>
-                      )}
-                    </Button>
-                  </>
+                  <Button type="submit" disabled={isDownloading} className="w-full">
+                    {isCheckingExisting ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang kiểm tra...</>
+                    ) : (
+                      <><Play className="mr-2 h-4 w-4" />Tải Hóa Đơn</>
+                    )}
+                  </Button>
                 )}
               </div>
             </form>
