@@ -545,7 +545,6 @@ export default function InvoiceHistory() {
 
       {subTab === 'invoices' ? (
         <Card>
-          <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -671,12 +670,10 @@ export default function InvoiceHistory() {
                 )}
               </TableBody>
             </Table>
-          </div>
           <PaginationBar page={page} totalPages={totalPages} size={size} total={total} onPageChange={setPage} onSizeChange={(s) => { setSize(s); setPage(0); }} />
         </Card>
       ) : (
         <Card>
-          <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -739,7 +736,6 @@ export default function InvoiceHistory() {
                 )}
               </TableBody>
             </Table>
-          </div>
           <PaginationBar page={page} totalPages={totalPages} size={size} total={total} onPageChange={setPage} onSizeChange={(s) => { setSize(s); setPage(0); }} />
         </Card>
       )}
