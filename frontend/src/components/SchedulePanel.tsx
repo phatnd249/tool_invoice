@@ -456,6 +456,7 @@ export default function SchedulePanel() {
                   <TableHead>Doanh nghiệp</TableHead>
                   <TableHead>Chu kỳ</TableHead>
                   <TableHead>Loại HĐ</TableHead>
+                  <TableHead>Xử lý</TableHead>
                   <TableHead>Lần chạy cuối</TableHead>
                   <TableHead className="text-center">Trạng thái</TableHead>
                   <TableHead className="text-center">Thao tác</TableHead>
