@@ -103,6 +103,7 @@ class SchedulerService {
       scheduledAt: s.scheduledAt,
       dateRangeDays: s.dateRangeDays,
       invoiceType: s.invoiceType,
+      overwriteMode: s.overwriteMode || 'SKIP',
       isActive: s.isActive,
       lastRun: s.lastRun,
       createdAt: s.createdAt,
@@ -135,6 +136,7 @@ class SchedulerService {
           endDate,
           companyId: sc.companyId,
           invoiceType: (invoiceType as any) || 'SELL',
+          overwriteMode: (schedule.overwriteMode || 'SKIP') as 'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
           saveToDb: true,
           usernameLabel: 'scheduler',
         });
@@ -254,6 +256,7 @@ export interface ScheduleWithCompanies {
   scheduledAt: Date | null;
   dateRangeDays: number | null;
   invoiceType: string;
+  overwriteMode: string;
   isActive: boolean;
   lastRun: Date | null;
   createdAt: Date;

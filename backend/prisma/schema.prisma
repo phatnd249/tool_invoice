@@ -149,6 +149,7 @@ model Schedule {
   scheduledAt    DateTime? // Ngày giờ cụ thể (dùng khi repeatMode = "once")
   dateRangeDays  Int?      // Số ngày tải ngược từ hôm nay (null = auto-detect từ repeatMode)
   invoiceType    String    // "BUY" | "SELL" | "BOTH"
+  overwriteMode  String    @default("SKIP") // "SKIP" | "OVERWRITE" | "NEW_VERSION"
   isActive       Boolean   @default(true)
   lastRun        DateTime?
   createdAt      DateTime  @default(now())

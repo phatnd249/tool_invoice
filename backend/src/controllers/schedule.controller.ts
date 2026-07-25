@@ -31,7 +31,7 @@ export class ScheduleController {
    * Create a new schedule (companies can be assigned later).
    */
   static async create(req: AuthRequest, res: Response): Promise<void> {
-    const { name, cronExpression, scheduledAt, invoiceType, repeatMode, dateRangeDays } = req.body;
+    const { name, cronExpression, scheduledAt, invoiceType, repeatMode, dateRangeDays, overwriteMode } = req.body;
 
     if (repeatMode !== 'once' && !cronExpression) {
       res.status(400).json({ error: 'Thiếu cronExpression cho lịch định kỳ.' });
@@ -58,6 +58,7 @@ export class ScheduleController {
         scheduledAt: repeatMode === 'once' ? new Date(scheduledAt) : null,
         dateRangeDays: dateRangeDays || null,
         invoiceType,
+        overwriteMode: overwriteMode || 'SKIP',
         isActive: true,
       },
       include: { companies: { include: { company: true } } },
@@ -151,6 +152,48 @@ export class ScheduleController {
   }
 
   /**
+   * PUT /api/schedules/:id
+   * Update schedule details (name, cronExpression, repeatMode, etc).
+   */
+  static async update(req: AuthRequest, res: Response): Promise<void> {
+    const id = Number(req.params.id);
+    const { name, cronExpression, scheduledAt, invoiceType, repeatMode, dateRangeDays, overwriteMode } = req.body;
+
+    const schedule = await prisma.schedule.findUnique({
+      where: { id },
+      include: { companies: { include: { company: true } } },
+    });
+
+    if (!schedule) {
+      res.status(404).json({ error: 'Không tìm thấy lịch.' });
+      return;
+    }
+
+    const effectiveCron = repeatMode === 'once' ? '' : (cronExpression ?? schedule.cronExpression);
+
+    const updated = await prisma.schedule.update({
+      where: { id },
+      data: {
+        name: name !== undefined ? name : undefined,
+        cronExpression: cronExpression !== undefined ? effectiveCron : undefined,
+        repeatMode: repeatMode ?? undefined,
+        scheduledAt: repeatMode === 'once' ? new Date(scheduledAt) : (scheduledAt !== undefined ? null : undefined),
+        dateRangeDays: dateRangeDays !== undefined ? dateRangeDays : undefined,
+        invoiceType: invoiceType ?? undefined,
+        overwriteMode: overwriteMode ?? undefined,
+      },
+      include: { companies: { include: { company: true } } },
+    });
+
+    // Restart job if active
+    if (updated.isActive && updated.companies.length > 0) {
+      schedulerService.startJob(formatSchedule(updated));
+    }
+
+    res.json(formatSchedule(updated));
+  }
+
+  /**
    * DELETE /api/schedules/:id
    * Remove schedule and stop its cron job.
    */
@@ -175,6 +218,7 @@ export interface ScheduleWithCompanies {
   scheduledAt: Date | null;
   dateRangeDays: number | null;
   invoiceType: string;
+  overwriteMode: string;
   isActive: boolean;
   lastRun: Date | null;
   createdAt: Date;

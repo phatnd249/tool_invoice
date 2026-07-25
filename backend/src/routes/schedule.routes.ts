@@ -9,6 +9,7 @@ router.use(authenticateToken as any);
 router.get('/', ScheduleController.list);
 router.post('/', ScheduleController.create);
 router.patch('/:id', ScheduleController.toggle);
+router.put('/:id', ScheduleController.update);
 router.put('/:id/companies', ScheduleController.updateCompanies as any);
 router.delete('/:id', ScheduleController.remove);
 

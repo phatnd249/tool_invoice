@@ -90,6 +90,7 @@ export default function SchedulePanel() {
   // Form state
   const [scheduleName, setScheduleName] = useState('');
   const [invoiceType, setInvoiceType] = useState<'BUY' | 'SELL' | 'BOTH'>('SELL');
+  const [scheduleOverwriteMode, setScheduleOverwriteMode] = useState<string>('SKIP');
   const [repeatMode, setRepeatMode] = useState<'weekly' | 'monthly' | 'quarterly' | 'custom' | 'once'>('weekly');
   const [scheduleHour, setScheduleHour] = useState(9);
   const [scheduleMinute, setScheduleMinute] = useState(0);
@@ -152,6 +153,7 @@ export default function SchedulePanel() {
         cronExpression,
         scheduledAt: repeatMode === 'once' ? new Date(onceDatetime).toISOString() : undefined,
         invoiceType,
+        overwriteMode: scheduleOverwriteMode,
         repeatMode,
         dateRangeDays: (repeatMode === 'custom' || repeatMode === 'once') && showDateRange ? dateRangeDays : null,
       });
@@ -397,6 +399,22 @@ export default function SchedulePanel() {
             </div>
 
             <div className="space-y-2">
+              <Label>Chế độ xử lý khi đã có hoá đơn</Label>
+              <Select value={scheduleOverwriteMode} onValueChange={setScheduleOverwriteMode}>
+                <SelectTrigger>
+                  <SelectValue>
+                    {scheduleOverwriteMode === 'OVERWRITE' ? 'Ghi đè (tải lại)' : scheduleOverwriteMode === 'NEW_VERSION' ? 'Tạo bản sao mới' : 'Bỏ qua nếu đã tải'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SKIP">Bỏ qua nếu đã tải</SelectItem>
+                  <SelectItem value="OVERWRITE">Ghi đè (tải lại)</SelectItem>
+                  <SelectItem value="NEW_VERSION">Tạo bản sao mới</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Label>Loại hoá đơn</Label>
               <div className="grid grid-cols-3 gap-2">
                 {INVOICE_TYPE_OPTIONS.map(opt => (
@@ -446,11 +464,11 @@ export default function SchedulePanel() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Đang tải...</TableCell>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Đang tải...</TableCell>
                   </TableRow>
                 ) : schedules.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Chưa thiết lập lịch tải tự động nào.</TableCell>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Chưa thiết lập lịch tải tự động nào.</TableCell>
                   </TableRow>
                 ) : (
                   schedules.map(sch => (
@@ -482,6 +500,17 @@ export default function SchedulePanel() {
                         <Badge variant={sch.invoiceType === 'SELL' ? 'default' : sch.invoiceType === 'BUY' ? 'secondary' : 'outline'}>
                           {formatInvoiceType(sch.invoiceType)}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                          (sch as any).overwriteMode === 'OVERWRITE'
+                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                            : (sch as any).overwriteMode === 'NEW_VERSION'
+                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                            : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                        }`}>
+                          {(sch as any).overwriteMode === 'OVERWRITE' ? 'Ghi đè' : (sch as any).overwriteMode === 'NEW_VERSION' ? 'Bản sao' : 'Bỏ qua'}
+                        </span>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {sch.lastRun ? new Date(sch.lastRun).toLocaleString('vi-VN') : 'Chưa chạy'}
