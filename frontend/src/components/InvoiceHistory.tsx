@@ -233,7 +233,7 @@ export default function InvoiceHistory() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  const [filterType, setFilterType] = useState('');
+  const [filterType, setFilterType] = useState('SELL');
   const [filterStatus, setFilterStatus] = useState('');
   const [searchText, setSearchText] = useState('');
 
@@ -524,7 +524,7 @@ export default function InvoiceHistory() {
               <Label className="text-sm text-muted-foreground whitespace-nowrap">
                 {filterType === 'SELL' ? 'Công ty bán:' : 'Công ty mua:'}
               </Label>
-              <div className="w-[360px]">
+              <div className="flex-1">
                 <CompanyAutocomplete
                   companies={companies}
                   value={companyFilter}
