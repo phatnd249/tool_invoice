@@ -557,6 +557,11 @@ function CompanyCard({
 }) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [invoiceType, setInvoiceType] = useState('BOTH');
+
+  const formatInvoiceType = (value: unknown): string => {
+    const labels: Record<string, string> = { SELL: 'Hóa đơn Bán ra', BUY: 'Hóa đơn Mua vào', BOTH: 'Cả hai loại' };
+    return labels[String(value)] || String(value);
+  };
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
   const [pendingDownloadParams, setPendingDownloadParams] = useState<{
     formattedStart: string;
@@ -830,7 +835,9 @@ function CompanyCard({
                   <Label htmlFor={`type-${company.id}`}>Loại hóa đơn</Label>
                   <Select value={invoiceType} onValueChange={v => setInvoiceType(v ?? 'BOTH')} disabled={isDownloading}>
                     <SelectTrigger id={`type-${company.id}`}>
-                      <SelectValue />
+                      <SelectValue>
+                        {formatInvoiceType}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="SELL">Hóa đơn Bán ra</SelectItem>

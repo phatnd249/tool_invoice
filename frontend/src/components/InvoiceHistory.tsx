@@ -34,6 +34,28 @@ import { toast } from 'sonner';
 import { API_BASE_URL } from '../config';
 import CompanyAutocomplete from '@/components/CompanyAutocomplete';
 
+// ── Select lookup helpers ──
+const FILTER_TYPE_LABELS: Record<string, string> = {
+  '': 'Tất cả hóa đơn',
+  SELL: 'Bán ra (SELL)',
+  BUY: 'Mua vào (BUY)',
+};
+
+const FILTER_STATUS_LABELS: Record<string, string> = {
+  '': 'Tất cả trạng thái',
+  SUCCESS: 'Thành công',
+  PARTIAL: 'Có HĐ bị lỗi',
+  FAILED: 'Thất bại',
+};
+
+function formatFilterType(value: unknown): string {
+  return FILTER_TYPE_LABELS[String(value)] || String(value);
+}
+
+function formatFilterStatus(value: unknown): string {
+  return FILTER_STATUS_LABELS[String(value)] || String(value);
+}
+
 interface InvoiceItem {
   id: number;
   invoiceId: string;
@@ -438,7 +460,9 @@ export default function InvoiceHistory() {
             {subTab === 'invoices' ? (
               <Select value={filterType} onValueChange={v => setFilterType(v ?? '')}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Tất cả hóa đơn" />
+                  <SelectValue placeholder="Tất cả hóa đơn">
+                    {formatFilterType}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Tất cả hóa đơn</SelectItem>
@@ -449,12 +473,14 @@ export default function InvoiceHistory() {
             ) : (
               <Select value={filterStatus} onValueChange={v => setFilterStatus(v ?? '')}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Tất cả trạng thái" />
+                  <SelectValue placeholder="Tất cả trạng thái">
+                    {formatFilterStatus}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Tất cả trạng thái</SelectItem>
                   <SelectItem value="SUCCESS">Thành công</SelectItem>
-                  <SelectItem value="PARTIAL">Một phần</SelectItem>
+                  <SelectItem value="PARTIAL">Có HĐ bị lỗi</SelectItem>
                   <SelectItem value="FAILED">Thất bại</SelectItem>
                 </SelectContent>
               </Select>
