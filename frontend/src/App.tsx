@@ -15,7 +15,8 @@ import {
   Moon,
   Loader2,
   ChevronsUpDown,
-
+  BookOpen,
+  Gift,
   WifiOff,
   RefreshCw,
   WifiHigh,
@@ -56,9 +57,11 @@ import FeedbackManager from './components/FeedbackManager';
 import FeedbackPage from './components/FeedbackPage';
 import Login from './components/Login';
 import TaxLookup from './components/TaxLookup';
+import GuidePage from './components/GuidePage';
+import ChangelogPage from './components/ChangelogPage';
 import { API_BASE_URL } from './config';
 
-type Tab = 'download' | 'history' | 'schedules' | 'companies' | 'config' | 'users' | 'feedbacks' | 'feedback' | 'tax-lookup';
+type Tab = 'download' | 'history' | 'schedules' | 'companies' | 'config' | 'users' | 'feedbacks' | 'feedback' | 'tax-lookup' | 'guide' | 'changelog';
 
 interface User {
   id: number;
@@ -173,6 +176,8 @@ export default function App() {
       case 'feedbacks': return 'Quản Lý Ý Kiến Đóng Góp';
       case 'feedback': return 'Góp Ý';
       case 'tax-lookup': return 'Tra Cứu Mã Số Thuế';
+      case 'guide': return 'Hướng Dẫn Sử Dụng';
+      case 'changelog': return 'Changelog';
     }
   };
 
@@ -197,6 +202,8 @@ export default function App() {
       label: 'TIỆN ÍCH',
       items: [
         { id: 'feedback' as Tab, label: 'Góp Ý', icon: MessageSquare },
+        { id: 'guide' as Tab, label: 'Hướng Dẫn', icon: BookOpen },
+        { id: 'changelog' as Tab, label: 'Changelog', icon: Gift },
       ],
     },
     {
@@ -374,6 +381,8 @@ export default function App() {
           {activeTab === 'companies' && <CompanyManager />}
           {activeTab === 'config' && <ConfigPanel />}
           {activeTab === 'tax-lookup' && <TaxLookup />}
+          {activeTab === 'guide' && <GuidePage />}
+          {activeTab === 'changelog' && <ChangelogPage />}
         </div>
       </SidebarInset>
 
