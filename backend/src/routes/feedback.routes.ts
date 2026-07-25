@@ -10,6 +10,9 @@ router.use(authenticateToken as any);
 // Post feedback is available to anyone authenticated (Staff or Admin)
 router.post('/', FeedbackController.submitFeedback as any);
 
+// User can view their own feedbacks
+router.get('/my', FeedbackController.getMyFeedbacks as any);
+
 // Admin-only review endpoints
 router.get('/', requireRole(['ADMIN']) as any, FeedbackController.getFeedbacks as any);
 router.put('/:id', requireRole(['ADMIN']) as any, FeedbackController.updateFeedbackStatus as any);

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../utils/db.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
+import { sendFeedbackNotification } from '../services/mail.service.js';
 
 export class FeedbackController {
   /**
@@ -36,10 +37,39 @@ export class FeedbackController {
         },
       });
 
+      // Gửi email thông báo cho team dev (async, không block response)
+      sendFeedbackNotification(feedback.content, {
+        id: feedback.userId,
+        username: feedback.user.username,
+      });
+
       res.status(201).json(feedback);
     } catch (error: any) {
       console.error('[FeedbackController] Submit feedback error:', error);
       res.status(500).json({ error: 'Không thể gửi ý kiến góp ý.' });
+    }
+  }
+
+  /**
+   * GET /api/feedbacks/my
+   * Get feedbacks of the current user (Available to all logged-in users)
+   */
+  public static async getMyFeedbacks(req: AuthRequest, res: Response): Promise<void> {
+    if (!req.user) {
+      res.status(401).json({ error: 'Yêu cầu xác thực.' });
+      return;
+    }
+
+    try {
+      const feedbacks = await prisma.feedback.findMany({
+        where: { userId: req.user.id },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      res.json(feedbacks);
+    } catch (error: any) {
+      console.error('[FeedbackController] Get my feedbacks error:', error);
+      res.status(500).json({ error: 'Không thể lấy danh sách góp ý.' });
     }
   }
 

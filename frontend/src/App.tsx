@@ -43,14 +43,7 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
+
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import InvoiceDownloader from './components/InvoiceDownloader';
@@ -60,11 +53,12 @@ import ConfigPanel from './components/ConfigPanel';
 import CompanyManager from './components/CompanyManager';
 import UserManagement from './components/UserManagement';
 import FeedbackManager from './components/FeedbackManager';
+import FeedbackPage from './components/FeedbackPage';
 import Login from './components/Login';
 import TaxLookup from './components/TaxLookup';
 import { API_BASE_URL } from './config';
 
-type Tab = 'download' | 'history' | 'schedules' | 'companies' | 'config' | 'users' | 'feedbacks' | 'tax-lookup';
+type Tab = 'download' | 'history' | 'schedules' | 'companies' | 'config' | 'users' | 'feedbacks' | 'feedback' | 'tax-lookup';
 
 interface User {
   id: number;
@@ -112,13 +106,6 @@ export default function App() {
   useEffect(() => {
     checkGdtHealth(false);
   }, [checkGdtHealth]);
-
-  // Feedback states
-  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
-  const [feedbackContent, setFeedbackContent] = useState('');
-  const [submittingFeedback, setSubmittingFeedback] = useState(false);
-  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
-  const [feedbackError, setFeedbackError] = useState('');
 
   // Configure Axios token
   if (token) {
@@ -173,36 +160,7 @@ export default function App() {
     setAuthError(errorMessage);
   };
 
-  const handleSendFeedback = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!feedbackContent.trim()) {
-      setFeedbackError('Vui lòng nhập nội dung góp ý.');
-      return;
-    }
 
-    setSubmittingFeedback(true);
-    setFeedbackError('');
-    setFeedbackSuccess(false);
-
-    try {
-      await axios.post(`${API_BASE_URL}/api/feedbacks`, {
-        content: feedbackContent.trim(),
-      });
-      setFeedbackSuccess(true);
-      toast.success('Cảm ơn đóng góp của bạn!');
-      setFeedbackContent('');
-      setTimeout(() => {
-        setFeedbackModalOpen(false);
-        setFeedbackSuccess(false);
-      }, 1500);
-    } catch (err: any) {
-      const msg = err.response?.data?.error || 'Không thể gửi ý kiến góp ý lúc này.';
-      setFeedbackError(msg);
-      toast.error(msg);
-    } finally {
-      setSubmittingFeedback(false);
-    }
-  };
 
   const getPageTitle = () => {
     switch (activeTab) {
@@ -212,7 +170,8 @@ export default function App() {
       case 'companies': return 'Quản Lý Doanh Nghiệp';
       case 'config': return 'Cấu Hình API Key';
       case 'users': return 'Quản Lý Thành Viên';
-      case 'feedbacks': return 'Ý Kiến Đóng Góp';
+      case 'feedbacks': return 'Quản Lý Ý Kiến Đóng Góp';
+      case 'feedback': return 'Góp Ý';
       case 'tax-lookup': return 'Tra Cứu Mã Số Thuế';
     }
   };
@@ -235,12 +194,18 @@ export default function App() {
       ],
     },
     {
+      label: 'TIỆN ÍCH',
+      items: [
+        { id: 'feedback' as Tab, label: 'Góp Ý', icon: MessageSquare },
+      ],
+    },
+    {
       label: 'QUẢN TRỊ',
       adminOnly: true,
       items: [
         { id: 'companies' as Tab, label: 'Doanh Nghiệp', icon: Building2 },
         { id: 'users' as Tab, label: 'Thành Viên', icon: Users },
-        { id: 'feedbacks' as Tab, label: 'Ý Kiến', icon: MessageSquare },
+        { id: 'feedbacks' as Tab, label: 'Quản Lý Ý Kiến', icon: MessageSquare },
       ],
     },
     {
@@ -383,12 +348,7 @@ export default function App() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                setFeedbackModalOpen(true);
-                setFeedbackContent('');
-                setFeedbackError('');
-                setFeedbackSuccess(false);
-              }}
+              onClick={() => setActiveTab('feedback')}
               className="gap-1.5"
             >
               <MessageSquare className="h-4 w-4" />
@@ -410,73 +370,14 @@ export default function App() {
           {activeTab === 'schedules' && <SchedulePanel />}
           {activeTab === 'users' && <UserManagement />}
           {activeTab === 'feedbacks' && <FeedbackManager />}
+          {activeTab === 'feedback' && <FeedbackPage />}
           {activeTab === 'companies' && <CompanyManager />}
           {activeTab === 'config' && <ConfigPanel />}
           {activeTab === 'tax-lookup' && <TaxLookup />}
         </div>
       </SidebarInset>
 
-      {/* Feedback Submission Dialog */}
-      <Dialog open={feedbackModalOpen} onOpenChange={setFeedbackModalOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              Gửi Ý Kiến Đóng Góp
-            </DialogTitle>
-            <DialogDescription>
-              Đóng góp ý kiến của bạn để cải thiện ứng dụng.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSendFeedback}>
-            <div className="space-y-4 py-2">
-              {feedbackError && (
-                <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm px-4 py-3 rounded-lg">
-                  {feedbackError}
-                </div>
-              )}
-              {feedbackSuccess && (
-                <div className="bg-green-500/10 border border-green-500/20 text-green-600 text-sm px-4 py-3 rounded-lg">
-                  Cảm ơn đóng góp của bạn. Ý kiến đã được gửi thành công!
-                </div>
-              )}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Nội dung góp ý</label>
-                <textarea
-                  required
-                  rows={4}
-                  value={feedbackContent}
-                  onChange={(e) => setFeedbackContent(e.target.value)}
-                  placeholder="Nhập ý kiến đóng góp, phản hồi hoặc báo lỗi của bạn tại đây..."
-                  className="w-full bg-background border border-input rounded-lg px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none leading-relaxed"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setFeedbackModalOpen(false)}
-              >
-                Hủy
-              </Button>
-              <Button
-                type="submit"
-                disabled={submittingFeedback}
-              >
-                {submittingFeedback ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Đang gửi...
-                  </>
-                ) : (
-                  'Gửi Đóng Góp'
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+
     </div>
       </SidebarProvider>
     </TooltipProvider>
