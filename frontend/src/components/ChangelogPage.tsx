@@ -15,6 +15,14 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: '1.2.0',
+    date: '2026-07-26',
+    type: 'patch',
+    changes: [
+      { type: 'fixed', description: 'Sửa lỗi phân trang GDT API: chuyển từ page-based (gây thiếu/trùng dữ liệu) sang state-based pagination dùng cursor.' },
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-07-25',
     type: 'minor',
