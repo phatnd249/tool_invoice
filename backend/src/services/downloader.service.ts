@@ -186,10 +186,16 @@ export class DownloaderService {
       const PAGE_SIZE = 50;
       const totalPages = Math.ceil(total / PAGE_SIZE);
       const allRecords: any[] = [];
+      let pageState: string | undefined;
 
       for (let page = 0; page < totalPages; page++) {
-        const urlPage = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&page=${page}&search=${searchParam}`;
-        log.debug({ page: page + 1, totalPages, baseUrl }, 'Fetching page...');
+        let urlPage: string;
+        if (pageState) {
+          urlPage = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&state=${encodeURIComponent(pageState)}&search=${searchParam}`;
+        } else {
+          urlPage = `${baseUrl}?sort=tdlap:desc&size=${PAGE_SIZE}&search=${searchParam}`;
+        }
+        log.debug({ page: page + 1, totalPages, baseUrl, hasState: !!pageState }, 'Fetching page...');
 
         const responsePage = await axiosGetWithRetry(urlPage, {
           headers, timeout: 60000, validateStatus: () => true,
@@ -212,7 +218,14 @@ export class DownloaderService {
         const sourceApi = baseUrl.includes('sco-query') ? 'sco-query' : 'query';
         const enhancedRecords = records.map((r: any) => ({ ...r, _sourceApi: sourceApi }));
         allRecords.push(...enhancedRecords);
-        log.debug({ page: page + 1, totalPages, baseUrl, recordsCount: records.length }, 'Page returned records');
+
+        // Lấy state cho trang tiếp theo (cursor-based pagination)
+        pageState = responsePage.data?.state;
+
+        log.debug({ page: page + 1, totalPages, baseUrl, recordsCount: records.length, hasNextState: !!pageState }, 'Page returned records');
+
+        // Dừng sớm nếu API không trả về state (đã hết dữ liệu)
+        if (!pageState) break;
 
         if (page < totalPages - 1) {
           await new Promise(resolve => setTimeout(resolve, 500));
