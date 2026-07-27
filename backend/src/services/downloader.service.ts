@@ -13,6 +13,7 @@ const log = createLogger('DownloaderService');
  * Wrapper for axios.get with automatic retry and exponential backoff for 429, 5xx, and Timeout/Network errors.
  */
 async function axiosGetWithRetry(url: string, config: any, retries: number = 3, delayMs: number = 1000): Promise<any> {
+  let lastError: any;
   for (let i = 0; i < retries; i++) {
     try {
       const response = await axios.get(url, config);
@@ -120,25 +121,29 @@ export class DownloaderService {
 
     let allInvoices: any[] = [];
 
-    // Query standard invoices — 1 lần duy nhất (không filter ttxly, API trả về tất cả)
+    // Query standard invoices (fetch all at once, filter locally to save API calls)
     try {
       const queryInvoices = await withRetry(
         () => this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers),
         { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
       );
-      allInvoices = allInvoices.concat(queryInvoices);
+      const validStatuses = [4, 5, 6, 7, 8];
+      const filteredStandard = queryInvoices.filter(inv => validStatuses.includes(inv.ttxly));
+      allInvoices = allInvoices.concat(filteredStandard);
     } catch (error: any) {
       if (error.message && error.message.includes('401')) throw error;
       log.warn({ err: error.message }, 'Error fetching standard invoices, ignoring');
     }
 
-    // Query cash register invoices (máy tính tiền) — 1 lần duy nhất
+    // Query cash register invoices (sco-query) (fetch all at once, filter locally)
     try {
       const scoQueryInvoices = await withRetry(
         () => this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers),
         { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
       );
-      allInvoices = allInvoices.concat(scoQueryInvoices);
+      const validScoStatuses = [5, 6, 8];
+      const filteredSco = scoQueryInvoices.filter(inv => validScoStatuses.includes(inv.ttxly));
+      allInvoices = allInvoices.concat(filteredSco);
     } catch (error: any) {
       if (error.message && error.message.includes('401')) throw error;
       log.warn({ err: error.message }, 'Error fetching sco-query invoices, ignoring');
@@ -164,7 +169,7 @@ export class DownloaderService {
     try {
       log.info({ startStr, endStr, baseUrl }, 'Querying count from GDT...');
       const response = await axiosGetWithRetry(urlCount, {
-        headers, timeout: 60000, validateStatus: () => true,
+        headers, timeout: 20000, validateStatus: () => true,
       });
 
       if (response.status === 401) throw new Error('Unauthorized GDT Token (401)');
@@ -198,7 +203,7 @@ export class DownloaderService {
         log.debug({ page: page + 1, totalPages, baseUrl, hasState: !!pageState }, 'Fetching page...');
 
         const responsePage = await axiosGetWithRetry(urlPage, {
-          headers, timeout: 60000, validateStatus: () => true,
+          headers, timeout: 20000, validateStatus: () => true,
         });
 
         if (responsePage.status !== 200) {
