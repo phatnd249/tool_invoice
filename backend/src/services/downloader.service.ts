@@ -81,18 +81,25 @@ function extractResponseBody(data: any): string {
  * Wrapper for axios.get with automatic retry and exponential backoff for 429 errors.
  */
 async function axiosGetWithRetry(url: string, config: any, retries: number = 3, delayMs: number = 1000): Promise<any> {
+  let lastError: any;
   for (let i = 0; i < retries; i++) {
-    const response = await axios.get(url, config);
-    if (response.status === 429) {
-      console.warn(`[DownloaderService] Rate limit (429) hit for ${url}. Retrying in ${delayMs}ms... (Attempt ${i + 1}/${retries})`);
+    try {
+      const response = await axios.get(url, config);
+      if (response.status === 429) {
+        console.warn(`[DownloaderService] Rate limit (429) hit for ${url}. Retrying in ${delayMs}ms... (Attempt ${i + 1}/${retries})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        delayMs *= 2; // Exponential backoff
+        continue;
+      }
+      return response;
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`[DownloaderService] Network error for ${url}: ${error.message}. Retrying in ${delayMs}ms... (Attempt ${i + 1}/${retries})`);
       await new Promise(resolve => setTimeout(resolve, delayMs));
-      delayMs *= 2; // Exponential backoff
-      continue;
+      delayMs *= 2;
     }
-    return response;
   }
-  // Last attempt
-  return axios.get(url, config);
+  throw lastError;
 }
 
 export class DownloaderService {
@@ -175,46 +182,37 @@ export class DownloaderService {
 
     let allInvoices: any[] = [];
 
-    // 1. Query standard invoices for each required status:
-    // 5: Đã cấp mã
-    // 6: Cục thuế đã nhận không mã
-    // 4: Không đủ điều kiện cấp mã
-    // 7: Đã kiểm tra định kỳ
-    // 8: Máy tính tiền (từ tab chuẩn)
-    const standardStatuses = [4, 5, 6, 7, 8];
-    for (const status of standardStatuses) {
-      try {
-        const queryInvoices = await withRetry(
-          () => this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers, status),
-          { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
-        );
-        allInvoices = allInvoices.concat(queryInvoices);
-      } catch (error: any) {
-        if (error.message && error.message.includes('401')) {
-          throw error;
-        }
-        console.error(`[DownloaderService] Error fetching standard invoices for status ${status}, ignoring:`, error.message);
+    // 1. Query standard invoices (fetch all at once, filter locally to save API calls)
+    try {
+      const queryInvoices = await withRetry(
+        () => this.fetchInvoicesFromUrl(baseUrlQuery, startStr, endStr, headers),
+        { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
+      );
+      // Filter out statuses we don't care about (e.g. keep 4, 5, 6, 7, 8)
+      const validStatuses = [4, 5, 6, 7, 8];
+      const filteredStandard = queryInvoices.filter(inv => validStatuses.includes(inv.ttxly));
+      allInvoices = allInvoices.concat(filteredStandard);
+    } catch (error: any) {
+      if (error.message && error.message.includes('401')) {
+        throw error;
       }
+      console.error(`[DownloaderService] Error fetching standard invoices, ignoring:`, error.message);
     }
 
-    // 2. Query cash register invoices (máy tính tiền)
-    // 5: Đã cấp mã
-    // 6: Cục thuế đã nhận không mã
-    // 8: Máy tính tiền
-    const scoStatuses = [5, 6, 8];
-    for (const status of scoStatuses) {
-      try {
-        const scoQueryInvoices = await withRetry(
-          () => this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers, status),
-          { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
-        );
-        allInvoices = allInvoices.concat(scoQueryInvoices);
-      } catch (error: any) {
-        if (error.message && error.message.includes('401')) {
-          throw error;
-        }
-        console.error(`[DownloaderService] Error fetching sco-query invoices for status ${status}, ignoring:`, error.message);
+    // 2. Query cash register invoices (sco-query) (fetch all at once, filter locally)
+    try {
+      const scoQueryInvoices = await withRetry(
+        () => this.fetchInvoicesFromUrl(baseUrlScoQuery, startStr, endStr, headers),
+        { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 10000 }
+      );
+      const validScoStatuses = [5, 6, 8];
+      const filteredSco = scoQueryInvoices.filter(inv => validScoStatuses.includes(inv.ttxly));
+      allInvoices = allInvoices.concat(filteredSco);
+    } catch (error: any) {
+      if (error.message && error.message.includes('401')) {
+        throw error;
       }
+      console.error(`[DownloaderService] Error fetching sco-query invoices, ignoring:`, error.message);
     }
 
     return allInvoices;
@@ -239,7 +237,7 @@ export class DownloaderService {
       console.log(`[DownloaderService] Querying count from ${startStr} to ${endStr} at ${baseUrl}...`);
       const response = await axiosGetWithRetry(urlCount, {
         headers,
-        timeout: 60000,
+        timeout: 20000,
         validateStatus: () => true,
       });
 
@@ -275,7 +273,7 @@ export class DownloaderService {
 
         const responsePage = await axiosGetWithRetry(urlPage, {
           headers,
-          timeout: 60000,
+          timeout: 20000,
           validateStatus: () => true,
         });
 

@@ -14,10 +14,13 @@
     "electron:pack": "npm run build && npm run electron:build-main && electron-builder"
   },
   "dependencies": {
+    "adm-zip": "0.6.0",
     "electron-is-dev": "^3.0.1",
+    "exceljs": "3.4.0",
     "html2pdf.js": "^0.14.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "sharp": "0.35.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -32,7 +35,7 @@
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "electron": "^42.4.1",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^25.1.8",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
