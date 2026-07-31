@@ -1,218 +1,109 @@
-// This is your Prisma schema file,
-// learn more it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 model User {
-  id               Int               @id @default(autoincrement())
-  username         String            @unique
-  password         String
-  role             String            @default("STAFF") // "ADMIN" or "STAFF"
-  isActive         Boolean           @default(true)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  companies        UserCompany[]
-  downloadHistories DownloadHistory[]
-  downloadJobs      DownloadJob[]
-  feedbacks        Feedback[]
+  id                  String    @id @default(cuid())
+  fullName            String
+  email               String    @unique
+  password            String
+  avatar              String?
+  status              String    @default("INACTIVE")
+  emailVerified       Boolean   @default(false)
+  emailVerifyToken    String?   @unique
+  emailVerifyExpiry   DateTime?
+  resetPasswordToken  String?   @unique
+  resetPasswordExpiry DateTime?
+  loginAttempts       Int       @default(0)
+  lockUntil           DateTime?
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  userRoles      UserRole[]
+  refreshTokens  RefreshToken[]
+  tokenBlacklist TokenBlacklist[]
+
+  @@map("users")
 }
 
-model Company {
-  id             Int               @id @default(autoincrement())
-  taxCode        String            @unique
-  name           String
-  lookupPassword String
-  token          String?
-  tokenExpiredAt DateTime?
-  loginMode      String            @default("AUTO") // "AUTO" or "MANUAL"
-  downloadCount  Int               @default(0)
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  // Thông tin từ masothue.com
-  address         String?   // Địa chỉ trụ sở chính
-  taxAddress      String?   // Địa chỉ thuế
-  representative  String?   // Người đại diện pháp luật
-  phone           String?   // Số điện thoại
-  activeDate      String?   // Ngày hoạt động
-  managedBy       String?   // Quản lý bởi (CQT)
-  companyType     String?   // Loại hình pháp lý
-  status          String?   // Tình trạng (Đang hoạt động,...)
-  lastSyncedAt    DateTime? // Lần đồng bộ gần nhất
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
 
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  scheduleCompanies ScheduleCompany[]
-  users          UserCompany[]
-  downloadJobs   DownloadJob[]
+  @@map("roles")
 }
 
-model UserCompany {
-  userId    Int
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyId Int
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  group       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  @@id([userId, companyId])
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
 }
 
-model Invoice {
-  id                 String        @id @default(uuid())
-  invoiceNumber      String
-  invoiceDate        DateTime
-  templateSymbol     String        // Ký hiệu mẫu hóa đơn (khmshdon)
-  invoiceSymbol      String        // Ký hiệu hóa đơn (khhdon)
-  paymentMethod      String?       // Hình thức thanh toán (htttoan)
-  currency           String        @default("VND") // Đơn vị tiền tệ (dvtte)
-  exchangeRate       Float         @default(1.0) // Tỷ giá (tgia)
-  taxAuthorityCode   String?       // Mã cơ quan thuế (mccqt)
-  lookupCode         String?       // Mã tra cứu (matracuu)
-  invoiceName        String?       // Tên hóa đơn (thdon)
-  version            String?       // Phiên bản (pban)
-  gdtProviderTaxCode String?       // Mã số thuế tổ chức giải pháp (msttcgp)
-
-  // Seller info
-  sellerName         String
-  sellerTaxCode      String
-  sellerAddress      String?
-  sellerPhone        String?
-
-  // Buyer info
-  buyerName          String
-  buyerTaxCode       String
-  buyerAddress       String?
-  buyerCustomerId    String?
-
-  // Financial summary
-  totalBeforeTax     Float
-  taxAmount          Float
-  totalAmount        Float
-  discountAmount     Float?
-  feeAmount          Float?
-  totalAmountInWords String?
-
-  type               String        // "BUY" (Mua vào) or "SELL" (Bán ra)
-  pdfPath            String?
-  xmlPath            String?
-  zipPath            String?       // Đường dẫn file ZIP gốc đã tải
-  invoiceStatus      Int?          // tthai — Trạng thái hoá đơn (1=mới, 2=thay thế, 3=điều chỉnh, 4=bị thay thế, 5=bị điều chỉnh, 6=đã huỷ)
-  processStatus      Int?          // ttxly — Tình trạng xử lý của CQT (0=đã nhận, 5=đã cấp mã, ...)
-  isSavedToDb        Boolean       @default(true)
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-
-  items              InvoiceItem[]
-
-  @@unique([invoiceNumber, invoiceSymbol, templateSymbol, sellerTaxCode, buyerTaxCode])
-}
-
-model InvoiceItem {
-  id          Int     @id @default(autoincrement())
-  invoiceId   String
-  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  lineNumber  String? // Số thứ tự dòng (stt)
-  name        String  // Tên hàng hóa, dịch vụ (thhdvu)
-  unit        String? // Đơn vị tính (dvtinh)
-  quantity    Float?  // Số lượng (sluong)
-  price       Float?  // Đơn giá (dgia)
-  amount      Float   // Thành tiền chưa thuế (thtien)
-  taxRate     String? // Thuế suất (tsuat)
-}
-
-model DownloadHistory {
-  id              Int      @id @default(autoincrement())
-  downloadDate    DateTime @default(now())
-  taxCode         String
-  invoiceType     String   // "BUY" or "SELL" or "BOTH"
-  status          String   // "SUCCESS" or "FAILED" or "PARTIAL"
-  log             String?
-  countDownloaded Int      @default(0)
-  userId          Int?
-  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  username        String?
-
-  startDate       DateTime? // Ngày bắt đầu khoảng thời gian tải
-  endDate         DateTime? // Ngày kết thúc khoảng thời gian tải
-  totalInvoices   Int?      // Tổng số hoá đơn từ kết quả query GDT
-}
-
-model Schedule {
-  id             Int       @id @default(autoincrement())
-  name           String?   // Tên gợi nhớ cho lịch (VD: "Lịch cuối tháng")
-  cronExpression String    // e.g., "0 9 * * *" (9 AM daily), or "" for one-time
-  repeatMode     String    @default("weekly") // "daily" | "weekly" | "monthly" | "quarterly" | "custom" | "once"
-  scheduledAt    DateTime? // Ngày giờ cụ thể (dùng khi repeatMode = "once")
-  dateRangeDays  Int?      // Số ngày tải ngược từ hôm nay (null = auto-detect từ repeatMode)
-  invoiceType    String    // "BUY" | "SELL" | "BOTH"
-  overwriteMode  String    @default("SKIP") // "SKIP" | "OVERWRITE" | "NEW_VERSION"
-  isActive       Boolean   @default(true)
-  lastRun        DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  companies      ScheduleCompany[]
-}
-
-model ScheduleCompany {
-  scheduleId Int
-  schedule   Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-  companyId  Int
-  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@id([scheduleId, companyId])
-}
-
-model Setting {
-  key   String @id
-  value String
-}
-
-model DownloadJob {
-  id              String    @id @default(uuid())
-  companyId       Int?
-  companyName     String?
-  taxCode         String?
-  userId          Int?
-  username        String?
-
-  startDate       DateTime?
-  endDate         DateTime?
-  invoiceType     String    // "BUY" | "SELL" | "BOTH"
-  overwriteMode   String    @default("SKIP")
-
-  status          String    @default("PENDING")  // PENDING | RUNNING | COMPLETED | FAILED | CANCELLED
-  progressCurrent Int       @default(0)
-  progressTotal   Int       @default(0)
-  progressMessage String?
-  progressType    String?   // "BUY" | "SELL" (đang xử lý loại nào)
-
-  successCount    Int       @default(0)
-  errorCount      Int       @default(0)
-  errors          String?   // JSON string của mảng lỗi (tối đa 20 lỗi gần nhất)
-
-  logs            String?   // JSON string của mảng log entries [{time, message, type}]
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  company         Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([userId, status])
-  @@index([status, createdAt])
-}
-
-model Feedback {
-  id        Int      @id @default(autoincrement())
-  content   String
-  status    String   @default("PENDING") // "PENDING", "RESOLVED", "REJECTED"
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model UserRole {
+  userId    String
+  roleId    String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  jti       String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model TokenBlacklist {
+  id        String   @id @default(cuid())
+  userId    String
+  jti       String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("token_blacklist")
 }

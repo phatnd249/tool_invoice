@@ -1,46 +1,11 @@
-# Dependency directories
+package-lock.json
+bun.lock
+
 node_modules/
-jspm_packages/
-backend/bun.lock
+backend/node_modules/
+frontend/node_modules/
 
-# Build outputs
-dist/
-dist-executable/
-dist-desktop/
-build/
-out/
-
-# Database files
-*.db
-*.db-journal
-*.db-shm
-*.db-wal
-
-# Log files
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Environment files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Invoices download directory (local temporary files)
-backend/invoices/
-invoices/
-
-# Frontend build copied to backend/public/ during production build
 backend/public/
-*.zip
 
 temp/
-bun.lock
+.sw*

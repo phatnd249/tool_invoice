@@ -1,33 +1,35 @@
 {
-  "name": "tool-invoice-monorepo",
+  "name": "project",
+  "version": "0.0.1",
   "private": true,
   "workspaces": [
     "backend",
     "frontend"
   ],
-  "type": "module",
   "scripts": {
-    "dev": "concurrently -n be,fe -c cyan,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:backend": "npm run dev -w backend",
-    "dev:frontend": "npm run dev -w frontend",
-    "build": "npm run build:backend && npm run build:frontend && npm run build:copy-frontend && npm run build:prisma",
-    "build:backend": "npm run build -w backend",
-    "build:frontend": "npm run build -w frontend",
-    "build:copy-frontend": "node scripts/copy-frontend.js",
-    "build:prisma": "cd backend && npx prisma generate",
-    "start": "NODE_ENV=production node backend/dist/server.cjs",
-    "build:executable": "node build-executable.js"
+    "install:all": "npm install && npm install --prefix backend && npm install --prefix frontend",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run start:dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "debug": "concurrently \"npm run debug:backend\" \"npm run debug:frontend\"",
+    "debug:backend": "npm run start:debug --prefix backend",
+    "debug:frontend": "npm run dev --prefix frontend",
+    "build": "npm run build:backend && npm run build:frontend && npm run copy:frontend",
+    "build:backend": "npm run build --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "copy:frontend": "rm -rf backend/public && mkdir -p backend/public && cp -r frontend/dist/* backend/public/",
+    "start": "concurrently \"npm run start:prod --prefix backend\" \"npm run preview --prefix frontend\"",
+    "lint": "concurrently \"npm run lint --prefix backend\" \"npm run lint --prefix frontend\"",
+    "test": "npm run test --prefix backend",
+    "prisma:generate": "cd backend && npx prisma generate",
+    "prisma:migrate": "cd backend && npx prisma migrate dev",
+    "prisma:migrate:deploy": "cd backend && npx prisma migrate deploy",
+    "prisma:migrate:reset": "cd backend && npx prisma migrate reset",
+    "prisma:studio": "cd backend && npx prisma studio",
+    "prisma:seed": "npm run prisma:seed --prefix backend",
+    "db:setup": "npm run prisma:generate && npm run prisma:migrate && npm run prisma:seed"
   },
   "devDependencies": {
-    "concurrently": "^10.0.3"
-  },
-  "allowScripts": {
-    "@prisma/client@5.22.0": true,
-    "@prisma/engines@5.22.0": true,
-    "core-js@3.49.0": true,
-    "electron-winstaller@5.4.0": true,
-    "esbuild@0.28.1": true,
-    "prisma@5.22.0": true,
-    "sharp@0.32.6": true
+    "concurrently": "^9.1.0"
   }
 }
