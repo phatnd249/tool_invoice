@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GdtRawInvoice } from './gdt-client.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class InvoicesPersistenceService {
@@ -12,7 +13,8 @@ export class InvoicesPersistenceService {
 
   /**
    * Upsert một hoá đơn từ GDT raw data vào DB.
-   * Dùng composite unique key để tránh trùng lặp.
+   * Dùng findFirst + create/update thủ công vì composite unique key
+   * có buyerTaxCode nullable (Prisma upsert không xử lý tốt null trong unique).
    */
   async upsert(
     inv: GdtRawInvoice,
@@ -22,34 +24,41 @@ export class InvoicesPersistenceService {
   ): Promise<{ id: string; isNew: boolean }> {
     const data = this.mapToInvoiceData(inv, type, source, companyId);
 
-    const result = await this.prisma.invoice.upsert({
-      where: {
-        invoiceNumber_invoiceSymbol_templateSymbol_sellerTaxCode_buyerTaxCode:
-          {
-            invoiceNumber: data.invoiceNumber,
-            invoiceSymbol: data.invoiceSymbol,
-            templateSymbol: data.templateSymbol,
-            sellerTaxCode: data.sellerTaxCode,
-            buyerTaxCode: data.buyerTaxCode,
-          },
-      },
-      create: data,
-      update: {
-        invoiceStatus: data.invoiceStatus,
-        processStatus: data.processStatus,
-        totalBeforeTax: data.totalBeforeTax,
-        taxAmount: data.taxAmount,
-        totalAmount: data.totalAmount,
-        discountAmount: data.discountAmount,
-        type: data.type,
-        source: data.source,
-        paymentMethod: data.paymentMethod,
-        currency: data.currency,
-        exchangeRate: data.exchangeRate,
-      },
-    });
+    // Tìm invoice đã tồn tại theo composite key
+    const where: Prisma.InvoiceWhereInput = {
+      invoiceNumber: data.invoiceNumber,
+      invoiceSymbol: data.invoiceSymbol,
+      templateSymbol: data.templateSymbol,
+      sellerTaxCode: data.sellerTaxCode,
+      buyerTaxCode: data.buyerTaxCode ?? null,
+    };
 
-    return { id: result.id, isNew: result.createdAt.getTime() === result.updatedAt.getTime() };
+    const existing = await this.prisma.invoice.findFirst({ where });
+
+    if (existing) {
+      // Update
+      await this.prisma.invoice.update({
+        where: { id: existing.id },
+        data: {
+          invoiceStatus: data.invoiceStatus,
+          processStatus: data.processStatus,
+          totalBeforeTax: data.totalBeforeTax,
+          taxAmount: data.taxAmount,
+          totalAmount: data.totalAmount,
+          totalAmountInWords: data.totalAmountInWords,
+          buyerName: data.buyerName,
+          sellerName: data.sellerName,
+          type: data.type,
+          source: data.source,
+          rawData: data.rawData,
+        },
+      });
+      return { id: existing.id, isNew: false };
+    }
+
+    // Create
+    const created = await this.prisma.invoice.create({ data });
+    return { id: created.id, isNew: true };
   }
 
   /**
@@ -91,36 +100,40 @@ export class InvoicesPersistenceService {
     companyId?: string,
   ) {
     return {
+      // Core identity
       invoiceNumber: String(inv.shdon || '').trim(),
       invoiceDate: this.parseGdtDate(inv.tdlap),
       templateSymbol: String(inv.khmshdon || '').trim(),
       invoiceSymbol: String(inv.khhdon || '').trim(),
-      paymentMethod: inv.htttoan ? String(inv.htttoan).trim() : null,
-      currency: String(inv.dvtte || 'VND').trim(),
-      exchangeRate: Number(inv.tgia) || 1.0,
-      taxAuthorityCode: inv.mccqt ? String(inv.mccqt).trim() : null,
-      lookupCode: inv.matracuu ? String(inv.matracuu).trim() : null,
-      invoiceName: inv.thdon ? String(inv.thdon).trim() : 'Hoá đơn điện tử',
-      sellerName: String(inv.nbten || '').trim(),
+
+      // Seller
       sellerTaxCode: String(inv.nbmst || '').trim(),
-      sellerAddress: inv.nbdchi ? String(inv.nbdchi).trim() : null,
-      sellerPhone: null,
-      buyerName: String(inv.nmten || inv.nmtnmua || '').trim(),
-      buyerTaxCode: String(inv.nmmst || '').trim(),
-      buyerAddress: inv.nmdchi ? String(inv.nmdchi).trim() : null,
-      totalBeforeTax: Number(inv.tgtcthue) || 0,
-      taxAmount: Number(inv.tgtthue) || 0,
+      sellerName: String(inv.nbten || '').trim(),
+
+      // Buyer (nullable: hoá đơn bán lẻ không có nmmst)
+      buyerTaxCode: inv.nmmst ? String(inv.nmmst).trim() : null,
+      buyerName: (inv.nmten || inv.nmtnmua || '').trim() || null,
+
+      // Financial
+      totalBeforeTax:
+        inv.tgtcthue != null ? Number(inv.tgtcthue) : null,
+      taxAmount: inv.tgtthue != null ? Number(inv.tgtthue) : null,
       totalAmount: Number(inv.tgtttbso) || 0,
-      discountAmount:
-        inv.ttcktmai != null ? Number(inv.ttcktmai) : null,
-      totalAmountInWords: null,
+      totalAmountInWords: inv.tgtttbchu?.trim() || null,
+
+      // Status
       invoiceStatus:
         inv.tthai != null ? Number(inv.tthai) : null,
       processStatus:
         inv.ttxly != null ? Number(inv.ttxly) : null,
+
+      // Type & source
       type,
       source,
       companyId: companyId || null,
+
+      // ★ Raw GDT JSON — lưu toàn bộ dữ liệu gốc
+      rawData: JSON.stringify(inv),
     };
   }
 

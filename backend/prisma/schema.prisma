@@ -142,54 +142,51 @@ model Company {
 
 model Invoice {
   id                 String   @id @default(cuid())
-  invoiceNumber      String
-  invoiceDate        DateTime
-  templateSymbol     String
-  invoiceSymbol      String
-  paymentMethod      String?
-  currency           String   @default("VND")
-  exchangeRate       Float    @default(1.0)
-  taxAuthorityCode   String?
-  lookupCode         String?
-  invoiceName        String?
 
-  // Seller info
-  sellerName         String
-  sellerTaxCode      String
-  sellerAddress      String?
-  sellerPhone        String?
+  // ── Core identity (composite unique) ──
+  invoiceNumber      String    // shdon
+  invoiceDate        DateTime  // tdlap
+  templateSymbol     String    // khmshdon
+  invoiceSymbol      String    // khhdon
 
-  // Buyer info
-  buyerName          String
-  buyerTaxCode       String
-  buyerAddress       String?
+  // ── Seller ──
+  sellerTaxCode      String    // nbmst
+  sellerName         String    // nbten
 
-  // Financial summary
-  totalBeforeTax     Float
-  taxAmount          Float
-  totalAmount        Float
-  discountAmount     Float?
-  totalAmountInWords String?
+  // ── Buyer (nullable: hoá đơn bán lẻ không có MST) ──
+  buyerTaxCode       String?   // nmmst
+  buyerName          String?   // nmten || nmtnmua
 
-  // GDT status
-  invoiceStatus      Int?       // tthai: 1=mới, 2=thay thế, 3=điều chỉnh, 4=bị thay thế, 5=bị điều chỉnh, 6=đã huỷ
-  processStatus      Int?       // ttxly: trạng thái xử lý của CQT
+  // ── Financial ──
+  totalBeforeTax     Float?    // tgtcthue
+  taxAmount          Float?    // tgtthue
+  totalAmount        Float     // tgtttbso
+  totalAmountInWords String?   // tgtttbchu
 
-  // Type & source
-  type               String     // "BUY" | "SELL"
-  source             String?    // "query" | "sco-query"
+  // ── GDT Status ──
+  invoiceStatus      Int?      // tthai: 1=mới, 2=thay thế, 3=điều chỉnh, 4=bị thay thế, 5=bị điều chỉnh, 6=đã huỷ
+  processStatus      Int?      // ttxly: trạng thái xử lý của CQT
 
-  // Relations
+  // ── Type & source ──
+  type               String    // "BUY" | "SELL"
+  source             String?   // "query" | "sco-query"
+
+  // ── Raw GDT JSON (toàn bộ dữ liệu gốc) ──
+  rawData            String?
+
+  // ── Relations ──
   companyId          String?
-  company            Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  company            Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   items              InvoiceItem[]
 
   @@unique([invoiceNumber, invoiceSymbol, templateSymbol, sellerTaxCode, buyerTaxCode])
   @@index([companyId, type, invoiceDate])
+  @@index([sellerTaxCode, invoiceDate])
+  @@index([buyerTaxCode, invoiceDate])
   @@map("invoices")
 }
 
