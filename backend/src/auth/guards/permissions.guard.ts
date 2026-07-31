@@ -28,6 +28,15 @@ export class PermissionsGuard implements CanActivate {
     const user: AuthUser = request.user;
     if (!user) throw new ForbiddenException('Access denied');
 
+    // SUPER_ADMIN bypasses all permission checks
+    const isSuperAdmin = await this.prisma.role.findFirst({
+      where: {
+        name: 'SUPER_ADMIN',
+        userRoles: { some: { userId: user.id } },
+      },
+    });
+    if (isSuperAdmin) return true;
+
     const userPermissions = await this.prisma.permission.findMany({
       where: {
         rolePermissions: {

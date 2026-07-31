@@ -28,6 +28,7 @@ model User {
   userRoles      UserRole[]
   refreshTokens  RefreshToken[]
   tokenBlacklist TokenBlacklist[]
+  createdCompanies Company[]
 
   @@map("users")
 }
@@ -106,4 +107,34 @@ model TokenBlacklist {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("token_blacklist")
+}
+
+model Company {
+  id             String    @id @default(cuid())
+  taxCode        String    @unique
+  name           String
+  lookupPassword String
+  token          String?
+  tokenExpiredAt DateTime?
+  loginMode      String    @default("AUTO")
+  downloadCount  Int       @default(0)
+
+  // Thông tin từ masothue.com
+  address        String?
+  taxAddress     String?
+  representative String?
+  phone          String?
+  activeDate     String?
+  managedBy      String?
+  companyType    String?
+  status         String?
+  lastSyncedAt   DateTime?
+
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  creator        User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@map("companies")
 }
