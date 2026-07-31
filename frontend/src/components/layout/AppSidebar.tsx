@@ -8,6 +8,7 @@ import {
   LogOut,
   ChevronRight,
   Building2,
+  FileText,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -38,6 +39,7 @@ const navItems = [
   { to: '/roles', icon: Shield, label: 'Roles', permission: 'role:read' },
   { to: '/permissions', icon: Key, label: 'Permissions', permission: 'permission:read' },
   { to: '/companies', icon: Building2, label: 'Companies', permission: 'company:read' },
+  { to: '/invoices', icon: FileText, label: 'Invoices', permission: 'invoice:read' },
 ]
 
 export function AppSidebar() {

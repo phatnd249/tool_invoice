@@ -1,14 +1,21 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
-import { Download } from 'lucide-react'
+import { format } from 'date-fns'
+import { Download, CalendarIcon } from 'lucide-react'
+import type { DateRange } from 'react-day-picker'
 import { invoicesApi } from '@/api/invoices'
 import { getErrorMessage } from '@/lib/apiClient'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -30,45 +37,31 @@ interface InvoiceDownloadFormProps {
 }
 
 export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFormProps) {
-  const today = new Date().toISOString().slice(0, 10)
-  const lastMonth = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+  const today = new Date()
+  const lastMonth = new Date(Date.now() - 30 * 86400000)
 
-  const [startDate, setStartDate] = useState(lastMonth)
-  const [endDate, setEndDate] = useState(today)
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: lastMonth,
+    to: today,
+  })
   const [invoiceType, setInvoiceType] = useState('BOTH')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<DownloadResult | null>(null)
 
-  // Kiểm tra token trạng thái
   const tokenExpired = company.tokenExpiredAt
     ? new Date(company.tokenExpiredAt) < new Date()
     : true
-  const canDownload =
-    !!company.token && !tokenExpired
-      ? true
-      : company.loginMode === 'AUTO'
-        ? true // AUTO mode sẽ tự refresh
-        : false // MANUAL mode + hết hạn → cần login lại
 
   const getDisabledReason = (): string | null => {
-    if (!startDate || !endDate) return 'Vui lòng chọn khoảng thời gian'
+    if (!dateRange.from || !dateRange.to) return 'Vui lòng chọn khoảng thời gian'
     if (!company.token && company.loginMode === 'MANUAL')
-      return 'Doanh nghiệp chưa được đăng nhập. Vui lòng đăng nhập thủ công.'
+      return 'Doanh nghiệp chưa được đăng nhập.'
     if (tokenExpired && company.loginMode === 'MANUAL')
       return 'Token đã hết hạn. Vui lòng đăng nhập thủ công trước.'
     return null
   }
 
   const disabledReason = getDisabledReason()
-
-  // Token status display
-  const tokenLabel = !company.token
-    ? 'Chưa đăng nhập'
-    : tokenExpired
-      ? company.loginMode === 'AUTO'
-        ? 'Sẽ tự động refresh'
-        : 'Cần đăng nhập lại'
-      : 'Token sẵn sàng'
 
   const TokenBadge = () => {
     if (!company.token)
@@ -95,12 +88,8 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
   }
 
   const handleDownload = async () => {
-    if (!startDate || !endDate) {
+    if (!dateRange.from || !dateRange.to) {
       toast.error('Vui lòng chọn khoảng thời gian')
-      return
-    }
-    if (new Date(startDate) > new Date(endDate)) {
-      toast.error('Ngày bắt đầu phải trước ngày kết thúc')
       return
     }
 
@@ -109,8 +98,8 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
     try {
       const { data } = await invoicesApi.download({
         companyId: company.id,
-        startDate,
-        endDate,
+        startDate: format(dateRange.from, 'yyyy-MM-dd'),
+        endDate: format(dateRange.to, 'yyyy-MM-dd'),
         invoiceType,
       })
       setResult(data)
@@ -132,32 +121,33 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
         <TokenBadge />
       </div>
 
-      {/* Date range */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor={`start-${company.id}`} className="text-xs">
-            Từ ngày
-          </Label>
-          <Input
-            id={`start-${company.id}`}
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            max={endDate || undefined}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`end-${company.id}`} className="text-xs">
-            Đến ngày
-          </Label>
-          <Input
-            id={`end-${company.id}`}
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            min={startDate || undefined}
-          />
-        </div>
+      {/* Date range picker */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Khoảng thời gian</Label>
+        <Popover>
+          <PopoverTrigger
+            render={
+              <Button
+                variant="outline"
+                className="w-full justify-start text-left font-normal"
+              />
+            }
+          >
+            <CalendarIcon className="mr-2 size-4" />
+            {dateRange.from && dateRange.to
+              ? `${format(dateRange.from, 'dd/MM/yyyy')} → ${format(dateRange.to, 'dd/MM/yyyy')}`
+              : 'Chọn khoảng thời gian'}
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="range"
+              selected={dateRange}
+              onSelect={setDateRange}
+              defaultMonth={dateRange.from || today}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Invoice type */}
@@ -201,7 +191,7 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
           {result.results.map((r) => (
             <div key={r.type} className="flex items-center justify-between">
               <span className="text-muted-foreground">
-                {r.type === 'BUY' ? '📥 Mua vào' : '📤 Bán ra'}
+                {r.type === 'BUY' ? 'Mua vào' : 'Bán ra'}
               </span>
               <span className="tabular-nums">
                 {r.totalQueried} hoá đơn
@@ -230,6 +220,3 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
     </div>
   )
 }
-
-// Re-export for use in CompanyAccordion
-export { INVOICE_TYPE_ITEMS }
