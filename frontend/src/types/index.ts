@@ -45,7 +45,6 @@ export interface Invoice {
   processStatus: number | null
   type: 'BUY' | 'SELL'
   source: string | null
-  rawData: string | null
   zipPath: string | null
   xmlPath: string | null
   downloadStatus: string | null

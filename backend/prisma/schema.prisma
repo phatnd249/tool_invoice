@@ -171,9 +171,6 @@ model Invoice {
   type               String    // "BUY" | "SELL"
   source             String?   // "query" | "sco-query"
 
-  // ── Raw GDT JSON (toàn bộ dữ liệu gốc) ──
-  rawData            String?
-
   // ── ZIP / XML paths ──
   zipPath            String?
   xmlPath            String?

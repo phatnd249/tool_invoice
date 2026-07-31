@@ -50,7 +50,6 @@ export class InvoicesPersistenceService {
           sellerName: data.sellerName,
           type: data.type,
           source: data.source,
-          rawData: data.rawData,
         },
       });
       return { id: existing.id, isNew: false };
@@ -131,9 +130,6 @@ export class InvoicesPersistenceService {
       type,
       source,
       companyId: companyId || null,
-
-      // ★ Raw GDT JSON — lưu toàn bộ dữ liệu gốc
-      rawData: JSON.stringify(inv),
     };
   }
 
