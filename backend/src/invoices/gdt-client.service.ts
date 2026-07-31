@@ -238,4 +238,54 @@ export class GdtClientService {
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+
+  // ─── Invoice Detail ────────────────────────────────────────────────────
+
+  /**
+   * Gọi GDT detail API để lấy chi tiết hoá đơn (bao gồm items).
+   * Dùng khi cần lấy hdhhdvu / cttkhac.
+   */
+  async downloadInvoiceDetail(
+    invoice: GdtRawInvoice,
+    token: string,
+  ): Promise<Record<string, any> | null> {
+    const nbmst = invoice.nbmst;
+    const khmshdon = invoice.khmshdon;
+    const khhdon = invoice.khhdon;
+    const shdon = invoice.shdon;
+
+    if (!nbmst || shdon === undefined || !khmshdon || !khhdon) {
+      this.logger.warn(
+        `Thiếu thông tin để gọi detail API: nbmst=${nbmst}, shdon=${shdon}`,
+      );
+      return null;
+    }
+
+    const isSco =
+      invoice._sourceApi === 'sco-query' ||
+      String(khhdon).toUpperCase().startsWith('M');
+    const apiPath = isSco ? 'sco-query' : 'query';
+    const detailUrl =
+      `${this.GDT_BASE}/${apiPath}/invoices/detail?nbmst=${nbmst}&khhdon=${khhdon}&shdon=${shdon}&khmshdon=${khmshdon}`;
+
+    try {
+      const response = await this.fetchWithRetry(detailUrl, {
+        headers: this.buildHeaders(token),
+        timeout: 20000,
+      });
+
+      if (response.status === 200 && response.data) {
+        return response.data;
+      }
+      this.logger.warn(
+        `GDT detail API returned status ${response.status} for ${shdon}`,
+      );
+      return null;
+    } catch (error: any) {
+      this.logger.warn(
+        `Failed to fetch detail for invoice ${shdon}: ${error.message}`,
+      );
+      return null;
+    }
+  }
 }

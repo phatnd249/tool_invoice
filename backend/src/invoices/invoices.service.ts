@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GdtAuthService } from '../ai/gdt-auth.service';
-import { GdtClientService } from './gdt-client.service';
+import { GdtClientService, GdtRawInvoice } from './gdt-client.service';
 import { InvoicesPersistenceService } from './invoices-persistence.service';
 import { DownloadInvoicesDto } from './dto/download-invoices.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
@@ -50,7 +50,7 @@ export class InvoicesService {
       );
 
       // 3. Query GDT (cả standard + sco)
-      let invoices = await this.gdtClient.queryInvoices(
+      const invoices = await this.gdtClient.queryInvoices(
         new Date(startDate),
         new Date(endDate),
         token,
@@ -61,9 +61,12 @@ export class InvoicesService {
       const stats = await this.persistence.bulkUpsert(
         invoices,
         type,
-        'query', // source mặc định, từng record có _sourceApi riêng
+        'query',
         company.id,
       );
+
+      // 5. Fetch detail API để lấy items cho các invoice mới tạo
+      await this.fetchItemsForNewInvoices(invoices, token, type, company.id);
 
       results.push({
         type,
@@ -199,5 +202,66 @@ export class InvoicesService {
     }
 
     return { company, token };
+  }
+
+  // ─── Fetch Items from GDT Detail API ─────────────────────────────────────
+
+  /**
+   * Với mỗi invoice, gọi GDT detail API để lấy hdhhdvu/cttkhac và lưu vào InvoiceItem.
+   * Chỉ fetch cho các invoice mới tạo (không có items).
+   */
+  private async fetchItemsForNewInvoices(
+    invoices: GdtRawInvoice[],
+    token: string,
+    type: 'BUY' | 'SELL',
+    companyId: string,
+  ): Promise<void> {
+    let fetchedCount = 0;
+
+    for (const inv of invoices) {
+      try {
+        // Tìm invoice trong DB để kiểm tra đã có items chưa
+        const existing = await this.prisma.invoice.findFirst({
+          where: {
+            invoiceNumber: String(inv.shdon || ''),
+            invoiceSymbol: String(inv.khhdon || ''),
+            templateSymbol: String(inv.khmshdon || ''),
+            sellerTaxCode: String(inv.nbmst || ''),
+            buyerTaxCode: inv.nmmst ? String(inv.nmmst) : null,
+          },
+          include: { _count: { select: { items: true } } },
+        });
+
+        // Chỉ fetch detail nếu chưa có items
+        if (existing && existing._count.items === 0) {
+          const detailJson = await this.gdtClient.downloadInvoiceDetail(
+            inv,
+            token,
+          );
+          if (detailJson) {
+            await this.persistence.saveItemsFromDetail(
+              existing.id,
+              detailJson,
+            );
+            fetchedCount++;
+          }
+        }
+
+        // Delay để tránh rate limiting
+        if (fetchedCount > 0 && fetchedCount % 10 === 0) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      } catch (error: any) {
+        this.logger.warn(
+          `Failed to fetch detail for invoice ${inv.shdon}: ${error.message}`,
+        );
+      }
+    }
+
+    if (fetchedCount > 0) {
+      this.logger.log(
+        `Fetched items for ${fetchedCount}/${invoices.length} invoices (${type})`,
+      );
+    }
   }
 }

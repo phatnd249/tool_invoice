@@ -142,4 +142,43 @@ export class InvoicesPersistenceService {
     const parsed = Date.parse(dateStr);
     return isNaN(parsed) ? new Date() : new Date(parsed);
   }
+
+  // ─── Invoice Items ──────────────────────────────────────────────────────
+
+  /**
+   * Lưu items từ GDT detail API (hdhhdvu hoặc cttkhac).
+   * Xoá items cũ trước khi tạo mới.
+   */
+  async saveItemsFromDetail(
+    invoiceId: string,
+    detailJson: Record<string, any>,
+  ): Promise<void> {
+    const detailItems: any[] =
+      detailJson.hdhhdvu || detailJson.cttkhac || [];
+
+    if (detailItems.length === 0) return;
+
+    // Xoá items cũ
+    await this.prisma.invoiceItem.deleteMany({ where: { invoiceId } });
+
+    // Tạo items mới
+    await this.prisma.invoiceItem.createMany({
+      data: detailItems.map((item: any, idx: number) => ({
+        invoiceId,
+        lineNumber: idx + 1,
+        name: String(
+          item.ten || item.thdon || item.tchat || '',
+        ).trim(),
+        unit: String(item.dvtinh || '').trim() || null,
+        quantity: item.sluong != null ? Number(item.sluong) : null,
+        price: item.dgia != null ? Number(item.dgia) : null,
+        amount: Number(item.thtien) || 0,
+        taxRate: String(item.ltsuat || item.tsuat || '').trim() || null,
+      })),
+    });
+
+    this.logger.debug(
+      `Saved ${detailItems.length} items for invoice ${invoiceId}`,
+    );
+  }
 }
