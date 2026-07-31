@@ -222,6 +222,19 @@ export class GdtClientService {
           status === 429 ||
           (status >= 500 && status <= 599);
 
+        // Log response body cho lỗi 4xx (client error) để debug
+        if (status && status >= 400 && status < 500 && !isRetryable) {
+          const errBody = err.response?.data
+            ? (typeof err.response.data === 'string'
+                ? err.response.data
+                : JSON.stringify(err.response.data)
+              ).slice(0, 2000)
+            : '(empty)';
+          this.logger.error(
+            `GDT trả về HTTP ${status} (${err.config?.url || url}): ${errBody}`,
+          );
+        }
+
         if (i < retries && isRetryable) {
           this.logger.warn(
             `Request failed (${status || err.code}), retrying in ${delayMs}ms...`,
