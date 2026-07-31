@@ -193,7 +193,7 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
               <span className="text-muted-foreground">
                 {r.type === 'BUY' ? 'Mua vào' : 'Bán ra'}
               </span>
-              <span className="tabular-nums">
+              <span className="tabular-nums text-xs">
                 {r.totalQueried} hoá đơn
                 {r.created > 0 && (
                   <span className="text-green-600 dark:text-green-400">
@@ -215,6 +215,25 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
             <span>Tổng</span>
             <span className="tabular-nums">{result.totalSaved} hoá đơn đã lưu</span>
           </div>
+          {/* Items download stats */}
+          {result.results.some(r => r.itemsDownloaded > 0 || r.itemsFailed > 0) && (
+            <>
+              <Separator />
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                {result.results.map(r => (
+                  <div key={r.type} className="flex justify-between">
+                    <span>{r.type === 'BUY' ? 'Mua vào' : 'Bán ra'}: ZIP/XML</span>
+                    <span>
+                      <span className="text-green-600">{r.itemsDownloaded} thành công</span>
+                      {r.itemsFailed > 0 && (
+                        <span className="text-destructive">, {r.itemsFailed} lỗi</span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

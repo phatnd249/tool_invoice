@@ -174,6 +174,14 @@ model Invoice {
   // ── Raw GDT JSON (toàn bộ dữ liệu gốc) ──
   rawData            String?
 
+  // ── ZIP / XML paths ──
+  zipPath            String?
+  xmlPath            String?
+
+  // ── Download tracking ──
+  downloadStatus     String?   // null | "DOWNLOADED" | "PARSED" | "ERROR"
+  errorMessage       String?   // Lỗi khi tải ZIP hoặc parse XML
+
   // ── Relations ──
   companyId          String?
   company            Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)

@@ -4,10 +4,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { GdtAuthService } from '../ai/gdt-auth.service';
 import { GdtClientService, GdtRawInvoice } from './gdt-client.service';
 import { InvoicesPersistenceService } from './invoices-persistence.service';
+import { XmlParserService } from './xml-parser.service';
 import { DownloadInvoicesDto } from './dto/download-invoices.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
@@ -18,9 +21,11 @@ export class InvoicesService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
     private readonly gdtAuth: GdtAuthService,
     private readonly gdtClient: GdtClientService,
     private readonly persistence: InvoicesPersistenceService,
+    private readonly xmlParser: XmlParserService,
   ) {}
 
   // ─── Download ────────────────────────────────────────────────────────────
@@ -33,23 +38,30 @@ export class InvoicesService {
 
     // 2. Xác định loại cần tải
     const types: Array<'BUY' | 'SELL'> =
-      invoiceType === 'BOTH' ? ['BUY', 'SELL'] : [invoiceType as 'BUY' | 'SELL'];
+      invoiceType === 'BOTH'
+        ? ['BUY', 'SELL']
+        : [invoiceType as 'BUY' | 'SELL'];
 
     const results: Array<{
       type: string;
       totalQueried: number;
       created: number;
       updated: number;
+      itemsDownloaded: number;
+      itemsFailed: number;
     }> = [];
 
     let grandTotal = 0;
+
+    const invoicesBaseDir =
+      this.config.get('INVOICES_DIR') || './invoices';
 
     for (const type of types) {
       this.logger.log(
         `Downloading ${type} invoices for ${company.taxCode} (${startDate} → ${endDate})`,
       );
 
-      // 3. Query GDT (cả standard + sco)
+      // 3. Query GDT
       const invoices = await this.gdtClient.queryInvoices(
         new Date(startDate),
         new Date(endDate),
@@ -57,7 +69,7 @@ export class InvoicesService {
         type,
       );
 
-      // 4. Lưu vào DB
+      // 4. Lưu metadata vào DB
       const stats = await this.persistence.bulkUpsert(
         invoices,
         type,
@@ -65,19 +77,81 @@ export class InvoicesService {
         company.id,
       );
 
-      // 5. Fetch detail API để lấy items cho các invoice mới tạo
-      await this.fetchItemsForNewInvoices(invoices, token, type, company.id);
+      // 5. Tải ZIP + parse XML + lưu items cho từng invoice
+      const companyDir = this.sanitizeDirName(company.name);
+      const outputDir = path.join(
+        invoicesBaseDir,
+        companyDir,
+        type === 'SELL' ? 'BanRa' : 'MuaVao',
+      );
+
+      let itemsDownloaded = 0;
+      let itemsFailed = 0;
+
+      for (let i = 0; i < invoices.length; i++) {
+        const inv = invoices[i];
+        try {
+          this.logger.debug(
+            `[${i + 1}/${invoices.length}] Downloading ZIP for ${inv.shdon}...`,
+          );
+
+          // 5a. Tải ZIP
+          const { zipPath } = await this.gdtClient.downloadInvoiceZip(
+            inv,
+            token,
+            outputDir,
+          );
+
+          // 5b. Giải nén → XML
+          const xmlPath = this.xmlParser.extractXmlFromZip(
+            zipPath,
+            outputDir,
+          );
+
+          // 5c. Parse XML → items
+          const parsed = this.xmlParser.parseInvoiceXml(xmlPath);
+
+          // 5d. Lưu items + paths vào DB
+          await this.persistence.saveItemsFromZip(
+            inv,
+            type,
+            parsed.items,
+            zipPath,
+            xmlPath,
+          );
+
+          itemsDownloaded++;
+        } catch (error: any) {
+          itemsFailed++;
+          this.logger.warn(
+            `Failed to process invoice ${inv.shdon}: ${error.message}`,
+          );
+          // Lưu error message
+          await this.persistence.markError(
+            inv,
+            type,
+            error.message,
+          ).catch(() => {});
+        }
+
+        // Delay 500ms giữa các request
+        if (i < invoices.length - 1) {
+          await this.delay(500);
+        }
+      }
 
       results.push({
         type,
         totalQueried: invoices.length,
         ...stats,
+        itemsDownloaded,
+        itemsFailed,
       });
 
       grandTotal += stats.created + stats.updated;
     }
 
-    // 5. Cập nhật downloadCount
+    // 6. Cập nhật downloadCount
     if (grandTotal > 0) {
       await this.prisma.company.update({
         where: { id: company.id },
@@ -152,7 +226,10 @@ export class InvoicesService {
   async findOne(id: string) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
-      include: { items: true, company: { select: { id: true, name: true, taxCode: true } } },
+      include: {
+        items: true,
+        company: { select: { id: true, name: true, taxCode: true } },
+      },
     });
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
@@ -172,7 +249,6 @@ export class InvoicesService {
 
     let token = company.token;
 
-    // Kiểm tra token hết hạn
     if (!token || this.gdtAuth.isTokenExpired(token)) {
       if (company.loginMode !== 'AUTO') {
         throw new BadRequestException(
@@ -189,7 +265,6 @@ export class InvoicesService {
         company.lookupPassword,
       );
 
-      // Lưu token mới vào DB
       await this.prisma.company.update({
         where: { id: company.id },
         data: {
@@ -204,64 +279,16 @@ export class InvoicesService {
     return { company, token };
   }
 
-  // ─── Fetch Items from GDT Detail API ─────────────────────────────────────
+  // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  /**
-   * Với mỗi invoice, gọi GDT detail API để lấy hdhhdvu/cttkhac và lưu vào InvoiceItem.
-   * Chỉ fetch cho các invoice mới tạo (không có items).
-   */
-  private async fetchItemsForNewInvoices(
-    invoices: GdtRawInvoice[],
-    token: string,
-    type: 'BUY' | 'SELL',
-    companyId: string,
-  ): Promise<void> {
-    let fetchedCount = 0;
+  private sanitizeDirName(name: string): string {
+    return name
+      .replace(/[^a-zA-Z0-9À-ỹ\s]/g, '')
+      .replace(/\s+/g, '_')
+      .slice(0, 100);
+  }
 
-    for (const inv of invoices) {
-      try {
-        // Tìm invoice trong DB để kiểm tra đã có items chưa
-        const existing = await this.prisma.invoice.findFirst({
-          where: {
-            invoiceNumber: String(inv.shdon || ''),
-            invoiceSymbol: String(inv.khhdon || ''),
-            templateSymbol: String(inv.khmshdon || ''),
-            sellerTaxCode: String(inv.nbmst || ''),
-            buyerTaxCode: inv.nmmst ? String(inv.nmmst) : null,
-          },
-          include: { _count: { select: { items: true } } },
-        });
-
-        // Chỉ fetch detail nếu chưa có items
-        if (existing && existing._count.items === 0) {
-          const detailJson = await this.gdtClient.downloadInvoiceDetail(
-            inv,
-            token,
-          );
-          if (detailJson) {
-            await this.persistence.saveItemsFromDetail(
-              existing.id,
-              detailJson,
-            );
-            fetchedCount++;
-          }
-        }
-
-        // Delay để tránh rate limiting
-        if (fetchedCount > 0 && fetchedCount % 10 === 0) {
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-      } catch (error: any) {
-        this.logger.warn(
-          `Failed to fetch detail for invoice ${inv.shdon}: ${error.message}`,
-        );
-      }
-    }
-
-    if (fetchedCount > 0) {
-      this.logger.log(
-        `Fetched items for ${fetchedCount}/${invoices.length} invoices (${type})`,
-      );
-    }
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

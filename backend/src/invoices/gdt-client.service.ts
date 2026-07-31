@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface GdtRawInvoice {
   shdon: string;
@@ -237,6 +239,96 @@ export class GdtClientService {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Sinh mã trạng thái để đặt tên file ZIP.
+   * Copy từ code cũ: getStatusFileCode()
+   */
+  private getStatusFileCode(inv: {
+    khhdon?: string;
+    ttxly?: number;
+    tthai?: number;
+  }): string {
+    const khhdon = String(inv.khhdon || '').toUpperCase();
+    let baseCode = 'K';
+    if (khhdon.match(/^[1-6]?M/)) baseCode = 'M';
+    else if (khhdon.match(/^[1-6]?C/)) baseCode = 'C';
+    if (baseCode === 'K' && inv.ttxly === 5) baseCode = 'C';
+    if (baseCode === 'K' && inv.ttxly === 8) baseCode = 'M';
+
+    const statusMap: Record<number, string> = {
+      1: '', 2: 'TT', 3: 'DC', 4: 'BTT', 5: 'BDC', 6: 'HUY',
+    };
+    const invoiceCode =
+      inv.tthai != null ? (statusMap[inv.tthai] ?? '?') : '';
+
+    if (baseCode && invoiceCode) return `${baseCode}-${invoiceCode}`;
+    return baseCode || invoiceCode || 'K';
+  }
+
+  // ─── Invoice ZIP Download ───────────────────────────────────────────────
+
+  /**
+   * Tải file ZIP (XML) của một hoá đơn từ GDT export-xml API.
+   * Lưu vào outputDir và trả về đường dẫn file ZIP.
+   */
+  async downloadInvoiceZip(
+    invoice: GdtRawInvoice,
+    token: string,
+    outputDir: string,
+  ): Promise<{ zipPath: string }> {
+    const nbmst = invoice.nbmst;
+    const khmshdon = invoice.khmshdon;
+    const khhdon = invoice.khhdon;
+    const shdon = invoice.shdon;
+
+    if (!nbmst || shdon === undefined || !khmshdon || !khhdon) {
+      throw new Error(
+        `Thiếu thông tin hoá đơn (nbmst/shdon/khmshdon/khhdon) để tải ZIP`,
+      );
+    }
+
+    const isSco =
+      invoice._sourceApi === 'sco-query' ||
+      String(khhdon).toUpperCase().startsWith('M');
+    const apiPath = isSco ? 'sco-query' : 'query';
+    const exportUrl = `${this.GDT_BASE}/${apiPath}/invoices/export-xml?nbmst=${nbmst}&khhdon=${khhdon}&shdon=${shdon}&khmshdon=${khmshdon}`;
+
+    const statusCode = this.getStatusFileCode(invoice);
+    const taxCode = String(nbmst);
+    const invNum = String(shdon);
+    const zipFileName = `${taxCode}-${invNum}-${statusCode}.zip`;
+    const zipPath = path.join(outputDir, zipFileName);
+
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    this.logger.debug(`Downloading ZIP for invoice ${invNum}...`);
+
+    // Không retry khi tải ZIP (lỗi 500 là lỗi thực sự từ GDT)
+    const response = await this.fetchWithRetry(exportUrl, {
+      headers: this.buildHeaders(token),
+      responseType: 'arraybuffer',
+      timeout: 60000,
+      validateStatus: () => true,
+    }, 0);
+
+    if (response.status === 200) {
+      fs.writeFileSync(zipPath, Buffer.from(response.data));
+      this.logger.log(`Downloaded ZIP: ${zipPath}`);
+      return { zipPath };
+    }
+
+    // Parse error body
+    const responseBody = response.data
+      ? Buffer.from(response.data).toString('utf-8').slice(0, 2000)
+      : '(empty)';
+    this.logger.error(
+      `GDT returned ${response.status} for invoice ${invNum}: ${responseBody}`,
+    );
+    throw new Error(
+      `GDT trả về lỗi (HTTP ${response.status}) cho hoá đơn ${invNum}`,
+    );
   }
 
   // ─── Invoice Detail ────────────────────────────────────────────────────

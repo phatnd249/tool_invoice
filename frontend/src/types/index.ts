@@ -60,6 +60,8 @@ export interface DownloadResult {
     totalQueried: number
     created: number
     updated: number
+    itemsDownloaded: number
+    itemsFailed: number
   }>
   totalSaved: number
 }

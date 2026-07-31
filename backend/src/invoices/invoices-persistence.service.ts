@@ -146,39 +146,106 @@ export class InvoicesPersistenceService {
   // ─── Invoice Items ──────────────────────────────────────────────────────
 
   /**
-   * Lưu items từ GDT detail API (hdhhdvu hoặc cttkhac).
+   * Lưu items từ file ZIP đã parse (XML), kèm zip/xml paths.
    * Xoá items cũ trước khi tạo mới.
    */
-  async saveItemsFromDetail(
-    invoiceId: string,
-    detailJson: Record<string, any>,
+  async saveItemsFromZip(
+    inv: GdtRawInvoice,
+    type: 'BUY' | 'SELL',
+    items: Array<{
+      lineNumber?: string;
+      name: string;
+      unit?: string;
+      quantity?: number;
+      price?: number;
+      amount: number;
+      taxRate?: string;
+    }>,
+    zipPath: string,
+    xmlPath: string,
   ): Promise<void> {
-    const detailItems: any[] =
-      detailJson.hdhhdvu || detailJson.cttkhac || [];
+    const where = this.buildWhere(inv, type);
+    const invoice = await this.prisma.invoice.findFirst({ where });
+    if (!invoice) {
+      this.logger.warn(`Invoice not found for ${inv.shdon}, skipping items`);
+      return;
+    }
 
-    if (detailItems.length === 0) return;
+    await this.prisma.$transaction(async (tx) => {
+      // Xoá items cũ
+      await tx.invoiceItem.deleteMany({
+        where: { invoiceId: invoice.id },
+      });
 
-    // Xoá items cũ
-    await this.prisma.invoiceItem.deleteMany({ where: { invoiceId } });
+      // Tạo items mới
+      if (items.length > 0) {
+        await tx.invoiceItem.createMany({
+          data: items.map((item, idx) => ({
+            invoiceId: invoice.id,
+            lineNumber: item.lineNumber
+              ? Number(item.lineNumber)
+              : idx + 1,
+            name: item.name,
+            unit: item.unit || null,
+            quantity: item.quantity ?? null,
+            price: item.price ?? null,
+            amount: item.amount,
+            taxRate: item.taxRate || null,
+          })),
+        });
+      }
 
-    // Tạo items mới
-    await this.prisma.invoiceItem.createMany({
-      data: detailItems.map((item: any, idx: number) => ({
-        invoiceId,
-        lineNumber: idx + 1,
-        name: String(
-          item.ten || item.thdon || item.tchat || '',
-        ).trim(),
-        unit: String(item.dvtinh || '').trim() || null,
-        quantity: item.sluong != null ? Number(item.sluong) : null,
-        price: item.dgia != null ? Number(item.dgia) : null,
-        amount: Number(item.thtien) || 0,
-        taxRate: String(item.ltsuat || item.tsuat || '').trim() || null,
-      })),
+      // Cập nhật zip/xml paths + status
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          zipPath,
+          xmlPath,
+          downloadStatus: 'PARSED',
+          errorMessage: null,
+        },
+      });
     });
 
     this.logger.debug(
-      `Saved ${detailItems.length} items for invoice ${invoiceId}`,
+      `Saved ${items.length} items for invoice ${inv.shdon}`,
     );
+  }
+
+  /**
+   * Đánh dấu invoice bị lỗi khi tải ZIP hoặc parse XML.
+   */
+  async markError(
+    inv: GdtRawInvoice,
+    type: 'BUY' | 'SELL',
+    errorMessage: string,
+  ): Promise<void> {
+    const where = this.buildWhere(inv, type);
+    const invoice = await this.prisma.invoice.findFirst({ where });
+    if (!invoice) return;
+
+    await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { downloadStatus: 'ERROR', errorMessage },
+    });
+
+    this.logger.warn(
+      `Marked invoice ${inv.shdon} as ERROR: ${errorMessage.slice(0, 100)}`,
+    );
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────
+
+  private buildWhere(
+    inv: GdtRawInvoice,
+    _type: 'BUY' | 'SELL',
+  ): Prisma.InvoiceWhereInput {
+    return {
+      invoiceNumber: String(inv.shdon || '').trim(),
+      invoiceSymbol: String(inv.khhdon || '').trim(),
+      templateSymbol: String(inv.khmshdon || '').trim(),
+      sellerTaxCode: String(inv.nbmst || '').trim(),
+      buyerTaxCode: inv.nmmst ? String(inv.nmmst).trim() : null,
+    };
   }
 }
