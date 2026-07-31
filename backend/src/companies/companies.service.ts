@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CaptchaResolverService } from '../ai/captcha-resolver.service';
+import { MaSoThueService } from './masothue.service';
 import { ConfigService } from '@nestjs/config';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
@@ -32,6 +33,7 @@ export class CompaniesService {
     private readonly prisma: PrismaService,
     private readonly captchaResolver: CaptchaResolverService,
     private readonly config: ConfigService,
+    private readonly maSoThueService: MaSoThueService,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -315,112 +317,31 @@ export class CompaniesService {
   async syncCompanyInfo(id: string) {
     const company = await this.findOne(id);
 
-    // Try to fetch info from masothue.com
     try {
-      const info = await this.fetchMaSoThueInfo(company.taxCode);
+      const info = await this.maSoThueService.lookup(company.taxCode);
 
       return this.prisma.company.update({
         where: { id },
         data: {
-          name: info.name || company.name,
-          address: info.address,
-          taxAddress: info.taxAddress,
-          representative: info.representative,
-          phone: info.phone,
-          activeDate: info.activeDate,
-          managedBy: info.managedBy,
-          companyType: info.type,
-          status: info.status,
+          name: info.name !== 'Không xác định' ? info.name : company.name,
+          address: info.address !== 'Đang cập nhật' ? info.address : null,
+          taxAddress: info.taxAddress !== 'Đang cập nhật' ? info.taxAddress : null,
+          representative: info.representative !== 'Đang cập nhật' ? info.representative : null,
+          phone: info.phone !== 'Đang cập nhật' ? info.phone : null,
+          activeDate: info.activeDate !== 'Đang cập nhật' ? info.activeDate : null,
+          managedBy: info.managedBy !== 'Đang cập nhật' ? info.managedBy : null,
+          companyType: info.type !== 'Đang cập nhật' ? info.type : null,
+          status: info.status !== 'Đang cập nhật' ? info.status : null,
           lastSyncedAt: new Date(),
         },
       });
     } catch (error: any) {
-      throw new BadRequestException(
-        `Failed to sync company info: ${error.message}`,
-      );
-    }
-  }
-
-  /**
-   * Tra cứu thông tin doanh nghiệp từ masothue.com
-   * (copy logic từ source code cũ)
-   */
-  private async fetchMaSoThueInfo(taxCode: string): Promise<{
-    name?: string;
-    address?: string;
-    taxAddress?: string;
-    representative?: string;
-    phone?: string;
-    activeDate?: string;
-    managedBy?: string;
-    type?: string;
-    status?: string;
-  }> {
-    const url = `https://masothue.com/Search/?q=${taxCode}&type=auto`;
-
-    try {
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0',
-          Accept: 'text/html,application/xhtml+xml',
-        },
-        timeout: 15000,
-      });
-
-      const html: string = response.data;
-      const result: any = {};
-
-      // Parse the HTML to extract company info
-      // Các pattern tìm kiếm dựa trên cấu trúc HTML của masothue.com
-      const extract = (pattern: RegExp, html: string): string | undefined => {
-        const match = html.match(pattern);
-        return match ? match[1].trim() : undefined;
-      };
-
-      result.name = extract(
-        /<h1[^>]*class="[^"]*h1[^"]*"[^>]*>([^<]+)<\/h1>/i,
-        html,
-      );
-      result.address = extract(
-        /<td[^>]*>\s*Địa chỉ trụ sở chính\s*<\/td>\s*<td[^>]*>([^<]+)<\/td>/i,
-        html,
-      );
-      result.taxAddress = extract(
-        /<td[^>]*>\s*Địa chỉ thuế\s*<\/td>\s*<td[^>]*>([^<]+)<\/td>/i,
-        html,
-      );
-      result.representative = extract(
-        /<td[^>]*>\s*Người đại diện pháp luật\s*<\/td>\s*<td[^>]*>([^<]+)<\/td>/i,
-        html,
-      );
-      result.phone = extract(
-        /<td[^>]*>\s*Số điện thoại\s*<\/td>\s*<td[^>]*>([^<]+)<\/td>/i,
-        html,
-      );
-      result.activeDate = extract(
-        /<td[^>]*>\s*Ngày hoạt động\s*<\/td>\s*<td[^>]*>([^<]+)<\/td>/i,
-        html,
-      );
-      result.managedBy = extract(
-        /<td[^>]*>\s*Quản lý bởi\s*<\/td>\s*<td[^>]*>([^<]+)<\/td>/i,
-        html,
-      );
-      result.type = extract(
-        /<td[^>]*>\s*Loại hình pháp lý\s*<\/td>\s*<td[^>]*>([^<]+)<\/td>/i,
-        html,
-      );
-      result.status = extract(
-        /<td[^>]*>\s*Tình trạng\s*<\/td>\s*<td[^>]*>([^<]+)<\/td>/i,
-        html,
-      );
-
-      return result;
-    } catch (error: any) {
       this.logger.error(
-        `Error fetching MaSoThue info for ${taxCode}: ${error.message}`,
+        `Failed to sync company info for ${company.taxCode}: ${error.message}`,
       );
-      throw error;
+      throw new BadRequestException(
+        `Không thể đồng bộ thông tin doanh nghiệp: ${error.message}`,
+      );
     }
   }
 }
