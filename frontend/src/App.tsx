@@ -18,6 +18,7 @@ import { UsersPage } from '@/pages/users/UsersPage'
 import { RolesPage } from '@/pages/roles/RolesPage'
 import { PermissionsPage } from '@/pages/permissions/PermissionsPage'
 import { CompaniesPage } from '@/pages/companies/CompaniesPage'
+import { InvoicesPage } from '@/pages/invoices/InvoicesPage'
 
 // Error pages
 import { ForbiddenPage } from '@/pages/errors/ForbiddenPage'
@@ -75,6 +76,14 @@ function ProtectedRoutes() {
           element={
             <ProtectedRoute permission="company:read">
               <CompaniesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/invoices"
+          element={
+            <ProtectedRoute permission="invoice:read">
+              <InvoicesPage />
             </ProtectedRoute>
           }
         />

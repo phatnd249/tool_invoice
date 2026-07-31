@@ -27,6 +27,43 @@ export interface Company {
   updatedAt: string
 }
 
+export interface Invoice {
+  id: string
+  invoiceNumber: string
+  invoiceDate: string
+  templateSymbol: string
+  invoiceSymbol: string
+  sellerTaxCode: string
+  sellerName: string
+  buyerTaxCode: string | null
+  buyerName: string | null
+  totalBeforeTax: number | null
+  taxAmount: number | null
+  totalAmount: number
+  totalAmountInWords: string | null
+  invoiceStatus: number | null
+  processStatus: number | null
+  type: 'BUY' | 'SELL'
+  source: string | null
+  rawData: string | null
+  companyId: string | null
+  company?: Pick<Company, 'id' | 'name' | 'taxCode'>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DownloadResult {
+  company: { id: string; name: string; taxCode: string }
+  dateRange: { startDate: string; endDate: string }
+  results: Array<{
+    type: string
+    totalQueried: number
+    created: number
+    updated: number
+  }>
+  totalSaved: number
+}
+
 export interface Permission {
   id: string
   name: string
