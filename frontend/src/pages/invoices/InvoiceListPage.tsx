@@ -582,7 +582,7 @@ export function InvoiceListPage() {
         )}
 
         {/* ── Table ── */}
-        <div className="rounded-xl border bg-card shadow-sm">
+        <div className="rounded-xl border bg-card shadow-sm overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
