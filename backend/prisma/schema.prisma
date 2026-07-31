@@ -135,6 +135,75 @@ model Company {
   updatedAt      DateTime  @updatedAt
 
   creator        User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  invoices       Invoice[]
 
   @@map("companies")
+}
+
+model Invoice {
+  id                 String   @id @default(cuid())
+  invoiceNumber      String
+  invoiceDate        DateTime
+  templateSymbol     String
+  invoiceSymbol      String
+  paymentMethod      String?
+  currency           String   @default("VND")
+  exchangeRate       Float    @default(1.0)
+  taxAuthorityCode   String?
+  lookupCode         String?
+  invoiceName        String?
+
+  // Seller info
+  sellerName         String
+  sellerTaxCode      String
+  sellerAddress      String?
+  sellerPhone        String?
+
+  // Buyer info
+  buyerName          String
+  buyerTaxCode       String
+  buyerAddress       String?
+
+  // Financial summary
+  totalBeforeTax     Float
+  taxAmount          Float
+  totalAmount        Float
+  discountAmount     Float?
+  totalAmountInWords String?
+
+  // GDT status
+  invoiceStatus      Int?       // tthai: 1=mới, 2=thay thế, 3=điều chỉnh, 4=bị thay thế, 5=bị điều chỉnh, 6=đã huỷ
+  processStatus      Int?       // ttxly: trạng thái xử lý của CQT
+
+  // Type & source
+  type               String     // "BUY" | "SELL"
+  source             String?    // "query" | "sco-query"
+
+  // Relations
+  companyId          String?
+  company            Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  items              InvoiceItem[]
+
+  @@unique([invoiceNumber, invoiceSymbol, templateSymbol, sellerTaxCode, buyerTaxCode])
+  @@index([companyId, type, invoiceDate])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  lineNumber  Int?
+  name        String
+  unit        String?
+  quantity    Float?
+  price       Float?
+  amount      Float
+  taxRate     String?
+
+  @@map("invoice_items")
 }

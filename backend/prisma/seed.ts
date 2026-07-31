@@ -63,6 +63,9 @@ async function main() {
     { name: 'role:create', group: 'role', description: 'Tạo vai trò mới' },
     { name: 'role:update', group: 'role', description: 'Cập nhật vai trò' },
     { name: 'role:delete', group: 'role', description: 'Xoá vai trò' },
+
+    { name: 'invoice:read', group: 'invoice', description: 'Xem danh sách và chi tiết hoá đơn' },
+    { name: 'invoice:download', group: 'invoice', description: 'Tải hoá đơn từ Tổng cục Thuế' },
   ];
 
   const permissionIds: Record<string, string> = {};
