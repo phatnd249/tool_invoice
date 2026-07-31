@@ -190,11 +190,12 @@ export function CompaniesPage() {
               />
             </div>
             <Select
+              items={LOGIN_MODE_OPTIONS}
               value={loginModeFilter}
               onValueChange={(v) => { setLoginModeFilter(v ?? ''); setPage(1) }}
             >
               <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="Tất cả chế độ" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {LOGIN_MODE_OPTIONS.map(({ value, label }) => (

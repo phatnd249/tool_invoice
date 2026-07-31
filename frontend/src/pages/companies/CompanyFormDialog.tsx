@@ -24,6 +24,11 @@ import {
 } from '@/components/ui/dialog'
 import type { Company } from '@/types'
 
+const LOGIN_MODE_ITEMS = [
+  { label: 'Tự động (Gemini AI giải captcha)', value: 'AUTO' },
+  { label: 'Thủ công (tự nhập captcha)', value: 'MANUAL' },
+]
+
 interface CompanyFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -149,6 +154,7 @@ export function CompanyFormDialog({ open, onOpenChange, onSaved, editCompany }: 
           <div className="space-y-2">
             <Label htmlFor="loginMode">Chế độ đăng nhập</Label>
             <Select
+              items={LOGIN_MODE_ITEMS}
               value={form.loginMode}
               onValueChange={(v) => setForm((p) => ({ ...p, loginMode: v ?? 'AUTO' }))}
             >
@@ -156,8 +162,11 @@ export function CompanyFormDialog({ open, onOpenChange, onSaved, editCompany }: 
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="AUTO">Tự động (Gemini AI giải captcha)</SelectItem>
-                <SelectItem value="MANUAL">Thủ công (tự nhập captcha)</SelectItem>
+                {LOGIN_MODE_ITEMS.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
