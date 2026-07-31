@@ -319,15 +319,26 @@ export class GdtClientService {
       return { zipPath };
     }
 
-    // Parse error body
+    // Parse error body — cố gắng trích xuất message từ GDT
     const responseBody = response.data
       ? Buffer.from(response.data).toString('utf-8').slice(0, 2000)
       : '(empty)';
     this.logger.error(
       `GDT returned ${response.status} for invoice ${invNum}: ${responseBody}`,
     );
+
+    // Thử parse JSON từ response để lấy message chi tiết
+    let gdtMessage = '';
+    try {
+      const json = JSON.parse(responseBody);
+      gdtMessage = json.message || json.error || '';
+    } catch {
+      // Không phải JSON, dùng raw text
+      gdtMessage = responseBody.slice(0, 300);
+    }
+
     throw new Error(
-      `GDT trả về lỗi (HTTP ${response.status}) cho hoá đơn ${invNum}`,
+      gdtMessage || `GDT trả về lỗi (HTTP ${response.status}) cho hoá đơn ${invNum}`,
     );
   }
 
