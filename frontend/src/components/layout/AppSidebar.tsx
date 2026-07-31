@@ -7,6 +7,7 @@ import {
   User,
   LogOut,
   ChevronRight,
+  Building2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -36,6 +37,7 @@ const navItems = [
   { to: '/users', icon: Users, label: 'Users', permission: 'user:read' },
   { to: '/roles', icon: Shield, label: 'Roles', permission: 'role:read' },
   { to: '/permissions', icon: Key, label: 'Permissions', permission: 'permission:read' },
+  { to: '/companies', icon: Building2, label: 'Companies', permission: 'company:read' },
 ]
 
 export function AppSidebar() {

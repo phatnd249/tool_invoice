@@ -4,6 +4,29 @@ export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'BANNED'
 
 // ─── Entities ─────────────────────────────────────────────────────────────────
 
+export interface Company {
+  id: string
+  taxCode: string
+  name: string
+  lookupPassword: string
+  token: string | null
+  tokenExpiredAt: string | null
+  loginMode: 'AUTO' | 'MANUAL'
+  downloadCount: number
+  address: string | null
+  taxAddress: string | null
+  representative: string | null
+  phone: string | null
+  activeDate: string | null
+  managedBy: string | null
+  companyType: string | null
+  status: string | null
+  lastSyncedAt: string | null
+  createdBy: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Permission {
   id: string
   name: string
