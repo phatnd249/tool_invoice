@@ -151,6 +151,51 @@ function StatusBadge({ invoice }: { invoice: Invoice }) {
   )
 }
 
+// ─── Download Status Badge ─────────────────────────────────────────────────
+
+function DownloadStatusBadge({ invoice }: { invoice: Invoice }) {
+  if (!invoice.downloadStatus) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className="cursor-default border-yellow-300 bg-yellow-50 text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+            Chờ tải
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>Chưa tải file ZIP/XML</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  if (invoice.downloadStatus === 'PARSED') {
+    return (
+      <Badge variant="outline" className="border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+        Đã tải
+      </Badge>
+    )
+  }
+
+  if (invoice.downloadStatus === 'ERROR') {
+    const errMsg = invoice.errorMessage || 'Lỗi không xác định'
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="destructive" className="cursor-default">
+            Lỗi tải
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs whitespace-pre-wrap">
+          {errMsg}
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return (
+    <Badge variant="secondary">{invoice.downloadStatus}</Badge>
+  )
+}
+
 // ─── Sort Icon ───────────────────────────────────────────────────────────────
 
 function SortIcon({ field, currentField, order }: { field: string; currentField: string; order: 'asc' | 'desc' }) {
@@ -356,6 +401,7 @@ const SORTABLE_COLUMNS = [
   'invoiceNumber', 'invoiceDate', 'templateSymbol', 'invoiceSymbol',
   'sellerTaxCode', 'sellerName', 'buyerTaxCode', 'buyerName',
   'totalBeforeTax', 'taxAmount', 'totalAmount', 'invoiceStatus',
+  'downloadStatus',
 ]
 
 export function InvoiceListPage() {
@@ -588,15 +634,18 @@ export function InvoiceListPage() {
                 <TableHead className="cursor-pointer select-none text-center" onClick={() => handleSort('invoiceStatus')}>
                   TT <SortIcon field="invoiceStatus" currentField={sortBy} order={sortOrder} />
                 </TableHead>
+                <TableHead className="cursor-pointer select-none text-center" onClick={() => handleSort('downloadStatus')}>
+                  Tải <SortIcon field="downloadStatus" currentField={sortBy} order={sortOrder} />
+                </TableHead>
                 <TableHead className="text-center w-16">CT</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <SkeletonRow cols={20} />
+                <SkeletonRow cols={21} />
               ) : invoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={20} className="py-16 text-center text-muted-foreground">
+                  <TableCell colSpan={21} className="py-16 text-center text-muted-foreground">
                     <FileText className="size-10 mx-auto mb-3 stroke-[1.25]" />
                     <p className="font-medium">Không có hoá đơn nào</p>
                     <p className="text-sm mt-1">Thử đổi bộ lọc hoặc tải hoá đơn mới.</p>
@@ -639,6 +688,9 @@ export function InvoiceListPage() {
                     <TableCell className="text-right font-bold text-xs">{formatCurrency(inv.totalAmount)}</TableCell>
                     <TableCell className="text-center">
                       <StatusBadge invoice={inv} />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <DownloadStatusBadge invoice={inv} />
                     </TableCell>
                     <TableCell className="text-center">
                       <Button

@@ -46,6 +46,10 @@ export interface Invoice {
   type: 'BUY' | 'SELL'
   source: string | null
   rawData: string | null
+  zipPath: string | null
+  xmlPath: string | null
+  downloadStatus: string | null
+  errorMessage: string | null
   companyId: string | null
   company?: Pick<Company, 'id' | 'name' | 'taxCode'>
   createdAt: string

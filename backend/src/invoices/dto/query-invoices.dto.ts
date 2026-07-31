@@ -37,6 +37,8 @@ export class QueryInvoicesDto extends PaginationDto {
     'totalBeforeTax',
     'taxAmount',
     'totalAmount',
+    'invoiceStatus',
+    'downloadStatus',
     'createdAt',
   ])
   sortBy?: string = 'invoiceDate';
