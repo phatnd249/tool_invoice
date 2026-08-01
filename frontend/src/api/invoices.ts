@@ -34,7 +34,7 @@ export const invoicesApi = {
     apiClient.get<PaginatedResult<Invoice>>('/invoices', { params }),
 
   getOne: (id: string) =>
-    apiClient.get<Invoice>(`/invoices/${id}`),
+    apiClient.get<Invoice>(`/invoices/detail/${id}`),
 
   // ─── Task APIs ──────────────────────────────────────────
 
@@ -56,5 +56,5 @@ export const invoicesApi = {
 
   /** Lấy chi tiết một task */
   getTask: (taskId: string) =>
-    apiClient.get<DownloadTask>(`/invoices/tasks/${taskId}`),
+    apiClient.get<DownloadTask>(`/invoices/tasks/detail/${taskId}`),
 }

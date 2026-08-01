@@ -46,20 +46,22 @@ export class TasksController {
   }
 
   /**
+   * Chi tiết một task.
+   * Dùng path /detail/:taskId để tránh conflict với @Get() (danh sách).
+   */
+  @Get('detail/:taskId')
+  @RequirePermissions('invoice:read')
+  findOne(@Param('taskId') taskId: string) {
+    return this.downloadTaskService.findOne(taskId);
+  }
+
+  /**
    * Danh sách task (có phân trang + filter).
+   * PHẢI ĐẶT SAU CÙNG để không bắt các route cụ thể phía trên.
    */
   @Get()
   @RequirePermissions('invoice:read')
   findAll(@Query() query: QueryTasksDto) {
     return this.downloadTaskService.findAll(query);
-  }
-
-  /**
-   * Chi tiết một task.
-   */
-  @Get(':taskId')
-  @RequirePermissions('invoice:read')
-  findOne(@Param('taskId') taskId: string) {
-    return this.downloadTaskService.findOne(taskId);
   }
 }

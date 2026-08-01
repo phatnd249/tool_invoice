@@ -31,7 +31,7 @@ export class InvoicesController {
     return this.invoicesService.findAll(query);
   }
 
-  @Get(':id')
+  @Get('detail/:id')
   @RequirePermissions('invoice:read')
   findOne(@Param('id') id: string) {
     return this.invoicesService.findOne(id);

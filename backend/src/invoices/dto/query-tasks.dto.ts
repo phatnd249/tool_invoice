@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsIn, IsInt, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class QueryTasksDto {
   @IsOptional()
@@ -11,16 +12,23 @@ export class QueryTasksDto {
 
   @IsOptional()
   @IsString()
-  sortBy?: string = 'createdAt';
+  sortBy?: string;
 
   @IsOptional()
   @IsString()
   @IsIn(['asc', 'desc'])
-  sortOrder?: 'asc' | 'desc' = 'desc';
+  sortOrder?: 'asc' | 'desc';
 
   @IsOptional()
-  page?: number;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
 
   @IsOptional()
-  limit?: number;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
 }
