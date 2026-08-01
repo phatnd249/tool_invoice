@@ -71,17 +71,22 @@ export function CompanyAccordion({ company }: CompanyAccordionProps) {
       </CardHeader>
 
       {/* Body (expandable) */}
-      {expanded && (
+      {expanded && (() => {
+        const hasCompanyInfo = !!(company.address || company.phone || company.representative || company.status)
+        return (
         <CardContent className="border-t pt-4 pb-4 space-y-4">
           {/* Company info summary */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <InfoRow icon={MapPin} label="Địa chỉ" value={company.address} />
-            <InfoRow icon={Phone} label="Điện thoại" value={company.phone} />
-            <InfoRow icon={User} label="Đại diện" value={company.representative} />
-            <InfoRow icon={Activity} label="Tình trạng" value={company.status} />
-          </div>
-
-          <Separator />
+          {hasCompanyInfo && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <InfoRow icon={MapPin} label="Địa chỉ" value={company.address} />
+                <InfoRow icon={Phone} label="Điện thoại" value={company.phone} />
+                <InfoRow icon={User} label="Đại diện" value={company.representative} />
+                <InfoRow icon={Activity} label="Tình trạng" value={company.status} />
+              </div>
+              <Separator />
+            </>
+          )}
 
           {/* Download form */}
           <InvoiceDownloadForm
@@ -91,7 +96,8 @@ export function CompanyAccordion({ company }: CompanyAccordionProps) {
             }}
           />
         </CardContent>
-      )}
+        )
+      })()}
     </Card>
   )
 }
