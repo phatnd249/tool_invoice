@@ -9,6 +9,7 @@ import { GdtClientService } from './gdt-client.service';
 import { XmlParserService } from './xml-parser.service';
 import { PreviewService } from './preview.service';
 import { ExcelService } from './excel.service';
+import { PdfService } from './pdf.service';
 import { AuthModule } from '../auth/auth.module';
 import { AiModule } from '../ai/ai.module';
 
@@ -23,6 +24,7 @@ import { AiModule } from '../ai/ai.module';
     XmlParserService,
     PreviewService,
     ExcelService,
+    PdfService,
   ],
   exports: [InvoicesService, DownloadTaskService],
 })

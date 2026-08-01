@@ -175,6 +175,7 @@ model Invoice {
   // ── ZIP / XML paths ──
   zipPath            String?
   xmlPath            String?
+  pdfPath            String?
 
   // ── Download tracking ──
   downloadStatus     String?   // null | "DOWNLOADED" | "PARSED" | "ERROR"

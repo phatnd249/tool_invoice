@@ -159,12 +159,12 @@ export class InvoicesPersistenceService {
     }>,
     zipPath: string,
     xmlPath: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const where = this.buildWhere(inv, type);
     const invoice = await this.prisma.invoice.findFirst({ where });
     if (!invoice) {
       this.logger.warn(`Invoice not found for ${inv.shdon}, skipping items`);
-      return;
+      return '';
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -206,6 +206,8 @@ export class InvoicesPersistenceService {
     this.logger.debug(
       `Saved ${items.length} items for invoice ${inv.shdon}`,
     );
+
+    return invoice.id;
   }
 
   /**

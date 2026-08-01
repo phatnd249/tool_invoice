@@ -84,4 +84,10 @@ export const invoicesApi = {
       failedCount: number
       errors: Array<{ invoiceNumber: string; error: string }>
     }>('/invoices/retry-failed', { invoiceIds }),
+
+  /** Tải PDF của hoá đơn */
+  downloadPdf: (id: string) =>
+    apiClient.get(`/invoices/pdf/${id}`, {
+      responseType: 'blob',
+    }).then(res => res.data),
 }

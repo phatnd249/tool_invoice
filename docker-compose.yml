@@ -1,0 +1,8 @@
+services:
+  # Gotenberg - HTML to PDF conversion
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: gotenberg
+    restart: unless-stopped
+    ports:
+      - "3001:3000"

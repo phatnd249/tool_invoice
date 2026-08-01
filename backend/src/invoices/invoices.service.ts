@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { GdtAuthService } from '../ai/gdt-auth.service';
@@ -13,6 +14,7 @@ import { InvoicesPersistenceService } from './invoices-persistence.service';
 import { XmlParserService } from './xml-parser.service';
 import { PreviewService } from './preview.service';
 import { ExcelService } from './excel.service';
+import { PdfService } from './pdf.service';
 import { DownloadInvoicesDto } from './dto/download-invoices.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
@@ -30,6 +32,7 @@ export class InvoicesService {
     private readonly xmlParser: XmlParserService,
     private readonly previewService: PreviewService,
     private readonly excelService: ExcelService,
+    private readonly pdfService: PdfService,
   ) {}
 
   // ─── Download ────────────────────────────────────────────────────────────
@@ -278,6 +281,61 @@ export class InvoicesService {
       type: inv.type,
     }));
     return this.excelService.generateModule7Report(data);
+  }
+
+  // ─── PDF Download ──────────────────────────────────────────────────────
+
+  async downloadPdf(
+    id: string,
+  ): Promise<{ pdfPath: string; fileName: string }> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id },
+      include: { company: { select: { name: true, id: true } } },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    // Nếu đã có pdfPath và file tồn tại, trả luôn
+    if (invoice.pdfPath && fs.existsSync(invoice.pdfPath)) {
+      return {
+        pdfPath: invoice.pdfPath,
+        fileName: path.basename(invoice.pdfPath),
+      };
+    }
+
+    // Lấy HTML preview
+    await this.previewService.getPreviewHtml(id);
+    const cacheHtmlPath = this.previewService.getCachePath(id);
+
+    // Xác định thư mục lưu PDF (cùng thư mục ZIP)
+    const invoicesBaseDir =
+      this.config.get('INVOICES_DIR') || './invoices';
+    const companyDir = this.sanitizeDirName(
+      invoice.company?.name || 'unknown',
+    );
+    const pdfDir = path.join(
+      invoicesBaseDir,
+      companyDir,
+      invoice.type === 'SELL' ? 'BanRa' : 'MuaVao',
+    );
+
+    const pdfFileName = this.pdfService.getPdfFileName(invoice);
+    const pdfPath = await this.pdfService.getOrCreatePdf(
+      id,
+      cacheHtmlPath,
+      pdfDir,
+      pdfFileName,
+    );
+
+    // Cập nhật pdfPath vào DB
+    await this.prisma.invoice.update({
+      where: { id },
+      data: { pdfPath },
+    });
+
+    return { pdfPath, fileName: pdfFileName };
   }
 
   // ─── Retry Failed ──────────────────────────────────────────────────────

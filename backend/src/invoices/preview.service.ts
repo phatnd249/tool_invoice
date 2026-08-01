@@ -15,6 +15,13 @@ export class PreviewService {
   }
 
   /**
+   * Trả về đường dẫn file HTML cache của một invoice.
+   */
+  getCachePath(invoiceId: string): string {
+    return path.join(this.cacheDir, `${invoiceId}.html`);
+  }
+
+  /**
    * Lấy nội dung HTML preview của một invoice.
    * Ưu tiên cache, nếu chưa có thì giải nén từ ZIP và lưu cache.
    */

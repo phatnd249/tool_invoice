@@ -11,6 +11,8 @@ import { GdtAuthService } from '../ai/gdt-auth.service';
 import { GdtClientService, GdtRawInvoice } from './gdt-client.service';
 import { InvoicesPersistenceService } from './invoices-persistence.service';
 import { XmlParserService } from './xml-parser.service';
+import { PreviewService } from './preview.service';
+import { PdfService } from './pdf.service';
 import { ConfigService } from '@nestjs/config';
 import { PaginationDto, PaginatedResult, paginate } from '../common/dto/pagination.dto';
 import * as path from 'path';
@@ -134,6 +136,8 @@ export class DownloadTaskService {
     private readonly gdtClient: GdtClientService,
     private readonly persistence: InvoicesPersistenceService,
     private readonly xmlParser: XmlParserService,
+    private readonly previewService: PreviewService,
+    private readonly pdfService: PdfService,
   ) {
     // Tăng limit listener để hỗ trợ nhiều task cùng lúc
     this.eventEmitter.setMaxListeners(200);
@@ -477,7 +481,7 @@ export class DownloadTaskService {
             });
 
             // Lưu items + paths vào DB
-            await this.persistence.saveItemsFromZip(
+            const invoiceId = await this.persistence.saveItemsFromZip(
               inv,
               type,
               parsed.items,
@@ -486,6 +490,44 @@ export class DownloadTaskService {
             );
 
             itemsDownloaded++;
+
+            // Tạo PDF tự động sau khi tải ZIP thành công
+            if (invoiceId) {
+              try {
+                await this.previewService.getPreviewHtml(invoiceId);
+                const cacheHtmlPath =
+                  this.previewService.getCachePath(invoiceId);
+                const pdfFileName = this.pdfService.getPdfFileName({
+                  sellerTaxCode: inv.nbmst || '',
+                  buyerTaxCode: inv.nmmst || null,
+                  invoiceNumber: String(inv.shdon),
+                  invoiceSymbol: inv.khhdon || '',
+                  processStatus: inv.ttxly ?? null,
+                  invoiceStatus: inv.tthai ?? null,
+                  type,
+                });
+                const generatedPdfPath =
+                  await this.pdfService.getOrCreatePdf(
+                    invoiceId,
+                    cacheHtmlPath,
+                    outputDir,
+                    pdfFileName,
+                  );
+                await this.prisma.invoice.update({
+                  where: { id: invoiceId },
+                  data: { pdfPath: generatedPdfPath },
+                });
+                await this.appendLog(taskId, {
+                  time: new Date().toISOString(),
+                  message: `  ✓ PDF: ${path.basename(generatedPdfPath)}`,
+                  level: 'info',
+                });
+              } catch (pdfErr: any) {
+                this.logger.warn(
+                  `Task ${taskId}: Failed to auto-generate PDF for ${invNum}: ${pdfErr.message}`,
+                );
+              }
+            }
 
             // Báo thành công cho rate limit handler (reset nếu đủ lâu)
             rateLimitHandler.handleSuccess();

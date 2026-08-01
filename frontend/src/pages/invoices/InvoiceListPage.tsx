@@ -583,6 +583,22 @@ export function InvoiceListPage() {
     }
   }
 
+  const handleDownloadPdf = async (invoiceId: string) => {
+    try {
+      const blob = await invoicesApi.downloadPdf(invoiceId)
+      const url = window.URL.createObjectURL(blob as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `invoice.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    }
+  }
+
   const handleRetryFailed = async () => {
     const retryableIds = selectedIds.filter((id) => {
       const inv = invoices.find((i) => i.id === id)
@@ -897,6 +913,16 @@ export function InvoiceListPage() {
                           title="Xem trước hoá đơn"
                         >
                           <Eye className={`size-3.5 ${previewingId === inv.id ? 'animate-pulse' : ''}`} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
+                          onClick={() => handleDownloadPdf(inv.id)}
+                          title="Tải PDF"
+                          disabled={inv.downloadStatus !== 'PARSED'}
+                        >
+                          <FileText className="size-3.5" />
                         </Button>
                       </div>
                     </TableCell>

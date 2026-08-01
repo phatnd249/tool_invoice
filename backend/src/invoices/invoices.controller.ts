@@ -89,4 +89,17 @@ export class InvoicesController {
   retryFailed(@Body() body: { invoiceIds: string[] }) {
     return this.invoicesService.retryFailed(body.invoiceIds);
   }
+
+  @Get('pdf/:id')
+  @RequirePermissions('invoice:read')
+  async downloadPdf(@Param('id') id: string, @Res() res: Response) {
+    const { pdfPath, fileName } =
+      await this.invoicesService.downloadPdf(id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}"`,
+    );
+    res.sendFile(pdfPath);
+  }
 }
