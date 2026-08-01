@@ -8,6 +8,7 @@ import { InvoicesPersistenceService } from './invoices-persistence.service';
 import { GdtClientService } from './gdt-client.service';
 import { XmlParserService } from './xml-parser.service';
 import { PreviewService } from './preview.service';
+import { ExcelService } from './excel.service';
 import { AuthModule } from '../auth/auth.module';
 import { AiModule } from '../ai/ai.module';
 
@@ -21,6 +22,7 @@ import { AiModule } from '../ai/ai.module';
     GdtClientService,
     XmlParserService,
     PreviewService,
+    ExcelService,
   ],
   exports: [InvoicesService, DownloadTaskService],
 })

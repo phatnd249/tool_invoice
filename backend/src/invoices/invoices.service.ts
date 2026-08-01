@@ -12,6 +12,7 @@ import { GdtClientService, GdtRawInvoice } from './gdt-client.service';
 import { InvoicesPersistenceService } from './invoices-persistence.service';
 import { XmlParserService } from './xml-parser.service';
 import { PreviewService } from './preview.service';
+import { ExcelService } from './excel.service';
 import { DownloadInvoicesDto } from './dto/download-invoices.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
@@ -28,6 +29,7 @@ export class InvoicesService {
     private readonly persistence: InvoicesPersistenceService,
     private readonly xmlParser: XmlParserService,
     private readonly previewService: PreviewService,
+    private readonly excelService: ExcelService,
   ) {}
 
   // ─── Download ────────────────────────────────────────────────────────────
@@ -243,6 +245,71 @@ export class InvoicesService {
 
   async previewHtml(id: string): Promise<string> {
     return this.previewService.getPreviewHtml(id);
+  }
+
+  // ─── Export Excel ───────────────────────────────────────────────────────
+
+  async exportExcel(invoiceIds: string[]): Promise<Buffer> {
+    const invoices = await this.prisma.invoice.findMany({
+      where: { id: { in: invoiceIds } },
+      include: { items: true },
+    });
+
+    if (invoices.length === 0) {
+      throw new NotFoundException('No invoices found');
+    }
+
+    const data = invoices.map((inv) => this.mapToParsedInvoice(inv));
+    return this.excelService.generateInvoiceReport(data);
+  }
+
+  async exportModule7(invoiceIds: string[]): Promise<Buffer> {
+    const invoices = await this.prisma.invoice.findMany({
+      where: { id: { in: invoiceIds } },
+      include: { items: true },
+    });
+
+    if (invoices.length === 0) {
+      throw new NotFoundException('No invoices found');
+    }
+
+    const data = invoices.map((inv) => ({
+      ...this.mapToParsedInvoice(inv),
+      type: inv.type,
+    }));
+    return this.excelService.generateModule7Report(data);
+  }
+
+  private mapToParsedInvoice(inv: any) {
+    return {
+      xmlFile: inv.xmlPath ? path.basename(inv.xmlPath) : 'invoice.xml',
+      templateSymbol: inv.templateSymbol,
+      invoiceSymbol: inv.invoiceSymbol,
+      invoiceNumber: inv.invoiceNumber,
+      invoiceDate: inv.invoiceDate,
+      currency: 'VND',
+      exchangeRate: 1,
+      paymentMethod: undefined,
+      sellerName: inv.sellerName,
+      sellerTaxCode: inv.sellerTaxCode,
+      buyerName: inv.buyerName || '',
+      buyerTaxCode: inv.buyerTaxCode || '',
+      totalBeforeTax: inv.totalBeforeTax || 0,
+      taxAmount: inv.taxAmount || 0,
+      totalAmount: inv.totalAmount,
+      totalAmountInWords: inv.totalAmountInWords || undefined,
+      lookupCode: undefined,
+      taxAuthorityCode: undefined,
+      items: inv.items.map((item: any) => ({
+        lineNumber: item.lineNumber ? String(item.lineNumber) : undefined,
+        name: item.name,
+        unit: item.unit || undefined,
+        quantity: item.quantity || undefined,
+        price: item.price || undefined,
+        amount: item.amount,
+        taxRate: item.taxRate || undefined,
+      })),
+    };
   }
 
   // ─── Token Resolution ────────────────────────────────────────────────────

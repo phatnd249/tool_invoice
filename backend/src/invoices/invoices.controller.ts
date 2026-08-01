@@ -47,4 +47,40 @@ export class InvoicesController {
     res.setHeader('Cache-Control', 'no-store');
     res.send(html);
   }
+
+  @Post('export')
+  @RequirePermissions('invoice:read')
+  async exportExcel(
+    @Body() body: { invoiceIds: string[] },
+    @Res() res: Response,
+  ) {
+    const buffer = await this.invoicesService.exportExcel(body.invoiceIds);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=BaoCao_HoaDon_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    );
+    res.send(buffer);
+  }
+
+  @Post('export-module7')
+  @RequirePermissions('invoice:read')
+  async exportModule7(
+    @Body() body: { invoiceIds: string[] },
+    @Res() res: Response,
+  ) {
+    const buffer = await this.invoicesService.exportModule7(body.invoiceIds);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=BaoCao_TongHop_M7_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    );
+    res.send(buffer);
+  }
 }

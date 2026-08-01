@@ -8,6 +8,7 @@ import {
   ArrowUp,
   ArrowDown,
   FileText,
+  FileSpreadsheet,
   Eye,
   X,
 } from 'lucide-react'
@@ -436,6 +437,10 @@ export function InvoiceListPage() {
   // Preview
   const [previewingId, setPreviewingId] = useState<string | null>(null)
 
+  // Export
+  const [exporting, setExporting] = useState(false)
+  const [exportingModule7, setExportingModule7] = useState(false)
+
   // Debounce
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -515,6 +520,48 @@ export function InvoiceListPage() {
       toast.error(getErrorMessage(err))
     } finally {
       setPreviewingId(null)
+    }
+  }
+
+  // ── Export handlers ──
+
+  const handleExportExcel = async () => {
+    if (selectedIds.length === 0 || exporting) return
+    setExporting(true)
+    try {
+      const blob = await invoicesApi.exportExcel(selectedIds)
+      const url = window.URL.createObjectURL(blob as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `BaoCao_HoaDon_${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleExportModule7 = async () => {
+    if (selectedIds.length === 0 || exportingModule7) return
+    setExportingModule7(true)
+    try {
+      const blob = await invoicesApi.exportModule7(selectedIds)
+      const url = window.URL.createObjectURL(blob as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `BaoCao_TongHop_M7_${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setExportingModule7(false)
     }
   }
 
@@ -600,9 +647,30 @@ export function InvoiceListPage() {
 
         {/* ── Selected count ── */}
         {selectedIds.length > 0 && (
-          <p className="text-sm text-muted-foreground">
-            Đã chọn {selectedIds.length} hoá đơn
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-muted-foreground">
+              Đã chọn {selectedIds.length} hoá đơn
+            </p>
+            <Button
+              onClick={handleExportExcel}
+              disabled={exporting}
+              size="sm"
+              className="gap-1.5"
+            >
+              <FileSpreadsheet className="size-4" />
+              {exporting ? 'Đang xuất...' : 'Xuất Excel'}
+            </Button>
+            <Button
+              onClick={handleExportModule7}
+              disabled={exportingModule7}
+              size="sm"
+              variant="secondary"
+              className="gap-1.5"
+            >
+              <FileSpreadsheet className="size-4" />
+              {exportingModule7 ? 'Đang xuất M7...' : 'Báo Cáo M7'}
+            </Button>
+          </div>
         )}
 
         {/* ── Table ── */}

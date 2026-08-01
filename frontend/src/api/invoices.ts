@@ -64,4 +64,16 @@ export const invoicesApi = {
       responseType: 'text',
       params: { t: Date.now() },
     }).then(res => res.data),
+
+  /** Xuất báo cáo Excel từ danh sách invoice đã chọn */
+  exportExcel: (invoiceIds: string[]) =>
+    apiClient.post('/invoices/export', { invoiceIds }, {
+      responseType: 'blob',
+    }).then(res => res.data),
+
+  /** Xuất báo cáo Module 7 (Bảng kê 01/GTGT) */
+  exportModule7: (invoiceIds: string[]) =>
+    apiClient.post('/invoices/export-module7', { invoiceIds }, {
+      responseType: 'blob',
+    }).then(res => res.data),
 }
