@@ -128,6 +128,48 @@ export class PreviewService {
         }
       });
 
+      // Inject background image để PDF render đúng
+      try {
+        const bgPath = path.resolve(
+          this.cacheDir,
+          '../../../images/viewinvoice-bg.jpg',
+        );
+
+        if (fs.existsSync(bgPath)) {
+          const bgBase64 = fs
+            .readFileSync(bgPath)
+            .toString('base64');
+          const bgDataUri = `data:image/jpeg;base64,${bgBase64}`;
+          const styleInjection = `
+            <style>
+              @media print {
+                .main-page, .bg-container {
+                  background-image: url("${bgDataUri}") !important;
+                  background-color: transparent !important;
+                  border: 3px double rgba(145, 87, 21, 0.69) !important;
+                }
+              }
+              .main-page, .bg-container {
+                background-image: url("${bgDataUri}") !important;
+              }
+            </style>
+          `;
+          htmlContent = htmlContent.replace(
+            '</head>',
+            `${styleInjection}</head>`,
+          );
+        } else {
+          this.logger.warn(
+            `Background image not found at ${bgPath}`,
+          );
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          { err: err.message },
+          'Failed to inject custom background',
+        );
+      }
+
       return htmlContent;
     } catch (error: any) {
       this.logger.error(
