@@ -11,7 +11,10 @@ import {
   FileSpreadsheet,
   Eye,
   RotateCcw,
+  CalendarIcon,
 } from 'lucide-react'
+import { format } from 'date-fns'
+import type { DateRange } from 'react-day-picker'
 import { invoicesApi } from '@/api/invoices'
 import { companiesApi } from '@/api/companies'
 import { getErrorMessage } from '@/lib/apiClient'
@@ -57,6 +60,12 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
 import CompanyAutocomplete from '@/components/CompanyAutocomplete'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import type { Invoice, Company } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -424,6 +433,9 @@ export function InvoiceListPage() {
   const [search, setSearch] = useState('')
   const [companyFilter, setCompanyFilter] = useState('')
 
+  // Date range filter
+  const [dateRange, setDateRange] = useState<DateRange | undefined>()
+
   // Sort
   const [sortBy, setSortBy] = useState('invoiceDate')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -461,6 +473,8 @@ export function InvoiceListPage() {
         companyId: companyFilter || undefined,
         sortBy,
         sortOrder,
+        startDate: dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : undefined,
+        endDate: dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : undefined,
       })
       setInvoices(data.data)
       setTotal(data.total)
@@ -471,7 +485,7 @@ export function InvoiceListPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, limit, search, filterType, companyFilter, sortBy, sortOrder])
+  }, [page, limit, search, filterType, companyFilter, dateRange, sortBy, sortOrder])
 
   useEffect(() => { fetchInvoices() }, [fetchInvoices])
 
@@ -654,8 +668,8 @@ export function InvoiceListPage() {
           </Button>
         </div>
 
-        {/* ── Filters row 2: company ── */}
-        <div className="flex items-center gap-3">
+        {/* ── Filters row 2: company + date range ── */}
+        <div className="flex flex-wrap items-center gap-3">
           <div className="w-full max-w-sm">
             <CompanyAutocomplete
               companies={companies}
@@ -664,6 +678,49 @@ export function InvoiceListPage() {
               placeholder="Tìm theo tên hoặc MST..."
             />
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={`gap-2 ${dateRange?.from ? 'border-primary/50 text-primary' : ''}`}
+              >
+                <CalendarIcon className="size-4" />
+                {dateRange?.from ? (
+                  dateRange.to ? (
+                    <>
+                      {format(dateRange.from, 'dd/MM/yy')} →{' '}
+                      {format(dateRange.to, 'dd/MM/yy')}
+                    </>
+                  ) : (
+                    format(dateRange.from, 'dd/MM/yy')
+                  )
+                ) : (
+                  'Tất cả ngày'
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={dateRange}
+                onSelect={(range) => { setDateRange(range); setPage(1) }}
+                numberOfMonths={2}
+              />
+              {dateRange?.from && (
+                <div className="border-t px-3 py-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => { setDateRange(undefined); setPage(1) }}
+                  >
+                    Xoá bộ lọc ngày
+                  </Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
         </div>
 
         {/* ── Selected count ── */}
