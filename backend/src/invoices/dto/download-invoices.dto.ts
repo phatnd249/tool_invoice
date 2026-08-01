@@ -15,4 +15,9 @@ export class DownloadInvoicesDto {
   @IsString()
   @IsIn(['BUY', 'SELL', 'BOTH'])
   invoiceType?: string = 'BOTH';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SKIP', 'OVERWRITE', 'NEW_VERSION'])
+  overwriteMode?: string = 'SKIP';
 }

@@ -15,7 +15,13 @@ import { PreviewService } from './preview.service';
 import { PdfService } from './pdf.service';
 import { ConfigService } from '@nestjs/config';
 import { PaginationDto, PaginatedResult, paginate } from '../common/dto/pagination.dto';
+import {
+  findNextVersion,
+  getVersionedFilePath,
+  removeAllRelatedFiles,
+} from '../common/file-version';
 import * as path from 'path';
+import * as fs from 'fs';
 
 // ─── Rate Limit Handler ────────────────────────────────────────────────────
 
@@ -113,6 +119,7 @@ interface DownloadTaskParams {
   startDate: string;
   endDate: string;
   invoiceType?: string;
+  overwriteMode?: string;
 }
 
 interface QueryTasksParams extends PaginationDto {
@@ -420,6 +427,37 @@ export class DownloadTaskService {
         for (let i = 0; i < invoices.length; i++) {
           const inv = invoices[i];
           const invNum = String(inv.shdon);
+
+          // ── Overwrite logic ────────────────────────────────────
+          const overwriteMode =
+            (params.overwriteMode as string) || 'SKIP';
+          const statusCode = this.getStatusFileCode(inv);
+          const taxCode = String(inv.nbmst);
+          const zipFileName = `${taxCode}-${invNum}-${statusCode}.zip`;
+          const zipPath = path.join(outputDir, zipFileName);
+
+          if (overwriteMode === 'SKIP') {
+            if (
+              fs.existsSync(zipPath) &&
+              (fs.statSync(zipPath).size || 0) > 0
+            ) {
+              await this.appendLog(taskId, {
+                time: new Date().toISOString(),
+                message: `  ⏭ Bỏ qua ${invNum}: đã có file ZIP`,
+                level: 'info',
+              });
+              continue;
+            }
+          } else if (overwriteMode === 'OVERWRITE') {
+            removeAllRelatedFiles(zipPath);
+            await this.appendLog(taskId, {
+              time: new Date().toISOString(),
+              message: `  🔄 Ghi đè ${invNum}: đã xoá file cũ`,
+              level: 'info',
+            });
+          }
+          // NEW_VERSION: tiếp tục bình thường, zipPath sẽ được
+          // getVersionedFilePath xử lý khi tải thành công
 
           // ── Kiểm tra cooldown trước khi download ─────────────────
           if (rateLimitHandler.isInCooldown()) {
@@ -853,5 +891,27 @@ export class DownloadTaskService {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private getStatusFileCode(inv: {
+    khhdon?: string;
+    ttxly?: number;
+    tthai?: number;
+  }): string {
+    const khhdon = String(inv.khhdon || '').toUpperCase();
+    let baseCode = 'K';
+    if (khhdon.match(/^[1-6]?M/)) baseCode = 'M';
+    else if (khhdon.match(/^[1-6]?C/)) baseCode = 'C';
+    if (baseCode === 'K' && inv.ttxly === 5) baseCode = 'C';
+    if (baseCode === 'K' && inv.ttxly === 8) baseCode = 'M';
+
+    const statusMap: Record<number, string> = {
+      1: '', 2: 'TT', 3: 'DC', 4: 'BTT', 5: 'BDC', 6: 'HUY',
+    };
+    const invoiceCode =
+      inv.tthai != null ? (statusMap[inv.tthai] ?? '?') : '';
+
+    if (baseCode && invoiceCode) return `${baseCode}-${invoiceCode}`;
+    return baseCode || invoiceCode || 'K';
   }
 }

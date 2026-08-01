@@ -44,6 +44,7 @@ export const invoicesApi = {
     startDate: string
     endDate: string
     invoiceType?: string
+    overwriteMode?: string
   }) => apiClient.post<{ taskId: string }>('/invoices/tasks/download', data),
 
   /** Lấy task đang chạy của một company */
@@ -96,4 +97,16 @@ export const invoicesApi = {
     apiClient.get(`/invoices/zip/${id}`, {
       responseType: 'blob',
     }).then(res => res.data),
+
+  /** Kiểm tra hoá đơn đã tồn tại trong khoảng thời gian */
+  checkExisting: (data: {
+    companyId: string
+    startDate: string
+    endDate: string
+    invoiceType?: string
+  }) =>
+    apiClient.post<{ hasExisting: boolean; count: number }>(
+      '/invoices/check-existing',
+      data,
+    ),
 }

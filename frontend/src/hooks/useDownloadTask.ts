@@ -300,6 +300,7 @@ export function useDownloadTask(companyId: string): UseDownloadTaskReturn {
       startDate: string
       endDate: string
       invoiceType?: string
+      overwriteMode?: string
     }) => {
       // Reset state
       setProgress(0)

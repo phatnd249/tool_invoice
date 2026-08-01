@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import { Download, CalendarIcon, RotateCcw } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
 import { useDownloadTask } from '@/hooks/useDownloadTask'
+import { invoicesApi } from '@/api/invoices'
 import { getErrorMessage } from '@/lib/apiClient'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
@@ -23,6 +24,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { DownloadProgress } from './DownloadProgress'
+import OverwriteConfirmDialog, {
+  type OverwriteMode,
+} from '@/components/OverwriteConfirmDialog'
 import type { Company } from '@/types'
 
 const INVOICE_TYPE_ITEMS = [
@@ -48,6 +52,12 @@ export function InvoiceDownloadForm({
   })
   const [invoiceType, setInvoiceType] = useState('BOTH')
   const [loading, setLoading] = useState(false)
+
+  // Overwrite dialog
+  const [showOverwriteDialog, setShowOverwriteDialog] =
+    useState(false)
+  const [existingCount, setExistingCount] = useState(0)
+  const [isChecking, setIsChecking] = useState(false)
 
   const {
     status,
@@ -112,6 +122,32 @@ export function InvoiceDownloadForm({
       return
     }
 
+    setIsChecking(true)
+    try {
+      const { data } = await invoicesApi.checkExisting({
+        companyId: company.id,
+        startDate: format(dateRange.from, 'yyyy-MM-dd'),
+        endDate: format(dateRange.to, 'yyyy-MM-dd'),
+        invoiceType,
+      })
+
+      if (data.hasExisting) {
+        setExistingCount(data.count)
+        setShowOverwriteDialog(true)
+      } else {
+        doStartDownload()
+      }
+    } catch {
+      // API lỗi → vẫn cho tải bình thường
+      doStartDownload()
+    } finally {
+      setIsChecking(false)
+    }
+  }
+
+  const doStartDownload = async (overwriteMode?: string) => {
+    if (!dateRange.from || !dateRange.to) return
+
     setLoading(true)
     try {
       await startDownload({
@@ -119,12 +155,22 @@ export function InvoiceDownloadForm({
         startDate: format(dateRange.from, 'yyyy-MM-dd'),
         endDate: format(dateRange.to, 'yyyy-MM-dd'),
         invoiceType,
+        overwriteMode,
       })
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleOverwriteConfirm = (mode: OverwriteMode) => {
+    setShowOverwriteDialog(false)
+    if (mode === 'SKIP') {
+      toast.info('Đã bỏ qua tải hoá đơn.')
+      return
+    }
+    doStartDownload(mode)
   }
 
   const handleReset = () => {
@@ -238,8 +284,26 @@ export function InvoiceDownloadForm({
         className="w-full"
       >
         <Download className="size-4" />
-        {loading ? 'Đang tạo task...' : 'Tải hoá đơn'}
+        {loading || isChecking ? 'Đang tạo task...' : 'Tải hoá đơn'}
       </LoadingButton>
+
+      <OverwriteConfirmDialog
+        open={showOverwriteDialog}
+        onOpenChange={setShowOverwriteDialog}
+        companyName={company.name}
+        startDate={
+          dateRange.from
+            ? format(dateRange.from, 'dd/MM/yyyy')
+            : ''
+        }
+        endDate={
+          dateRange.to
+            ? format(dateRange.to, 'dd/MM/yyyy')
+            : ''
+        }
+        existingCount={existingCount}
+        onConfirm={handleOverwriteConfirm}
+      />
     </div>
   )
 }

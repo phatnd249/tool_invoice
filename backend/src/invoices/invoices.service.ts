@@ -35,6 +35,52 @@ export class InvoicesService {
     private readonly pdfService: PdfService,
   ) {}
 
+  // ─── Check Existing ───────────────────────────────────────────────────
+
+  async checkExisting(params: {
+    companyId: string;
+    startDate: string;
+    endDate: string;
+    invoiceType?: string;
+  }): Promise<{ hasExisting: boolean; count: number }> {
+    const {
+      companyId,
+      startDate,
+      endDate,
+      invoiceType = 'BOTH',
+    } = params;
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+    });
+    if (!company) throw new NotFoundException('Company not found');
+
+    const normalizedMst = company.taxCode.startsWith('0')
+      ? company.taxCode.slice(1)
+      : company.taxCode;
+
+    const types: string[] =
+      invoiceType === 'BOTH' ? ['BUY', 'SELL'] : [invoiceType];
+
+    const count = await this.prisma.invoice.count({
+      where: {
+        invoiceDate: {
+          gte: new Date(startDate),
+          lte: new Date(endDate),
+        },
+        type: { in: types },
+        OR: [
+          { sellerTaxCode: company.taxCode },
+          { sellerTaxCode: normalizedMst },
+          { buyerTaxCode: company.taxCode },
+          { buyerTaxCode: normalizedMst },
+        ],
+      },
+    });
+
+    return { hasExisting: count > 0, count };
+  }
+
   // ─── Download ────────────────────────────────────────────────────────────
 
   async downloadInvoices(dto: DownloadInvoicesDto) {

@@ -22,6 +22,20 @@ import { RequirePermissions } from '../auth/decorators/require-permissions.decor
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
+  @Post('check-existing')
+  @RequirePermissions('invoice:read')
+  checkExisting(
+    @Body()
+    body: {
+      companyId: string
+      startDate: string
+      endDate: string
+      invoiceType?: string
+    },
+  ) {
+    return this.invoicesService.checkExisting(body);
+  }
+
   @Post('download')
   @RequirePermissions('invoice:download')
   download(@Body() dto: DownloadInvoicesDto) {
