@@ -89,7 +89,7 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<div className="flex items-center gap-2" />}>
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-                B
+                HĐ
               </div>
               <span className="truncate font-semibold">Invoice Pro</span>
             </SidebarMenuButton>
