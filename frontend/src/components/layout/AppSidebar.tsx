@@ -10,6 +10,7 @@ import {
   Building2,
   FileText,
   ListTodo,
+  List,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -20,6 +21,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -33,15 +35,31 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
-const navItems = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', permission: null },
-  { to: '/profile', icon: User, label: 'Profile', permission: null },
-  { to: '/users', icon: Users, label: 'Users', permission: 'user:read' },
-  { to: '/roles', icon: Shield, label: 'Roles', permission: 'role:read' },
-  { to: '/permissions', icon: Key, label: 'Permissions', permission: 'permission:read' },
-  { to: '/companies', icon: Building2, label: 'Companies', permission: 'company:read' },
-  { to: '/invoices', icon: FileText, label: 'Invoices', permission: 'invoice:read' },
-  { to: '/invoices/tasks', icon: ListTodo, label: 'Download Tasks', permission: 'invoice:read' },
+const navGroups = [
+  {
+    label: 'Tổng quan',
+    items: [
+      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', permission: null },
+      { to: '/profile', icon: User, label: 'Profile', permission: null },
+    ],
+  },
+  {
+    label: 'Hoá đơn',
+    items: [
+      { to: '/invoices', icon: FileText, label: 'Tải hoá đơn', permission: 'invoice:read' },
+      { to: '/invoices/list', icon: List, label: 'Hoá đơn đã tải', permission: 'invoice:read' },
+      { to: '/invoices/tasks', icon: ListTodo, label: 'Lịch sử tải', permission: 'invoice:read' },
+    ],
+  },
+  {
+    label: 'Quản trị',
+    items: [
+      { to: '/users', icon: Users, label: 'Users', permission: 'user:read' },
+      { to: '/roles', icon: Shield, label: 'Roles', permission: 'role:read' },
+      { to: '/permissions', icon: Key, label: 'Permissions', permission: 'permission:read' },
+      { to: '/companies', icon: Building2, label: 'Companies', permission: 'company:read' },
+    ],
+  },
 ]
 
 export function AppSidebar() {
@@ -73,29 +91,32 @@ export function AppSidebar() {
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
                 B
               </div>
-              <span className="truncate font-semibold">Boilerplate</span>
+              <span className="truncate font-semibold">Invoice Pro</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems
-                .filter(({ permission }) => !permission || hasPermission(permission))
-                .map(({ to, icon: Icon, label }) => (
-                  <SidebarMenuItem key={to}>
-                    <SidebarMenuButton isActive={location.pathname === to} render={<NavLink to={to} />}>
-                      <Icon className="size-4" />
-                      <span>{label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {navGroups.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items
+                  .filter(({ permission }) => !permission || hasPermission(permission))
+                  .map(({ to, icon: Icon, label }) => (
+                    <SidebarMenuItem key={to}>
+                      <SidebarMenuButton isActive={location.pathname === to} render={<NavLink to={to} />}>
+                        <Icon className="size-4" />
+                        <span>{label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter>
