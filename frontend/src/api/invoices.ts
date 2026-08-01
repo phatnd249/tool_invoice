@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/apiClient'
-import type { Invoice, PaginatedResult, DownloadResult } from '@/types'
+import type { Invoice, PaginatedResult, DownloadResult, DownloadTask } from '@/types'
 
 export interface QueryInvoicesParams {
   page?: number
@@ -8,6 +8,15 @@ export interface QueryInvoicesParams {
   type?: string
   startDate?: string
   endDate?: string
+  companyId?: string
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+}
+
+export interface QueryTasksParams {
+  page?: number
+  limit?: number
+  status?: string
   companyId?: string
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
@@ -26,4 +35,26 @@ export const invoicesApi = {
 
   getOne: (id: string) =>
     apiClient.get<Invoice>(`/invoices/${id}`),
+
+  // ─── Task APIs ──────────────────────────────────────────
+
+  /** Tạo task tải hoá đơn */
+  createDownloadTask: (data: {
+    companyId: string
+    startDate: string
+    endDate: string
+    invoiceType?: string
+  }) => apiClient.post<{ taskId: string }>('/invoices/tasks/download', data),
+
+  /** Lấy task đang chạy của một company */
+  getActiveTask: (companyId: string) =>
+    apiClient.get<DownloadTask | null>(`/invoices/tasks/company/${companyId}`),
+
+  /** Lấy danh sách task */
+  getTasks: (params?: QueryTasksParams) =>
+    apiClient.get<PaginatedResult<DownloadTask>>('/invoices/tasks', { params }),
+
+  /** Lấy chi tiết một task */
+  getTask: (taskId: string) =>
+    apiClient.get<DownloadTask>(`/invoices/tasks/${taskId}`),
 }

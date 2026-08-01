@@ -18,13 +18,13 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { InvoiceDownloadForm } from './InvoiceDownloadForm'
-import type { Company, DownloadResult } from '@/types'
+import type { Company } from '@/types'
 
 interface CompanyAccordionProps {
   company: Company
 }
 
-function InfoRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value?: string | null }) {
+function InfoRow({ icon: Icon, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value?: string | null }) {
   if (!value) return null
   return (
     <div className="flex items-start gap-2 text-sm">
@@ -86,7 +86,7 @@ export function CompanyAccordion({ company }: CompanyAccordionProps) {
           {/* Download form */}
           <InvoiceDownloadForm
             company={company}
-            onDownloaded={(result: DownloadResult) => {
+            onDownloaded={() => {
               // silently track
             }}
           />

@@ -136,6 +136,7 @@ model Company {
 
   creator        User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   invoices       Invoice[]
+  downloadTasks  DownloadTask[]
 
   @@map("companies")
 }
@@ -208,4 +209,26 @@ model InvoiceItem {
   taxRate     String?
 
   @@map("invoice_items")
+}
+
+model DownloadTask {
+  id                String   @id @default(cuid())
+  companyId         String
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy         String?
+  status            String   @default("PENDING")
+  progress          Int      @default(0)
+  totalInvoices     Int      @default(0)
+  processedInvoices Int      @default(0)
+  invoiceType       String   @default("BOTH")
+  dateStart         String
+  dateEnd           String
+  logs              String   @default("[]")
+  result            String?
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([companyId, status])
+  @@map("download_tasks")
 }

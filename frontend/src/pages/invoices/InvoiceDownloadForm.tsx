@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
-import { Download, CalendarIcon } from 'lucide-react'
+import { Download, CalendarIcon, RotateCcw } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
-import { invoicesApi } from '@/api/invoices'
+import { useDownloadTask } from '@/hooks/useDownloadTask'
 import { getErrorMessage } from '@/lib/apiClient'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Calendar } from '@/components/ui/calendar'
 import {
   Popover,
@@ -23,7 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { Company, DownloadResult } from '@/types'
+import { DownloadProgress } from './DownloadProgress'
+import type { Company } from '@/types'
 
 const INVOICE_TYPE_ITEMS = [
   { label: 'Cả hai (mua vào & bán ra)', value: 'BOTH' },
@@ -33,10 +33,12 @@ const INVOICE_TYPE_ITEMS = [
 
 interface InvoiceDownloadFormProps {
   company: Company
-  onDownloaded: (result: DownloadResult) => void
+  onDownloaded?: (result: any) => void
 }
 
-export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFormProps) {
+export function InvoiceDownloadForm({
+  company,
+}: InvoiceDownloadFormProps) {
   const today = new Date()
   const lastMonth = new Date(Date.now() - 30 * 86400000)
 
@@ -46,7 +48,24 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
   })
   const [invoiceType, setInvoiceType] = useState('BOTH')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<DownloadResult | null>(null)
+
+  const {
+    status,
+    progress,
+    processed,
+    total,
+    currentInvoiceType,
+    logs,
+    result,
+    errorMessage,
+    startDownload,
+    reset,
+  } = useDownloadTask(company.id)
+
+  // Watch for done results
+  if (status === 'done' && result) {
+    // Only call onDownloaded once (onDownloaded will be called via the effect in parent)
+  }
 
   const tokenExpired = company.tokenExpiredAt
     ? new Date(company.tokenExpiredAt) < new Date()
@@ -94,19 +113,13 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
     }
 
     setLoading(true)
-    setResult(null)
     try {
-      const { data } = await invoicesApi.download({
+      await startDownload({
         companyId: company.id,
         startDate: format(dateRange.from, 'yyyy-MM-dd'),
         endDate: format(dateRange.to, 'yyyy-MM-dd'),
         invoiceType,
       })
-      setResult(data)
-      onDownloaded(data)
-      toast.success(
-        `Đã tải thành công ${data.totalSaved} hoá đơn cho ${company.name}`,
-      )
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -114,6 +127,48 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
     }
   }
 
+  const handleReset = () => {
+    reset()
+    setLoading(false)
+  }
+
+  // ── Render: Active task (running / connecting / done / error) ──────────
+  const isActive =
+    status === 'connecting' ||
+    status === 'running' ||
+    status === 'done' ||
+    status === 'error'
+
+  if (isActive) {
+    return (
+      <div className="space-y-3">
+        <DownloadProgress
+          status={status}
+          progress={progress}
+          processed={processed}
+          total={total}
+          currentInvoiceType={currentInvoiceType}
+          logs={logs}
+          result={result}
+          errorMessage={errorMessage}
+        />
+
+        {(status === 'done' || status === 'error') && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={handleReset}
+          >
+            <RotateCcw className="size-4" />
+            Tải lại
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  // ── Render: Idle form ──────────────────────────────────────────────────
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -144,6 +199,7 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
               selected={dateRange}
               onSelect={setDateRange}
               defaultMonth={dateRange.from || today}
+              required={true}
               numberOfMonths={2}
             />
           </PopoverContent>
@@ -182,60 +238,8 @@ export function InvoiceDownloadForm({ company, onDownloaded }: InvoiceDownloadFo
         className="w-full"
       >
         <Download className="size-4" />
-        {loading ? 'Đang tải...' : 'Tải hoá đơn'}
+        {loading ? 'Đang tạo task...' : 'Tải hoá đơn'}
       </LoadingButton>
-
-      {/* Result summary */}
-      {result && (
-        <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
-          {result.results.map((r) => (
-            <div key={r.type} className="flex items-center justify-between">
-              <span className="text-muted-foreground">
-                {r.type === 'BUY' ? 'Mua vào' : 'Bán ra'}
-              </span>
-              <span className="tabular-nums text-xs">
-                {r.totalQueried} hoá đơn
-                {r.created > 0 && (
-                  <span className="text-green-600 dark:text-green-400">
-                    {' '}
-                    (+{r.created} mới)
-                  </span>
-                )}
-                {r.updated > 0 && (
-                  <span className="text-muted-foreground">
-                    {' '}
-                    ({r.updated} cập nhật)
-                  </span>
-                )}
-              </span>
-            </div>
-          ))}
-          <Separator />
-          <div className="flex items-center justify-between font-semibold">
-            <span>Tổng</span>
-            <span className="tabular-nums">{result.totalSaved} hoá đơn đã lưu</span>
-          </div>
-          {/* Items download stats */}
-          {result.results.some(r => r.itemsDownloaded > 0 || r.itemsFailed > 0) && (
-            <>
-              <Separator />
-              <div className="text-xs text-muted-foreground space-y-0.5">
-                {result.results.map(r => (
-                  <div key={r.type} className="flex justify-between">
-                    <span>{r.type === 'BUY' ? 'Mua vào' : 'Bán ra'}: ZIP/XML</span>
-                    <span>
-                      <span className="text-green-600">{r.itemsDownloaded} thành công</span>
-                      {r.itemsFailed > 0 && (
-                        <span className="text-destructive">, {r.itemsFailed} lỗi</span>
-                      )}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
     </div>
   )
 }

@@ -129,3 +129,34 @@ export interface ApiError {
   statusCode: number
   error?: string
 }
+
+// ─── Task Status ─────────────────────────────────────────────────────────────
+
+export type TaskStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'ERROR'
+
+export type DownloadStatus = 'idle' | 'connecting' | 'running' | 'done' | 'error'
+
+export interface LogEntry {
+  time: string
+  message: string
+  level: 'info' | 'warn' | 'error'
+}
+
+export interface DownloadTask {
+  id: string
+  companyId: string
+  company?: Pick<Company, 'id' | 'name' | 'taxCode'>
+  createdBy: string | null
+  status: TaskStatus
+  progress: number
+  totalInvoices: number
+  processedInvoices: number
+  invoiceType: string
+  dateStart: string
+  dateEnd: string
+  logs: LogEntry[]
+  result: DownloadResult | null
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+}

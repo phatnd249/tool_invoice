@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Building2,
   FileText,
+  ListTodo,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -40,6 +41,7 @@ const navItems = [
   { to: '/permissions', icon: Key, label: 'Permissions', permission: 'permission:read' },
   { to: '/companies', icon: Building2, label: 'Companies', permission: 'company:read' },
   { to: '/invoices', icon: FileText, label: 'Invoices', permission: 'invoice:read' },
+  { to: '/invoices/tasks', icon: ListTodo, label: 'Download Tasks', permission: 'invoice:read' },
 ]
 
 export function AppSidebar() {
