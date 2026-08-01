@@ -9,6 +9,7 @@ import {
   ArrowDown,
   FileText,
   FileSpreadsheet,
+  FileArchive,
   Eye,
   RotateCcw,
   CalendarIcon,
@@ -599,6 +600,22 @@ export function InvoiceListPage() {
     }
   }
 
+  const handleDownloadZip = async (invoiceId: string) => {
+    try {
+      const blob = await invoicesApi.downloadZip(invoiceId)
+      const url = window.URL.createObjectURL(blob as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `invoice.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    }
+  }
+
   const handleRetryFailed = async () => {
     const retryableIds = selectedIds.filter((id) => {
       const inv = invoices.find((i) => i.id === id)
@@ -838,7 +855,7 @@ export function InvoiceListPage() {
                 <TableHead className="cursor-pointer select-none text-center" onClick={() => handleSort('downloadStatus')}>
                   Tải <SortIcon field="downloadStatus" currentField={sortBy} order={sortOrder} />
                 </TableHead>
-                <TableHead className="text-center w-16">H.động</TableHead>
+                <TableHead className="text-center w-16">Hành động</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -923,6 +940,16 @@ export function InvoiceListPage() {
                           disabled={inv.downloadStatus !== 'PARSED'}
                         >
                           <FileText className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
+                          onClick={() => handleDownloadZip(inv.id)}
+                          title="Tải ZIP"
+                          disabled={!inv.zipPath}
+                        >
+                          <FileArchive className="size-3.5" />
                         </Button>
                       </div>
                     </TableCell>

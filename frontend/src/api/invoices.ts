@@ -90,4 +90,10 @@ export const invoicesApi = {
     apiClient.get(`/invoices/pdf/${id}`, {
       responseType: 'blob',
     }).then(res => res.data),
+
+  /** Tải ZIP của hoá đơn */
+  downloadZip: (id: string) =>
+    apiClient.get(`/invoices/zip/${id}`, {
+      responseType: 'blob',
+    }).then(res => res.data),
 }

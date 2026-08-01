@@ -104,4 +104,18 @@ export class InvoicesController {
     );
     res.sendFile(absolutePath);
   }
+
+  @Get('zip/:id')
+  @RequirePermissions('invoice:read')
+  async downloadZip(@Param('id') id: string, @Res() res: Response) {
+    const { zipPath, fileName } =
+      await this.invoicesService.getZipPath(id);
+    const absolutePath = path.resolve(zipPath);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}"`,
+    );
+    res.sendFile(absolutePath);
+  }
 }

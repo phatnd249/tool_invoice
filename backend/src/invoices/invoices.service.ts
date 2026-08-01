@@ -338,6 +338,27 @@ export class InvoicesService {
     return { pdfPath, fileName: pdfFileName };
   }
 
+  async getZipPath(
+    id: string,
+  ): Promise<{ zipPath: string; fileName: string }> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    if (!invoice.zipPath || !fs.existsSync(invoice.zipPath)) {
+      throw new NotFoundException('ZIP file not found');
+    }
+
+    return {
+      zipPath: invoice.zipPath,
+      fileName: path.basename(invoice.zipPath),
+    };
+  }
+
   // ─── Retry Failed ──────────────────────────────────────────────────────
 
   async retryFailed(invoiceIds: string[]): Promise<{
