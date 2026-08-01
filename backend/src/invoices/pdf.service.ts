@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import FormData from 'form-data';
 import axios from 'axios';
 import { PreviewService } from './preview.service';
+import { getInvoiceFileStatusCode } from '../common/invoice-utils';
 
 @Injectable()
 export class PdfService {
@@ -101,36 +102,12 @@ export class PdfService {
             invoice.buyerTaxCode ||
             'UNKNOWN');
 
-    const statusFileCode = this.getStatusFileCode({
+    const statusFileCode = getInvoiceFileStatusCode({
       khhdon: invoice.invoiceSymbol,
       ttxly: invoice.processStatus ?? undefined,
       tthai: invoice.invoiceStatus ?? undefined,
     });
 
     return `${taxCode}-${invoice.invoiceNumber}-${statusFileCode}.pdf`;
-  }
-
-  // ── Helper ──
-
-  private getStatusFileCode(inv: {
-    khhdon?: string;
-    ttxly?: number;
-    tthai?: number;
-  }): string {
-    const khhdon = String(inv.khhdon || '').toUpperCase();
-    let baseCode = 'K';
-    if (khhdon.match(/^[1-6]?M/)) baseCode = 'M';
-    else if (khhdon.match(/^[1-6]?C/)) baseCode = 'C';
-    if (baseCode === 'K' && inv.ttxly === 5) baseCode = 'C';
-    if (baseCode === 'K' && inv.ttxly === 8) baseCode = 'M';
-
-    const statusMap: Record<number, string> = {
-      1: '', 2: 'TT', 3: 'DC', 4: 'BTT', 5: 'BDC', 6: 'HUY',
-    };
-    const invoiceCode =
-      inv.tthai != null ? (statusMap[inv.tthai] ?? '?') : '';
-
-    if (baseCode && invoiceCode) return `${baseCode}-${invoiceCode}`;
-    return baseCode || invoiceCode || 'K';
   }
 }

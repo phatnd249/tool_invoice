@@ -1,0 +1,52 @@
+// ─── Shared Invoice Utilities ───────────────────────────────────────────────
+// Dùng chung cho toàn bộ invoice module. Pure functions, không dependency.
+
+/**
+ * Sinh mã trạng thái file (K/C/M kèm trạng thái) dùng đặt tên file ZIP/XML/PDF.
+ *
+ * Logic:
+ * - K: hoá đơn thông thường (mặc định)
+ * - M: hoá đơn máy tính tiền (kí hiệu bắt đầu bằng M)
+ * - C: hoá đơn có mã (kí hiệu bắt đầu bằng C, hoặc ttxly=5)
+ *
+ * Kết hợp với invoice status: TT (thay thế), DC (điều chỉnh), BTT (bị thay thế), ...
+ */
+export function getInvoiceFileStatusCode(inv: {
+  khhdon?: string;
+  ttxly?: number;
+  tthai?: number;
+}): string {
+  const khhdon = String(inv.khhdon || '').toUpperCase();
+  let baseCode = 'K';
+  if (khhdon.match(/^[1-6]?M/)) baseCode = 'M';
+  else if (khhdon.match(/^[1-6]?C/)) baseCode = 'C';
+  if (baseCode === 'K' && inv.ttxly === 5) baseCode = 'C';
+  if (baseCode === 'K' && inv.ttxly === 8) baseCode = 'M';
+
+  const statusMap: Record<number, string> = {
+    1: '', 2: 'TT', 3: 'DC', 4: 'BTT', 5: 'BDC', 6: 'HUY',
+  };
+  const invoiceCode =
+    inv.tthai != null ? (statusMap[inv.tthai] ?? '?') : '';
+
+  if (baseCode && invoiceCode) return `${baseCode}-${invoiceCode}`;
+  return baseCode || invoiceCode || 'K';
+}
+
+/**
+ * Làm sạch tên thư mục: bỏ ký tự đặc biệt, thay whitespace bằng underscore.
+ * Giới hạn 100 ký tự.
+ */
+export function sanitizeDirName(name: string): string {
+  return name
+    .replace(/[^a-zA-Z0-9À-ỹ\s]/g, '')
+    .replace(/\s+/g, '_')
+    .slice(0, 100);
+}
+
+/**
+ * Delay async với Promise.
+ */
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

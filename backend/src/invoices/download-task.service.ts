@@ -7,7 +7,6 @@ import {
 import { EventEmitter } from 'events';
 import { Observable } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { GdtAuthService } from '../ai/gdt-auth.service';
 import { GdtClientService, GdtRawInvoice } from './gdt-client.service';
 import { InvoicesPersistenceService } from './invoices-persistence.service';
 import { XmlParserService } from './xml-parser.service';
@@ -20,6 +19,9 @@ import {
   getVersionedFilePath,
   removeAllRelatedFiles,
 } from '../common/file-version';
+import { sanitizeDirName, delay, getInvoiceFileStatusCode } from '../common/invoice-utils';
+import { TokenResolverService } from '../common/token-resolver.service';
+import { InvoiceDownloaderService } from './invoice-downloader.service';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -134,13 +136,13 @@ interface QueryTasksParams extends PaginationDto {
 @Injectable()
 export class DownloadTaskService {
   private readonly logger = new Logger(DownloadTaskService.name);
-  private _currentVersion = 0;
   private readonly eventEmitter = new EventEmitter();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
-    private readonly gdtAuth: GdtAuthService,
+    private readonly tokenResolver: TokenResolverService,
+    private readonly downloader: InvoiceDownloaderService,
     private readonly gdtClient: GdtClientService,
     private readonly persistence: InvoicesPersistenceService,
     private readonly xmlParser: XmlParserService,
@@ -340,7 +342,7 @@ export class DownloadTaskService {
       });
 
       // ── Resolve company + token ──────────────────────────────────────
-      const { company, token } = await this.resolveCompanyAndToken(companyId, taskId);
+      const { company, token } = await this.tokenResolver.resolve(companyId);
 
       // ── Xác định loại cần tải ────────────────────────────────────────
       const types: Array<'BUY' | 'SELL'> =
@@ -413,7 +415,7 @@ export class DownloadTaskService {
         });
 
         // Tải ZIP + parse XML cho từng invoice
-        const companyDir = this.sanitizeDirName(company.name);
+        const companyDir = sanitizeDirName(company.name);
         const typeDir =
           type === 'SELL' ? 'BanRa' : 'MuaVao';
 
@@ -426,20 +428,20 @@ export class DownloadTaskService {
           const inv = invoices[i];
           const invNum = String(inv.shdon);
 
-          // ── Tính outputDir theo tháng của hoá đơn ─────────────
+          // ── Overwrite pre-check ────────────────────────────────
+          const overwriteMode =
+            (params.overwriteMode as string) || 'SKIP';
+          let currentVersion = 0;
+
           const invDate = new Date(inv.tdlap);
-          const monthDir = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`;
           const outputDir = path.join(
             invoicesBaseDir,
             companyDir,
             typeDir,
-            monthDir,
+            `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`,
           );
 
-          // ── Overwrite logic ────────────────────────────────────
-          const overwriteMode =
-            (params.overwriteMode as string) || 'SKIP';
-          const statusCode = this.getStatusFileCode(inv);
+          const statusCode = getInvoiceFileStatusCode(inv);
           const taxCode = String(inv.nbmst);
           const baseFileName = `${taxCode}-${invNum}-${statusCode}`;
           const zipFileName = `${baseFileName}.zip`;
@@ -465,25 +467,20 @@ export class DownloadTaskService {
               level: 'info',
             });
           } else if (overwriteMode === 'NEW_VERSION') {
-            // Tìm version tiếp theo nếu file đã tồn tại
             if (
               fs.existsSync(zipPath) &&
               (fs.statSync(zipPath).size || 0) > 0
             ) {
-              const version = findNextVersion(zipPath);
-              this._currentVersion = version;
+              currentVersion = findNextVersion(zipPath);
               await this.appendLog(taskId, {
                 time: new Date().toISOString(),
-                message: `  📋 Tạo bản sao v${version} cho ${invNum}`,
+                message: `  📋 Tạo bản sao v${currentVersion} cho ${invNum}`,
                 level: 'info',
               });
-            } else {
-              this._currentVersion = 0;
             }
           }
-          // ── End overwrite logic ────────────────────────────────
 
-          // ── Kiểm tra cooldown trước khi download ─────────────────
+          // ── Kiểm tra cooldown trước khi download ──────────────
           if (rateLimitHandler.isInCooldown()) {
             const waitMs = rateLimitHandler.getRemainingCooldown();
             await this.appendLog(taskId, {
@@ -491,13 +488,12 @@ export class DownloadTaskService {
               message: `⏳ Rate limit: đang tạm dừng ${Math.round(waitMs / 1000)}s trước khi tiếp tục...`,
               level: 'warn',
             });
-            await this.delay(waitMs);
+            await delay(waitMs);
           }
 
           try {
             // Progress
             const progress = Math.round(((i + 1) / invoices.length) * 100);
-            const message = `Đang tải hoá đơn ${invNum} (${i + 1}/${invoices.length})...`;
 
             this.emit(taskId, {
               type: 'progress',
@@ -505,7 +501,7 @@ export class DownloadTaskService {
               processed: i + 1,
               total: invoices.length,
               invoiceType: type,
-              message,
+              message: `Đang tải hoá đơn ${invNum} (${i + 1}/${invoices.length})...`,
             });
 
             await this.appendLog(taskId, {
@@ -514,107 +510,42 @@ export class DownloadTaskService {
               level: 'info',
             });
 
-            // Tải ZIP
-            const { zipPath: downloadedZipPath } =
-              await this.gdtClient.downloadInvoiceZip(
-                inv,
-                token,
-                outputDir,
-              );
+            // Tải ZIP + parse + save + PDF (dùng chung downloader)
+            const result = await this.downloader.downloadSingleInvoice({
+              invoice: inv,
+              token,
+              type,
+              companyName: company.name,
+              overwriteMode: overwriteMode as 'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
+              currentVersion,
+            });
 
-            // ── NEW_VERSION: đổi tên file ZIP nếu cần ──────────
-            let finalZipPath = downloadedZipPath;
-            if (
-              overwriteMode === 'NEW_VERSION' &&
-              this._currentVersion > 0
-            ) {
-              const versionedZipPath = getVersionedFilePath(
-                zipPath,
-                this._currentVersion,
-              );
-              fs.renameSync(downloadedZipPath, versionedZipPath);
-              finalZipPath = versionedZipPath;
+            itemsDownloaded++;
+
+            await this.appendLog(taskId, {
+              time: new Date().toISOString(),
+              message: `  ✓ Đã tải ZIP: ${result.zipPath ? path.basename(result.zipPath) : invNum + '.zip'}`,
+              level: 'info',
+            });
+
+            await this.appendLog(taskId, {
+              time: new Date().toISOString(),
+              message: `  ✓ Parse XML: ${result.itemsCount} items`,
+              level: 'info',
+            });
+
+            if (result.pdfPath) {
               await this.appendLog(taskId, {
                 time: new Date().toISOString(),
-                message: `  📋 Đã lưu bản sao: ${path.basename(versionedZipPath)}`,
+                message: `  ✓ PDF: ${path.basename(result.pdfPath)}`,
                 level: 'info',
               });
             }
 
-            await this.appendLog(taskId, {
-              time: new Date().toISOString(),
-              message: `  ✓ Đã tải ZIP: ${path.basename(finalZipPath)}`,
-              level: 'info',
-            });
-
-            // Giải nén → XML
-            const xmlPath = this.xmlParser.extractXmlFromZip(
-              finalZipPath,
-              outputDir,
-            );
-
-            // Parse XML → items
-            const parsed = this.xmlParser.parseInvoiceXml(xmlPath);
-
-            await this.appendLog(taskId, {
-              time: new Date().toISOString(),
-              message: `  ✓ Parse XML: ${parsed.items.length} items`,
-              level: 'info',
-            });
-
-            // Lưu items + paths vào DB
-            const invoiceId = await this.persistence.saveItemsFromZip(
-              inv,
-              type,
-              parsed.items,
-              finalZipPath,
-              xmlPath,
-            );
-
-            itemsDownloaded++;
-
-            // Tạo PDF tự động sau khi tải ZIP thành công
-            if (invoiceId) {
-              try {
-                await this.previewService.getPreviewHtml(invoiceId);
-                const cacheHtmlPath =
-                  this.previewService.getCachePath(invoiceId);
-                const pdfFileName = this.pdfService.getPdfFileName({
-                  sellerTaxCode: inv.nbmst || '',
-                  buyerTaxCode: inv.nmmst || null,
-                  invoiceNumber: String(inv.shdon),
-                  invoiceSymbol: inv.khhdon || '',
-                  processStatus: inv.ttxly ?? null,
-                  invoiceStatus: inv.tthai ?? null,
-                  type,
-                });
-                const generatedPdfPath =
-                  await this.pdfService.getOrCreatePdf(
-                    invoiceId,
-                    cacheHtmlPath,
-                    outputDir,
-                    pdfFileName,
-                  );
-                await this.prisma.invoice.update({
-                  where: { id: invoiceId },
-                  data: { pdfPath: generatedPdfPath },
-                });
-                await this.appendLog(taskId, {
-                  time: new Date().toISOString(),
-                  message: `  ✓ PDF: ${path.basename(generatedPdfPath)}`,
-                  level: 'info',
-                });
-              } catch (pdfErr: any) {
-                this.logger.warn(
-                  `Task ${taskId}: Failed to auto-generate PDF for ${invNum}: ${pdfErr.message}`,
-                );
-              }
-            }
-
-            // Báo thành công cho rate limit handler (reset nếu đủ lâu)
+            // Báo thành công cho rate limit handler
             rateLimitHandler.handleSuccess();
 
-            // Cập nhật processedInvoices trong DB
+            // Cập nhật processedInvoices
             await this.updateTask(taskId, {
               progress,
               processedInvoices: i + 1,
@@ -635,7 +566,7 @@ export class DownloadTaskService {
               this.logger.warn(
                 `Task ${taskId}: Rate limited on invoice ${invNum}. Cooling down ${Math.round(cooldownMs / 1000)}s`,
               );
-              await this.delay(cooldownMs);
+              await delay(cooldownMs);
             } else {
               // ── Lỗi thực sự (500, timeout, etc.): ghi log + mark error ──
               await this.appendLog(taskId, {
@@ -657,7 +588,7 @@ export class DownloadTaskService {
 
           // Delay 500ms giữa các request
           if (i < invoices.length - 1) {
-            await this.delay(500);
+            await delay(500);
           }
         }
 
@@ -746,57 +677,6 @@ export class DownloadTaskService {
       // Cleanup EventEmitter listeners
       this.eventEmitter.removeAllListeners(taskId);
     }
-  }
-
-  // ─── Private: Token Resolution ───────────────────────────────────────────
-
-  private async resolveCompanyAndToken(
-    companyId: string,
-    taskId: string,
-  ): Promise<{ company: any; token: string }> {
-    const company = await this.prisma.company.findUnique({
-      where: { id: companyId },
-    });
-    if (!company) {
-      throw new NotFoundException('Company not found');
-    }
-
-    let token = company.token;
-
-    if (!token || this.gdtAuth.isTokenExpired(token)) {
-      if (company.loginMode !== 'AUTO') {
-        throw new BadRequestException(
-          `Token của ${company.name} (${company.taxCode}) đã hết hạn. Vui lòng đăng nhập lại thủ công.`,
-        );
-      }
-
-      await this.appendLog(taskId, {
-        time: new Date().toISOString(),
-        message: `Token hết hạn, đang tự động refresh...`,
-        level: 'info',
-      });
-
-      token = await this.gdtAuth.loginAuto(
-        company.taxCode,
-        company.lookupPassword,
-      );
-
-      await this.prisma.company.update({
-        where: { id: company.id },
-        data: {
-          token,
-          tokenExpiredAt: this.gdtAuth.getTokenExpiration(token),
-        },
-      });
-
-      await this.appendLog(taskId, {
-        time: new Date().toISOString(),
-        message: `Token đã được refresh`,
-        level: 'info',
-      });
-    }
-
-    return { company, token };
   }
 
   // ─── Private: Helpers ────────────────────────────────────────────────────
@@ -924,38 +804,5 @@ export class DownloadTaskService {
         `Failed to send current state for task ${taskId}: ${err.message}`,
       );
     }
-  }
-
-  private sanitizeDirName(name: string): string {
-    return name
-      .replace(/[^a-zA-Z0-9À-ỹ\s]/g, '')
-      .replace(/\s+/g, '_')
-      .slice(0, 100);
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  private getStatusFileCode(inv: {
-    khhdon?: string;
-    ttxly?: number;
-    tthai?: number;
-  }): string {
-    const khhdon = String(inv.khhdon || '').toUpperCase();
-    let baseCode = 'K';
-    if (khhdon.match(/^[1-6]?M/)) baseCode = 'M';
-    else if (khhdon.match(/^[1-6]?C/)) baseCode = 'C';
-    if (baseCode === 'K' && inv.ttxly === 5) baseCode = 'C';
-    if (baseCode === 'K' && inv.ttxly === 8) baseCode = 'M';
-
-    const statusMap: Record<number, string> = {
-      1: '', 2: 'TT', 3: 'DC', 4: 'BTT', 5: 'BDC', 6: 'HUY',
-    };
-    const invoiceCode =
-      inv.tthai != null ? (statusMap[inv.tthai] ?? '?') : '';
-
-    if (baseCode && invoiceCode) return `${baseCode}-${invoiceCode}`;
-    return baseCode || invoiceCode || 'K';
   }
 }

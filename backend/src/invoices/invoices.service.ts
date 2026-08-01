@@ -8,7 +8,6 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
-import { GdtAuthService } from '../ai/gdt-auth.service';
 import { GdtClientService, GdtRawInvoice } from './gdt-client.service';
 import { InvoicesPersistenceService } from './invoices-persistence.service';
 import { XmlParserService } from './xml-parser.service';
@@ -18,6 +17,9 @@ import { PdfService } from './pdf.service';
 import { DownloadInvoicesDto } from './dto/download-invoices.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
+import { sanitizeDirName, delay } from '../common/invoice-utils';
+import { TokenResolverService } from '../common/token-resolver.service';
+import { InvoiceDownloaderService } from './invoice-downloader.service';
 
 @Injectable()
 export class InvoicesService {
@@ -26,8 +28,9 @@ export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
-    private readonly gdtAuth: GdtAuthService,
+    private readonly tokenResolver: TokenResolverService,
     private readonly gdtClient: GdtClientService,
+    private readonly downloader: InvoiceDownloaderService,
     private readonly persistence: InvoicesPersistenceService,
     private readonly xmlParser: XmlParserService,
     private readonly previewService: PreviewService,
@@ -87,7 +90,7 @@ export class InvoicesService {
     const { companyId, startDate, endDate, invoiceType = 'BOTH' } = dto;
 
     // 1. Resolve company + token
-    const { company, token } = await this.resolveCompanyAndToken(companyId);
+    const { company, token } = await this.tokenResolver.resolve(companyId);
 
     // 2. Xác định loại cần tải
     const types: Array<'BUY' | 'SELL'> =
@@ -131,7 +134,7 @@ export class InvoicesService {
       );
 
       // 5. Tải ZIP + parse XML + lưu items cho từng invoice
-      const companyDir = this.sanitizeDirName(company.name);
+      const companyDir = sanitizeDirName(company.name);
       const typeDir =
         type === 'SELL' ? 'BanRa' : 'MuaVao';
 
@@ -140,46 +143,25 @@ export class InvoicesService {
 
       for (let i = 0; i < invoices.length; i++) {
         const inv = invoices[i];
-        const invDate = new Date(inv.tdlap);
-        const monthDir = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`;
-        const outputDir = path.join(
-          invoicesBaseDir,
-          companyDir,
-          typeDir,
-          monthDir,
-        );
 
         try {
           this.logger.debug(
             `[${i + 1}/${invoices.length}] Downloading ZIP for ${inv.shdon}...`,
           );
 
-          // 5a. Tải ZIP
-          const { zipPath } = await this.gdtClient.downloadInvoiceZip(
-            inv,
+          const result = await this.downloader.downloadSingleInvoice({
+            invoice: inv,
             token,
-            outputDir,
-          );
-
-          // 5b. Giải nén → XML
-          const xmlPath = this.xmlParser.extractXmlFromZip(
-            zipPath,
-            outputDir,
-          );
-
-          // 5c. Parse XML → items
-          const parsed = this.xmlParser.parseInvoiceXml(xmlPath);
-
-          // 5d. Lưu items + paths vào DB
-          await this.persistence.saveItemsFromZip(
-            inv,
             type,
-            parsed.items,
-            zipPath,
-            xmlPath,
-          );
+            companyName: company.name,
+          });
 
-          itemsDownloaded++;
+          if (result.success) {
+            itemsDownloaded++;
+            this.logger.debug(
+              `  ✓ Downloaded: ${result.itemsCount} items`,
+            );
+          }
         } catch (error: any) {
           itemsFailed++;
           this.logger.warn(
@@ -195,7 +177,7 @@ export class InvoicesService {
 
         // Delay 500ms giữa các request
         if (i < invoices.length - 1) {
-          await this.delay(500);
+          await delay(500);
         }
       }
 
@@ -364,7 +346,7 @@ export class InvoicesService {
     // Xác định thư mục lưu PDF (cùng thư mục ZIP)
     const invoicesBaseDir =
       this.config.get('INVOICES_DIR') || './invoices';
-    const companyDir = this.sanitizeDirName(
+    const companyDir = sanitizeDirName(
       invoice.company?.name || 'unknown',
     );
     const invDate = new Date(invoice.invoiceDate);
@@ -448,44 +430,40 @@ export class InvoicesService {
       byCompany.get(key)!.push(inv);
     }
 
-    // 3. Xử lý từng company
+    // Khởi tạo counters
     const invoicesBaseDir =
       this.config.get('INVOICES_DIR') || './invoices';
     let successCount = 0;
     let failedCount = 0;
     const errors: Array<{ invoiceNumber: string; error: string }> = [];
 
-    for (const [companyId, companyInvoices] of byCompany) {
-      let token: string;
+    // 3. Resolve tokens trước cho tất cả companies
+    const tokenMap = new Map<string, string>();
+    for (const companyId of byCompany.keys()) {
       try {
-        const { token: t } =
-          await this.resolveCompanyAndToken(companyId);
-        token = t;
+        const { token } = await this.tokenResolver.resolve(companyId);
+        tokenMap.set(companyId, token);
       } catch (err: any) {
-        for (const inv of companyInvoices) {
+        for (const inv of byCompany.get(companyId) || []) {
           failedCount++;
           errors.push({
             invoiceNumber: inv.invoiceNumber,
             error: `Không lấy được token: ${err.message}`,
           });
         }
-        continue;
       }
+    }
+
+    for (const [companyId, companyInvoices] of byCompany) {
+      const token = tokenMap.get(companyId);
+      if (!token) continue; // already logged as error above
 
       const company = companyInvoices[0].company!;
-      const companyDir = this.sanitizeDirName(company.name);
+      const companyDir = sanitizeDirName(company.name);
 
       for (let i = 0; i < companyInvoices.length; i++) {
         const inv = companyInvoices[i];
         const type = inv.type as 'BUY' | 'SELL';
-        const invDate = new Date(inv.invoiceDate);
-        const monthDir = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`;
-        const outputDir = path.join(
-          invoicesBaseDir,
-          companyDir,
-          type === 'SELL' ? 'BanRa' : 'MuaVao',
-          monthDir,
-        );
 
         try {
           // Tạo GdtRawInvoice từ DB data
@@ -505,28 +483,12 @@ export class InvoicesService {
             tgtttbso: inv.totalAmount,
           };
 
-          // Tải ZIP
-          const { zipPath } = await this.gdtClient.downloadInvoiceZip(
-            gdtInv,
+          const result = await this.downloader.downloadSingleInvoice({
+            invoice: gdtInv,
             token,
-            outputDir,
-          );
-
-          // Parse XML
-          const xmlPath = this.xmlParser.extractXmlFromZip(
-            zipPath,
-            outputDir,
-          );
-          const parsed = this.xmlParser.parseInvoiceXml(xmlPath);
-
-          // Lưu items
-          await this.persistence.saveItemsFromZip(
-            gdtInv,
             type,
-            parsed.items,
-            zipPath,
-            xmlPath,
-          );
+            companyName: company.name,
+          });
 
           // Xoá cache preview cũ
           this.previewService.clearCache(inv.id);
@@ -565,13 +527,15 @@ export class InvoicesService {
 
         // Delay 500ms giữa các request
         if (i < companyInvoices.length - 1) {
-          await this.delay(500);
+          await delay(500);
         }
       }
     }
 
     return { successCount, failedCount, errors };
   }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
 
   private mapToParsedInvoice(inv: any) {
     return {
@@ -603,60 +567,5 @@ export class InvoicesService {
         taxRate: item.taxRate || undefined,
       })),
     };
-  }
-
-  // ─── Token Resolution ────────────────────────────────────────────────────
-
-  private async resolveCompanyAndToken(companyId: string) {
-    const company = await this.prisma.company.findUnique({
-      where: { id: companyId },
-    });
-    if (!company) {
-      throw new NotFoundException('Company not found');
-    }
-
-    let token = company.token;
-
-    if (!token || this.gdtAuth.isTokenExpired(token)) {
-      if (company.loginMode !== 'AUTO') {
-        throw new BadRequestException(
-          `Token của ${company.name} (${company.taxCode}) đã hết hạn. Vui lòng đăng nhập lại thủ công.`,
-        );
-      }
-
-      this.logger.log(
-        `Token expired for ${company.taxCode}, auto-refreshing...`,
-      );
-
-      token = await this.gdtAuth.loginAuto(
-        company.taxCode,
-        company.lookupPassword,
-      );
-
-      await this.prisma.company.update({
-        where: { id: company.id },
-        data: {
-          token,
-          tokenExpiredAt: this.gdtAuth.getTokenExpiration(token),
-        },
-      });
-
-      this.logger.log(`Token refreshed for ${company.taxCode}`);
-    }
-
-    return { company, token };
-  }
-
-  // ─── Helpers ─────────────────────────────────────────────────────────────
-
-  private sanitizeDirName(name: string): string {
-    return name
-      .replace(/[^a-zA-Z0-9À-ỹ\s]/g, '')
-      .replace(/\s+/g, '_')
-      .slice(0, 100);
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
