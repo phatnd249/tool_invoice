@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import * as path from 'path';
 import { InvoicesService } from './invoices.service';
 import { DownloadInvoicesDto } from './dto/download-invoices.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
@@ -95,11 +96,12 @@ export class InvoicesController {
   async downloadPdf(@Param('id') id: string, @Res() res: Response) {
     const { pdfPath, fileName } =
       await this.invoicesService.downloadPdf(id);
+    const absolutePath = path.resolve(pdfPath);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="${fileName}"`,
     );
-    res.sendFile(pdfPath);
+    res.sendFile(absolutePath);
   }
 }
