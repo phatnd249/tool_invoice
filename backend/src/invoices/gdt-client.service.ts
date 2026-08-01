@@ -318,7 +318,9 @@ export class GdtClientService {
 
     this.logger.debug(`Downloading ZIP for invoice ${invNum}...`);
 
-    // Không retry khi tải ZIP (lỗi 500 là lỗi thực sự từ GDT)
+    // Không retry khi tải ZIP:
+    // - HTTP 429 → để tầng trên (download-task.service) xử lý cooldown
+    // - HTTP 500 → hoá đơn không có file gốc trên GDT, retry vô ích
     const response = await this.fetchWithRetry(exportUrl, {
       headers: this.buildHeaders(token),
       responseType: 'arraybuffer',
@@ -350,8 +352,11 @@ export class GdtClientService {
       gdtMessage = responseBody.slice(0, 300);
     }
 
-    throw new Error(
-      gdtMessage || `GDT trả về lỗi (HTTP ${response.status}) cho hoá đơn ${invNum}`,
+    throw Object.assign(
+      new Error(
+        gdtMessage || `GDT trả về lỗi (HTTP ${response.status}) cho hoá đơn ${invNum}`,
+      ),
+      { statusCode: response.status },
     );
   }
 

@@ -15,6 +15,66 @@ import { ConfigService } from '@nestjs/config';
 import { PaginationDto, PaginatedResult, paginate } from '../common/dto/pagination.dto';
 import * as path from 'path';
 
+// ─── Rate Limit Handler ────────────────────────────────────────────────────
+
+/**
+ * Quản lý trạng thái rate limit từ GDT.
+ * Khi GDT liên tục trả 429, thời gian chờ tăng dần (exponential cooldown).
+ * Khi có request thành công hoặc hết thời gian cooldown, tự reset.
+ */
+class RateLimitHandler {
+  private consecutive429s = 0;
+  private last429Time = 0;
+  private cooldownUntil = 0;
+
+  private readonly THRESHOLD = 3;
+  private readonly BASE_COOLDOWN_MS = 10_000;   // 10 giây
+  private readonly MAX_COOLDOWN_MS = 120_000;    // 2 phút
+
+  /**
+   * Xử lý khi gặp 429.
+   * @returns Thời gian chờ (ms) trước khi tiếp tục.
+   */
+  handle429(): number {
+    const now = Date.now();
+
+    // Reset nếu đã qua 60s kể từ lần 429 cuối
+    if (now - this.last429Time > 60_000) {
+      this.consecutive429s = 0;
+    }
+
+    this.consecutive429s++;
+    this.last429Time = now;
+
+    if (this.consecutive429s < this.THRESHOLD) {
+      return 2000; // 2 giây — delay nhẹ
+    }
+
+    // Exponential backoff: 10s → 20s → 40s... max 120s
+    const multiplier = this.consecutive429s - this.THRESHOLD + 1;
+    const delay = Math.min(this.BASE_COOLDOWN_MS * multiplier, this.MAX_COOLDOWN_MS);
+    this.cooldownUntil = now + delay;
+    return delay;
+  }
+
+  /** Reset sau khi request thành công (chỉ reset nếu đủ lâu từ lần 429 cuối) */
+  handleSuccess(): void {
+    const now = Date.now();
+    if (now - this.last429Time > 30_000) {
+      this.consecutive429s = 0;
+      this.cooldownUntil = 0;
+    }
+  }
+
+  isInCooldown(): boolean {
+    return this.cooldownUntil > Date.now();
+  }
+
+  getRemainingCooldown(): number {
+    return Math.max(0, this.cooldownUntil - Date.now());
+  }
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface LogEntry {
@@ -351,9 +411,22 @@ export class DownloadTaskService {
         let itemsDownloaded = 0;
         let itemsFailed = 0;
 
+        const rateLimitHandler = new RateLimitHandler();
+
         for (let i = 0; i < invoices.length; i++) {
           const inv = invoices[i];
           const invNum = String(inv.shdon);
+
+          // ── Kiểm tra cooldown trước khi download ─────────────────
+          if (rateLimitHandler.isInCooldown()) {
+            const waitMs = rateLimitHandler.getRemainingCooldown();
+            await this.appendLog(taskId, {
+              time: new Date().toISOString(),
+              message: `⏳ Rate limit: đang tạm dừng ${Math.round(waitMs / 1000)}s trước khi tiếp tục...`,
+              level: 'warn',
+            });
+            await this.delay(waitMs);
+          }
 
           try {
             // Progress
@@ -414,6 +487,9 @@ export class DownloadTaskService {
 
             itemsDownloaded++;
 
+            // Báo thành công cho rate limit handler (reset nếu đủ lâu)
+            rateLimitHandler.handleSuccess();
+
             // Cập nhật processedInvoices trong DB
             await this.updateTask(taskId, {
               progress,
@@ -422,20 +498,37 @@ export class DownloadTaskService {
           } catch (error: any) {
             itemsFailed++;
 
-            await this.appendLog(taskId, {
-              time: new Date().toISOString(),
-              message: `  ✗ Lỗi hoá đơn ${invNum}: ${error.message}`,
-              level: 'error',
-            });
+            const statusCode = error?.statusCode || 0;
 
-            this.logger.warn(
-              `Task ${taskId}: Failed invoice ${invNum}: ${error.message}`,
-            );
+            if (statusCode === 429) {
+              // ── Rate limit: tạm dừng và chờ, KHÔNG ghi markError ──
+              const cooldownMs = rateLimitHandler.handle429();
+              await this.appendLog(taskId, {
+                time: new Date().toISOString(),
+                message: `⏳ GDT rate limit (HTTP 429) cho hoá đơn ${invNum}. Tạm dừng ${Math.round(cooldownMs / 1000)}s...`,
+                level: 'warn',
+              });
+              this.logger.warn(
+                `Task ${taskId}: Rate limited on invoice ${invNum}. Cooling down ${Math.round(cooldownMs / 1000)}s`,
+              );
+              await this.delay(cooldownMs);
+            } else {
+              // ── Lỗi thực sự (500, timeout, etc.): ghi log + mark error ──
+              await this.appendLog(taskId, {
+                time: new Date().toISOString(),
+                message: `  ✗ Lỗi hoá đơn ${invNum}: ${error.message}`,
+                level: 'error',
+              });
 
-            // Lưu error vào DB
-            await this.persistence
-              .markError(inv, type, error.message)
-              .catch(() => {});
+              this.logger.warn(
+                `Task ${taskId}: Failed invoice ${invNum}: ${error.message}`,
+              );
+
+              // Lưu error vào DB
+              await this.persistence
+                .markError(inv, type, error.message)
+                .catch(() => {});
+            }
           }
 
           // Delay 500ms giữa các request
