@@ -11,6 +11,7 @@ import { GdtAuthService } from '../ai/gdt-auth.service';
 import { GdtClientService, GdtRawInvoice } from './gdt-client.service';
 import { InvoicesPersistenceService } from './invoices-persistence.service';
 import { XmlParserService } from './xml-parser.service';
+import { PreviewService } from './preview.service';
 import { DownloadInvoicesDto } from './dto/download-invoices.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
@@ -26,6 +27,7 @@ export class InvoicesService {
     private readonly gdtClient: GdtClientService,
     private readonly persistence: InvoicesPersistenceService,
     private readonly xmlParser: XmlParserService,
+    private readonly previewService: PreviewService,
   ) {}
 
   // ─── Download ────────────────────────────────────────────────────────────
@@ -235,6 +237,12 @@ export class InvoicesService {
       throw new NotFoundException('Invoice not found');
     }
     return invoice;
+  }
+
+  // ─── Preview ────────────────────────────────────────────────────────────
+
+  async previewHtml(id: string): Promise<string> {
+    return this.previewService.getPreviewHtml(id);
   }
 
   // ─── Token Resolution ────────────────────────────────────────────────────

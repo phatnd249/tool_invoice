@@ -57,4 +57,11 @@ export const invoicesApi = {
   /** Lấy chi tiết một task */
   getTask: (taskId: string) =>
     apiClient.get<DownloadTask>(`/invoices/tasks/detail/${taskId}`),
+
+  /** Lấy HTML preview của hoá đơn */
+  preview: (id: string): Promise<string> =>
+    apiClient.get(`/invoices/preview/${id}`, {
+      responseType: 'text',
+      params: { t: Date.now() },
+    }).then(res => res.data),
 }

@@ -8,6 +8,7 @@ import {
   ArrowUp,
   ArrowDown,
   FileText,
+  Eye,
   X,
 } from 'lucide-react'
 import { invoicesApi } from '@/api/invoices'
@@ -432,6 +433,9 @@ export function InvoiceListPage() {
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
+  // Preview
+  const [previewingId, setPreviewingId] = useState<string | null>(null)
+
   // Debounce
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -491,6 +495,26 @@ export function InvoiceListPage() {
     } else {
       setSortBy(field)
       setSortOrder('asc')
+    }
+  }
+
+  // ── Preview ──
+
+  const handlePreview = async (invoiceId: string) => {
+    setPreviewingId(invoiceId)
+    try {
+      const html = await invoicesApi.preview(invoiceId)
+      const newWindow = window.open('', '_blank')
+      if (newWindow) {
+        newWindow.document.write(html)
+        newWindow.document.close()
+      } else {
+        toast.error('Trình duyệt đã chặn popup. Vui lòng cho phép mở tab mới.')
+      }
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setPreviewingId(null)
     }
   }
 
@@ -637,7 +661,7 @@ export function InvoiceListPage() {
                 <TableHead className="cursor-pointer select-none text-center" onClick={() => handleSort('downloadStatus')}>
                   Tải <SortIcon field="downloadStatus" currentField={sortBy} order={sortOrder} />
                 </TableHead>
-                <TableHead className="text-center w-16">CT</TableHead>
+                <TableHead className="text-center w-16">H.động</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -693,15 +717,27 @@ export function InvoiceListPage() {
                       <DownloadStatusBadge invoice={inv} />
                     </TableCell>
                     <TableCell className="text-center">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7"
-                        onClick={() => { setDetailInvoice(inv); setDetailOpen(true) }}
-                        title="Chi tiết"
-                      >
-                        <List className="size-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-center gap-0.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
+                          onClick={() => { setDetailInvoice(inv); setDetailOpen(true) }}
+                          title="Chi tiết"
+                        >
+                          <List className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
+                          onClick={() => handlePreview(inv.id)}
+                          disabled={previewingId === inv.id}
+                          title="Xem trước hoá đơn"
+                        >
+                          <Eye className={`size-3.5 ${previewingId === inv.id ? 'animate-pulse' : ''}`} />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

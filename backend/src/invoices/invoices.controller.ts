@@ -5,8 +5,10 @@ import {
   Param,
   Query,
   Body,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { InvoicesService } from './invoices.service';
 import { DownloadInvoicesDto } from './dto/download-invoices.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
@@ -35,5 +37,14 @@ export class InvoicesController {
   @RequirePermissions('invoice:read')
   findOne(@Param('id') id: string) {
     return this.invoicesService.findOne(id);
+  }
+
+  @Get('preview/:id')
+  @RequirePermissions('invoice:read')
+  async preview(@Param('id') id: string, @Res() res: Response) {
+    const html = await this.invoicesService.previewHtml(id);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(html);
   }
 }
