@@ -13,10 +13,6 @@ export class GdtQueryClientService {
 
   private readonly PAGE_SIZE = 50;
 
-  // ttxly values hợp lệ cho từng loại API
-  private readonly VALID_STANDARD_STATUSES = new Set([4, 5, 6, 7, 8]);
-  private readonly VALID_SCO_STATUSES = new Set([5, 6, 8]);
-
   constructor(private readonly http: GdtHttpClientService) {}
 
   /**
@@ -43,12 +39,9 @@ export class GdtQueryClientService {
         headers,
         'query',
       );
-      const filtered = standard.filter((inv) =>
-        this.VALID_STANDARD_STATUSES.has(inv.ttxly),
-      );
-      results.push(...filtered);
+      results.push(...standard);
       this.logger.log(
-        `Standard API: ${filtered.length}/${standard.length} invoices (${type})`,
+        `Standard API: ${standard.length} invoices (${type})`,
       );
     } catch (error: any) {
       this.logger.warn(
@@ -64,12 +57,9 @@ export class GdtQueryClientService {
         headers,
         'sco-query',
       );
-      const filtered = sco.filter((inv) =>
-        this.VALID_SCO_STATUSES.has(inv.ttxly),
-      );
-      results.push(...filtered);
+      results.push(...sco);
       this.logger.log(
-        `SCO API: ${filtered.length}/${sco.length} invoices (${type})`,
+        `SCO API: ${sco.length} invoices (${type})`,
       );
     } catch (error: any) {
       this.logger.warn(
@@ -93,7 +83,7 @@ export class GdtQueryClientService {
 
     // Lấy tổng số trước
     const countUrl = `${baseUrl}?sort=tdlap:desc&size=1&search=${encodeURIComponent(searchStr)}`;
-    const countResp = await this.http.fetchWithRetry(countUrl, { headers, timeout: 20000 });
+    const countResp = await this.http.fetchWithRetry(countUrl, { headers, timeout: 40000 });
 
     if (countResp.status === 401) {
       throw Object.assign(new Error('GDT token expired'), { status: 401 });
@@ -113,7 +103,7 @@ export class GdtQueryClientService {
         url = `${baseUrl}?sort=tdlap:desc&size=${this.PAGE_SIZE}&search=${encodeURIComponent(searchStr)}`;
       }
 
-      const resp = await this.http.fetchWithRetry(url, { headers, timeout: 20000 });
+      const resp = await this.http.fetchWithRetry(url, { headers, timeout: 40000 });
 
       if (resp.status === 401) {
         throw Object.assign(new Error('GDT token expired'), { status: 401 });
