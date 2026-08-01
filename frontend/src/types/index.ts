@@ -27,6 +27,17 @@ export interface Company {
   updatedAt: string
 }
 
+export interface InvoiceItem {
+  id: string
+  name: string
+  unit: string | null
+  quantity: number | null
+  price: number | null
+  amount: number
+  taxRate: string | null
+  lineNumber: number | null
+}
+
 export interface Invoice {
   id: string
   invoiceNumber: string
@@ -51,6 +62,7 @@ export interface Invoice {
   errorMessage: string | null
   companyId: string | null
   company?: Pick<Company, 'id' | 'name' | 'taxCode'>
+  items?: InvoiceItem[]
   createdAt: string
   updatedAt: string
 }

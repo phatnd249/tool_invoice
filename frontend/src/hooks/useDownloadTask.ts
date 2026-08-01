@@ -85,6 +85,7 @@ export interface UseDownloadTaskReturn {
     startDate: string
     endDate: string
     invoiceType?: string
+    overwriteMode?: string
   }) => Promise<void>
   /** Reset to idle state (for starting a new download) */
   reset: () => void

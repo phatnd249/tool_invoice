@@ -152,7 +152,7 @@ function StatusBadge({ invoice }: { invoice: Invoice }) {
 
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
+      <TooltipTrigger>
         <Badge variant={getStatusVariant(invoice)} className="cursor-default">
           {display}
         </Badge>
@@ -170,7 +170,7 @@ function DownloadStatusBadge({ invoice }: { invoice: Invoice }) {
   if (!invoice.downloadStatus) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>
+        <TooltipTrigger>
           <Badge variant="outline" className="cursor-default border-yellow-300 bg-yellow-50 text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
             Chờ tải
           </Badge>
@@ -192,7 +192,7 @@ function DownloadStatusBadge({ invoice }: { invoice: Invoice }) {
     const errMsg = invoice.errorMessage || 'Lỗi không xác định'
     return (
       <Tooltip>
-        <TooltipTrigger asChild>
+        <TooltipTrigger>
           <Badge variant="destructive" className="cursor-default">
             Lỗi tải
           </Badge>
@@ -459,7 +459,7 @@ export function InvoiceListPage() {
   const [retrying, setRetrying] = useState(false)
 
   // Debounce
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Fetch invoices ──
 
@@ -712,7 +712,7 @@ export function InvoiceListPage() {
             />
           </div>
           <Popover>
-            <PopoverTrigger asChild>
+            <PopoverTrigger>
               <Button
                 variant="outline"
                 size="sm"
