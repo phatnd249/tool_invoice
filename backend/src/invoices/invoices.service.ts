@@ -280,6 +280,162 @@ export class InvoicesService {
     return this.excelService.generateModule7Report(data);
   }
 
+  // ─── Retry Failed ──────────────────────────────────────────────────────
+
+  async retryFailed(invoiceIds: string[]): Promise<{
+    successCount: number;
+    failedCount: number;
+    errors: Array<{ invoiceNumber: string; error: string }>;
+  }> {
+    // 1. Query invoices có downloadStatus = 'ERROR' hoặc null (chờ tải)
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        id: { in: invoiceIds },
+        OR: [
+          { downloadStatus: 'ERROR' },
+          { downloadStatus: null },
+        ],
+      },
+      include: { company: true },
+    });
+
+    if (invoices.length === 0) {
+      throw new BadRequestException(
+        'Không tìm thấy hoá đơn nào cần tải lại (chỉ hỗ trợ hoá đơn chờ tải hoặc bị lỗi).',
+      );
+    }
+
+    // 2. Group by company để tối ưu token
+    const byCompany = new Map<string, typeof invoices>();
+    for (const inv of invoices) {
+      if (!inv.company) continue;
+      const key = inv.company.id;
+      if (!byCompany.has(key)) byCompany.set(key, []);
+      byCompany.get(key)!.push(inv);
+    }
+
+    // 3. Xử lý từng company
+    const invoicesBaseDir =
+      this.config.get('INVOICES_DIR') || './invoices';
+    let successCount = 0;
+    let failedCount = 0;
+    const errors: Array<{ invoiceNumber: string; error: string }> = [];
+
+    for (const [companyId, companyInvoices] of byCompany) {
+      let token: string;
+      try {
+        const { token: t } =
+          await this.resolveCompanyAndToken(companyId);
+        token = t;
+      } catch (err: any) {
+        for (const inv of companyInvoices) {
+          failedCount++;
+          errors.push({
+            invoiceNumber: inv.invoiceNumber,
+            error: `Không lấy được token: ${err.message}`,
+          });
+        }
+        continue;
+      }
+
+      const company = companyInvoices[0].company!;
+      const companyDir = this.sanitizeDirName(company.name);
+
+      for (let i = 0; i < companyInvoices.length; i++) {
+        const inv = companyInvoices[i];
+        const type = inv.type as 'BUY' | 'SELL';
+        const outputDir = path.join(
+          invoicesBaseDir,
+          companyDir,
+          type === 'SELL' ? 'BanRa' : 'MuaVao',
+        );
+
+        try {
+          // Tạo GdtRawInvoice từ DB data
+          const gdtInv: GdtRawInvoice = {
+            nbmst: inv.sellerTaxCode,
+            khmshdon: inv.templateSymbol,
+            khhdon: inv.invoiceSymbol,
+            shdon: inv.invoiceNumber,
+            _sourceApi: inv.source || 'query',
+            ttxly: inv.processStatus ?? 5,
+            tthai: inv.invoiceStatus ?? 1,
+            tdlap: inv.invoiceDate.toISOString(),
+            nbten: inv.sellerName,
+            nmmst: inv.buyerTaxCode || '',
+            tgtcthue: inv.totalBeforeTax ?? 0,
+            tgtthue: inv.taxAmount ?? 0,
+            tgtttbso: inv.totalAmount,
+          };
+
+          // Tải ZIP
+          const { zipPath } = await this.gdtClient.downloadInvoiceZip(
+            gdtInv,
+            token,
+            outputDir,
+          );
+
+          // Parse XML
+          const xmlPath = this.xmlParser.extractXmlFromZip(
+            zipPath,
+            outputDir,
+          );
+          const parsed = this.xmlParser.parseInvoiceXml(xmlPath);
+
+          // Lưu items
+          await this.persistence.saveItemsFromZip(
+            gdtInv,
+            type,
+            parsed.items,
+            zipPath,
+            xmlPath,
+          );
+
+          // Xoá cache preview cũ
+          this.previewService.clearCache(inv.id);
+
+          successCount++;
+          this.logger.log(`Retry success: ${inv.invoiceNumber}`);
+        } catch (err: any) {
+          failedCount++;
+          errors.push({
+            invoiceNumber: inv.invoiceNumber,
+            error: err.message,
+          });
+
+          // Cập nhật error message mới
+          await this.persistence
+            .markError(
+              {
+                shdon: inv.invoiceNumber,
+                khmshdon: inv.templateSymbol,
+                khhdon: inv.invoiceSymbol,
+                nbmst: inv.sellerTaxCode,
+                nmmst: inv.buyerTaxCode || '',
+                tdlap: '',
+                nbten: '',
+                tgtcthue: 0,
+                tgtthue: 0,
+                tgtttbso: 0,
+                ttxly: inv.processStatus ?? 5,
+                tthai: inv.invoiceStatus ?? 1,
+              },
+              type,
+              err.message,
+            )
+            .catch(() => {});
+        }
+
+        // Delay 500ms giữa các request
+        if (i < companyInvoices.length - 1) {
+          await this.delay(500);
+        }
+      }
+    }
+
+    return { successCount, failedCount, errors };
+  }
+
   private mapToParsedInvoice(inv: any) {
     return {
       xmlFile: inv.xmlPath ? path.basename(inv.xmlPath) : 'invoice.xml',

@@ -83,4 +83,10 @@ export class InvoicesController {
     );
     res.send(buffer);
   }
+
+  @Post('retry-failed')
+  @RequirePermissions('invoice:download')
+  retryFailed(@Body() body: { invoiceIds: string[] }) {
+    return this.invoicesService.retryFailed(body.invoiceIds);
+  }
 }

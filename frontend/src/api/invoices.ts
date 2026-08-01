@@ -76,4 +76,12 @@ export const invoicesApi = {
     apiClient.post('/invoices/export-module7', { invoiceIds }, {
       responseType: 'blob',
     }).then(res => res.data),
+
+  /** Tải lại các hoá đơn bị lỗi */
+  retryFailed: (invoiceIds: string[]) =>
+    apiClient.post<{
+      successCount: number
+      failedCount: number
+      errors: Array<{ invoiceNumber: string; error: string }>
+    }>('/invoices/retry-failed', { invoiceIds }),
 }

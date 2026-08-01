@@ -10,6 +10,7 @@ import {
   FileText,
   FileSpreadsheet,
   Eye,
+  RotateCcw,
   X,
 } from 'lucide-react'
 import { invoicesApi } from '@/api/invoices'
@@ -441,6 +442,9 @@ export function InvoiceListPage() {
   const [exporting, setExporting] = useState(false)
   const [exportingModule7, setExportingModule7] = useState(false)
 
+  // Retry
+  const [retrying, setRetrying] = useState(false)
+
   // Debounce
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -565,6 +569,39 @@ export function InvoiceListPage() {
     }
   }
 
+  const handleRetryFailed = async () => {
+    const retryableIds = selectedIds.filter((id) => {
+      const inv = invoices.find((i) => i.id === id)
+      return inv?.downloadStatus === 'ERROR' || inv?.downloadStatus === null
+    })
+
+    if (retryableIds.length === 0) {
+      toast.error('Vui lòng chọn ít nhất một hoá đơn chờ tải hoặc bị lỗi để tải lại.')
+      return
+    }
+
+    setRetrying(true)
+    try {
+      const { data } = await invoicesApi.retryFailed(retryableIds)
+      if (data.successCount > 0) {
+        toast.success(`Đã tải lại thành công ${data.successCount} hoá đơn.`)
+      }
+      if (data.failedCount > 0) {
+        toast.error(`${data.failedCount} hoá đơn vẫn bị lỗi.`, {
+          description: data.errors
+            .slice(0, 3)
+            .map((e) => `${e.invoiceNumber}: ${e.error}`)
+            .join('\n'),
+        })
+      }
+      fetchInvoices()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setRetrying(false)
+    }
+  }
+
   // ── Selection ──
 
   const handleSelectAll = (checked: boolean) => {
@@ -670,6 +707,21 @@ export function InvoiceListPage() {
               <FileSpreadsheet className="size-4" />
               {exportingModule7 ? 'Đang xuất M7...' : 'Báo Cáo M7'}
             </Button>
+            {selectedIds.some((id) => {
+              const inv = invoices.find((i) => i.id === id)
+              return inv?.downloadStatus === 'ERROR' || inv?.downloadStatus === null
+            }) && (
+              <Button
+                onClick={handleRetryFailed}
+                disabled={retrying}
+                size="sm"
+                variant="outline"
+                className="gap-1.5 border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+              >
+                <RotateCcw className="size-4" />
+                {retrying ? 'Đang tải lại...' : 'Tải lại HĐ lỗi'}
+              </Button>
+            )}
           </div>
         )}
 
