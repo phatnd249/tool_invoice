@@ -11,7 +11,6 @@ import {
   FileSpreadsheet,
   Eye,
   RotateCcw,
-  X,
 } from 'lucide-react'
 import { invoicesApi } from '@/api/invoices'
 import { companiesApi } from '@/api/companies'
@@ -57,6 +56,7 @@ import {
 } from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
+import CompanyAutocomplete from '@/components/CompanyAutocomplete'
 import type { Invoice, Company } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -619,11 +619,6 @@ export function InvoiceListPage() {
   const showSellerCols = filterType !== 'SELL'
   const showBuyerCols = filterType !== 'BUY'
 
-  const companyItems = [
-    { label: 'Tất cả công ty', value: '' },
-    ...companies.map((c) => ({ label: `${c.name} (${c.taxCode})`, value: c.id })),
-  ]
-
   return (
     <Layout title="Hoá đơn đã tải">
       <div className="space-y-4">
@@ -661,25 +656,14 @@ export function InvoiceListPage() {
 
         {/* ── Filters row 2: company ── */}
         <div className="flex items-center gap-3">
-          <Select
-            items={companyItems}
-            value={companyFilter}
-            onValueChange={(v) => { setCompanyFilter(v ?? ''); setPage(1) }}
-          >
-            <SelectTrigger className="w-full max-w-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {companyItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {companyFilter && (
-            <Button variant="ghost" size="sm" onClick={() => { setCompanyFilter(''); setPage(1) }} className="gap-1 text-xs">
-              <X className="size-3" /> Bỏ lọc
-            </Button>
-          )}
+          <div className="w-full max-w-sm">
+            <CompanyAutocomplete
+              companies={companies}
+              value={companyFilter}
+              onChange={(v) => { setCompanyFilter(v); setPage(1) }}
+              placeholder="Tìm theo tên hoặc MST..."
+            />
+          </div>
         </div>
 
         {/* ── Selected count ── */}
