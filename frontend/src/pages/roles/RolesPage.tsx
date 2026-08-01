@@ -229,7 +229,7 @@ export function RolesPage() {
   useEffect(() => { fetchRoles() }, [fetchRoles])
 
   return (
-    <Layout title="Roles">
+    <Layout title="Vai trò">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">{roles.length} role(s) total</p>

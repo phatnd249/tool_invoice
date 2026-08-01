@@ -68,7 +68,7 @@ export function ProfilePage() {
   const initials = user?.fullName.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase() ?? '?'
 
   return (
-    <Layout title="Profile">
+    <Layout title="Hồ sơ">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Avatar & info */}
         <Card>

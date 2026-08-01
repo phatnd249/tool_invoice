@@ -192,7 +192,7 @@ export function PermissionsPage() {
   const groups = [...new Set(permissions.map((p) => p.group))].sort()
 
   return (
-    <Layout title="Permissions">
+    <Layout title="Quyền hạn">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">{permissions.length} permission(s) total</p>

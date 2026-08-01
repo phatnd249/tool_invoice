@@ -126,7 +126,7 @@ export function DownloadTasksPage() {
   }
 
   return (
-    <Layout title="Quản lý Task Tải Hoá Đơn">
+    <Layout title="Lịch sử tải">
       <div className="space-y-4 max-w-5xl">
         {/* ── Header ────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">

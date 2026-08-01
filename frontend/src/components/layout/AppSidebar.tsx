@@ -40,7 +40,7 @@ const navGroups = [
     label: 'Tổng quan',
     items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', permission: null },
-      { to: '/profile', icon: User, label: 'Profile', permission: null },
+      { to: '/profile', icon: User, label: 'Hồ sơ', permission: null },
     ],
   },
   {
@@ -54,10 +54,10 @@ const navGroups = [
   {
     label: 'Quản trị',
     items: [
-      { to: '/users', icon: Users, label: 'Users', permission: 'user:read' },
-      { to: '/roles', icon: Shield, label: 'Roles', permission: 'role:read' },
-      { to: '/permissions', icon: Key, label: 'Permissions', permission: 'permission:read' },
-      { to: '/companies', icon: Building2, label: 'Companies', permission: 'company:read' },
+      { to: '/users', icon: Users, label: 'Người dùng', permission: 'user:read' },
+      { to: '/roles', icon: Shield, label: 'Vai trò', permission: 'role:read' },
+      { to: '/permissions', icon: Key, label: 'Quyền hạn', permission: 'permission:read' },
+      { to: '/companies', icon: Building2, label: 'Doanh nghiệp', permission: 'company:read' },
     ],
   },
 ]
@@ -141,11 +141,11 @@ export function AppSidebar() {
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onClick={() => navigate('/profile')}>
                   <User className="mr-2 size-4" />
-                  Profile
+                  Hồ sơ
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 size-4" />
-                  Sign out
+                  Đăng xuất
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

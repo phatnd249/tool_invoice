@@ -284,7 +284,7 @@ export function UsersPage() {
   }
 
   return (
-    <Layout title="Users">
+    <Layout title="Người dùng">
       <div className="space-y-4">
         {/* Toolbar */}
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
