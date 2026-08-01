@@ -132,17 +132,23 @@ export class InvoicesService {
 
       // 5. Tải ZIP + parse XML + lưu items cho từng invoice
       const companyDir = this.sanitizeDirName(company.name);
-      const outputDir = path.join(
-        invoicesBaseDir,
-        companyDir,
-        type === 'SELL' ? 'BanRa' : 'MuaVao',
-      );
+      const typeDir =
+        type === 'SELL' ? 'BanRa' : 'MuaVao';
 
       let itemsDownloaded = 0;
       let itemsFailed = 0;
 
       for (let i = 0; i < invoices.length; i++) {
         const inv = invoices[i];
+        const invDate = new Date(inv.tdlap);
+        const monthDir = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`;
+        const outputDir = path.join(
+          invoicesBaseDir,
+          companyDir,
+          typeDir,
+          monthDir,
+        );
+
         try {
           this.logger.debug(
             `[${i + 1}/${invoices.length}] Downloading ZIP for ${inv.shdon}...`,
@@ -361,10 +367,13 @@ export class InvoicesService {
     const companyDir = this.sanitizeDirName(
       invoice.company?.name || 'unknown',
     );
+    const invDate = new Date(invoice.invoiceDate);
+    const monthDir = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`;
     const pdfDir = path.join(
       invoicesBaseDir,
       companyDir,
       invoice.type === 'SELL' ? 'BanRa' : 'MuaVao',
+      monthDir,
     );
 
     const pdfFileName = this.pdfService.getPdfFileName(invoice);
@@ -469,10 +478,13 @@ export class InvoicesService {
       for (let i = 0; i < companyInvoices.length; i++) {
         const inv = companyInvoices[i];
         const type = inv.type as 'BUY' | 'SELL';
+        const invDate = new Date(inv.invoiceDate);
+        const monthDir = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`;
         const outputDir = path.join(
           invoicesBaseDir,
           companyDir,
           type === 'SELL' ? 'BanRa' : 'MuaVao',
+          monthDir,
         );
 
         try {

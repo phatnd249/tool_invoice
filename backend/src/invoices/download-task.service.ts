@@ -414,11 +414,8 @@ export class DownloadTaskService {
 
         // Tải ZIP + parse XML cho từng invoice
         const companyDir = this.sanitizeDirName(company.name);
-        const outputDir = path.join(
-          invoicesBaseDir,
-          companyDir,
-          type === 'SELL' ? 'BanRa' : 'MuaVao',
-        );
+        const typeDir =
+          type === 'SELL' ? 'BanRa' : 'MuaVao';
 
         let itemsDownloaded = 0;
         let itemsFailed = 0;
@@ -428,6 +425,16 @@ export class DownloadTaskService {
         for (let i = 0; i < invoices.length; i++) {
           const inv = invoices[i];
           const invNum = String(inv.shdon);
+
+          // ── Tính outputDir theo tháng của hoá đơn ─────────────
+          const invDate = new Date(inv.tdlap);
+          const monthDir = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`;
+          const outputDir = path.join(
+            invoicesBaseDir,
+            companyDir,
+            typeDir,
+            monthDir,
+          );
 
           // ── Overwrite logic ────────────────────────────────────
           const overwriteMode =
