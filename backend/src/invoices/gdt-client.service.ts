@@ -305,8 +305,9 @@ export class GdtClientService {
     const isSco =
       invoice._sourceApi === 'sco-query' ||
       String(khhdon).toUpperCase().startsWith('M');
-    const apiPath = isSco ? 'sco-query' : 'query';
-    const exportUrl = `${this.GDT_BASE}/${apiPath}/invoices/export-xml?nbmst=${nbmst}&khhdon=${khhdon}&shdon=${shdon}&khmshdon=${khmshdon}`;
+    const apiPaths = isSco
+      ? ['sco-query', 'query']
+      : ['query', 'sco-query'];
 
     const statusCode = this.getStatusFileCode(invoice);
     const taxCode = String(nbmst);
@@ -318,45 +319,74 @@ export class GdtClientService {
 
     this.logger.debug(`Downloading ZIP for invoice ${invNum}...`);
 
-    // Không retry khi tải ZIP:
-    // - HTTP 429 → để tầng trên (download-task.service) xử lý cooldown
-    // - HTTP 500 → hoá đơn không có file gốc trên GDT, retry vô ích
-    const response = await this.fetchWithRetry(exportUrl, {
-      headers: this.buildHeaders(token),
-      responseType: 'arraybuffer',
-      timeout: 60000,
-      validateStatus: () => true,
-    }, 0);
+    let lastError: any;
 
-    if (response.status === 200) {
-      fs.writeFileSync(zipPath, Buffer.from(response.data));
-      this.logger.log(`Downloaded ZIP: ${zipPath}`);
-      return { zipPath };
+    for (const apiPath of apiPaths) {
+      const exportUrl = `${this.GDT_BASE}/${apiPath}/invoices/export-xml?nbmst=${nbmst}&khhdon=${khhdon}&shdon=${shdon}&khmshdon=${khmshdon}`;
+
+      this.logger.debug(
+        `Trying ZIP download (${apiPath}): ${exportUrl}`,
+      );
+
+      // Không retry khi tải ZIP:
+      // - HTTP 429 → để tầng trên (download-task.service) xử lý cooldown
+      // - HTTP 500 → thử path còn lại, nếu cả 2 đều fail mới báo lỗi
+      const response = await this.fetchWithRetry(exportUrl, {
+        headers: this.buildHeaders(token),
+        responseType: 'arraybuffer',
+        timeout: 60000,
+        validateStatus: () => true,
+      }, 0);
+
+      if (response.status === 200) {
+        fs.writeFileSync(zipPath, Buffer.from(response.data));
+        this.logger.log(`Downloaded ZIP (${apiPath}): ${zipPath}`);
+        return { zipPath };
+      }
+
+      const responseBody = response.data
+        ? Buffer.from(response.data).toString('utf-8').slice(0, 2000)
+        : '(empty)';
+
+      // Nếu là 500, thử path còn lại
+      if (response.status === 500 && apiPath !== apiPaths[apiPaths.length - 1]) {
+        this.logger.warn(
+          `GDT returned 500 for ${apiPath}, trying fallback path...`,
+        );
+        lastError = { status: response.status, body: responseBody };
+        continue;
+      }
+
+      // Các lỗi khác: throw ngay
+      this.logger.error(
+        `GDT returned ${response.status} for invoice ${invNum} (URL: ${exportUrl}): ${responseBody}`,
+      );
+
+      let gdtMessage = '';
+      try {
+        const json = JSON.parse(responseBody);
+        gdtMessage = json.message || json.error || '';
+      } catch {
+        gdtMessage = responseBody.slice(0, 300);
+      }
+
+      throw Object.assign(
+        new Error(
+          gdtMessage || `GDT trả về lỗi (HTTP ${response.status}) cho hoá đơn ${invNum}`,
+        ),
+        { statusCode: response.status },
+      );
     }
 
-    // Parse error body — cố gắng trích xuất message từ GDT
-    const responseBody = response.data
-      ? Buffer.from(response.data).toString('utf-8').slice(0, 2000)
-      : '(empty)';
+    // Cả 2 path đều thất bại
     this.logger.error(
-      `GDT returned ${response.status} for invoice ${invNum}: ${responseBody}`,
+      `GDT returned 500 for both paths, invoice ${invNum}: ${lastError?.body}`,
     );
-
-    // Thử parse JSON từ response để lấy message chi tiết
-    let gdtMessage = '';
-    try {
-      const json = JSON.parse(responseBody);
-      gdtMessage = json.message || json.error || '';
-    } catch {
-      // Không phải JSON, dùng raw text
-      gdtMessage = responseBody.slice(0, 300);
-    }
-
     throw Object.assign(
       new Error(
-        gdtMessage || `GDT trả về lỗi (HTTP ${response.status}) cho hoá đơn ${invNum}`,
+        `GDT không có file ZIP cho hoá đơn ${invNum} (đã thử cả query và sco-query)`,
       ),
-      { statusCode: response.status },
+      { statusCode: lastError?.status || 500 },
     );
   }
 
