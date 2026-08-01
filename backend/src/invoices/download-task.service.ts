@@ -134,6 +134,7 @@ interface QueryTasksParams extends PaginationDto {
 @Injectable()
 export class DownloadTaskService {
   private readonly logger = new Logger(DownloadTaskService.name);
+  private _currentVersion = 0;
   private readonly eventEmitter = new EventEmitter();
 
   constructor(
@@ -433,7 +434,8 @@ export class DownloadTaskService {
             (params.overwriteMode as string) || 'SKIP';
           const statusCode = this.getStatusFileCode(inv);
           const taxCode = String(inv.nbmst);
-          const zipFileName = `${taxCode}-${invNum}-${statusCode}.zip`;
+          const baseFileName = `${taxCode}-${invNum}-${statusCode}`;
+          const zipFileName = `${baseFileName}.zip`;
           const zipPath = path.join(outputDir, zipFileName);
 
           if (overwriteMode === 'SKIP') {
@@ -455,9 +457,24 @@ export class DownloadTaskService {
               message: `  🔄 Ghi đè ${invNum}: đã xoá file cũ`,
               level: 'info',
             });
+          } else if (overwriteMode === 'NEW_VERSION') {
+            // Tìm version tiếp theo nếu file đã tồn tại
+            if (
+              fs.existsSync(zipPath) &&
+              (fs.statSync(zipPath).size || 0) > 0
+            ) {
+              const version = findNextVersion(zipPath);
+              this._currentVersion = version;
+              await this.appendLog(taskId, {
+                time: new Date().toISOString(),
+                message: `  📋 Tạo bản sao v${version} cho ${invNum}`,
+                level: 'info',
+              });
+            } else {
+              this._currentVersion = 0;
+            }
           }
-          // NEW_VERSION: tiếp tục bình thường, zipPath sẽ được
-          // getVersionedFilePath xử lý khi tải thành công
+          // ── End overwrite logic ────────────────────────────────
 
           // ── Kiểm tra cooldown trước khi download ─────────────────
           if (rateLimitHandler.isInCooldown()) {
@@ -491,21 +508,41 @@ export class DownloadTaskService {
             });
 
             // Tải ZIP
-            const { zipPath } = await this.gdtClient.downloadInvoiceZip(
-              inv,
-              token,
-              outputDir,
-            );
+            const { zipPath: downloadedZipPath } =
+              await this.gdtClient.downloadInvoiceZip(
+                inv,
+                token,
+                outputDir,
+              );
+
+            // ── NEW_VERSION: đổi tên file ZIP nếu cần ──────────
+            let finalZipPath = downloadedZipPath;
+            if (
+              overwriteMode === 'NEW_VERSION' &&
+              this._currentVersion > 0
+            ) {
+              const versionedZipPath = getVersionedFilePath(
+                zipPath,
+                this._currentVersion,
+              );
+              fs.renameSync(downloadedZipPath, versionedZipPath);
+              finalZipPath = versionedZipPath;
+              await this.appendLog(taskId, {
+                time: new Date().toISOString(),
+                message: `  📋 Đã lưu bản sao: ${path.basename(versionedZipPath)}`,
+                level: 'info',
+              });
+            }
 
             await this.appendLog(taskId, {
               time: new Date().toISOString(),
-              message: `  ✓ Đã tải ZIP: ${path.basename(zipPath)}`,
+              message: `  ✓ Đã tải ZIP: ${path.basename(finalZipPath)}`,
               level: 'info',
             });
 
             // Giải nén → XML
             const xmlPath = this.xmlParser.extractXmlFromZip(
-              zipPath,
+              finalZipPath,
               outputDir,
             );
 
@@ -523,7 +560,7 @@ export class DownloadTaskService {
               inv,
               type,
               parsed.items,
-              zipPath,
+              finalZipPath,
               xmlPath,
             );
 
