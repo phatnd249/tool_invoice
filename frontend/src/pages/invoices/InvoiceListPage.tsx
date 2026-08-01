@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import {
   Search,
@@ -733,7 +733,7 @@ export function InvoiceListPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Pagination>
+              <Pagination className="w-auto">
                 <PaginationContent>
                   <PaginationItem>
                     <PaginationPrevious onClick={() => setPage((p) => Math.max(1, p - 1))} />
@@ -741,7 +741,7 @@ export function InvoiceListPage() {
                   {Array.from({ length: totalPages }, (_, i) => i + 1)
                     .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
                     .map((p, idx, arr) => (
-                      <span key={p}>
+                      <React.Fragment key={p}>
                         {idx > 0 && arr[idx - 1] !== p - 1 && (
                           <PaginationItem><PaginationEllipsis /></PaginationItem>
                         )}
@@ -750,7 +750,7 @@ export function InvoiceListPage() {
                             {p}
                           </PaginationLink>
                         </PaginationItem>
-                      </span>
+                      </React.Fragment>
                     ))}
                   <PaginationItem>
                     <PaginationNext onClick={() => setPage((p) => Math.min(totalPages, p + 1))} />

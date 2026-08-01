@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { Eye, RefreshCw } from 'lucide-react'
@@ -127,7 +127,7 @@ export function DownloadTasksPage() {
 
   return (
     <Layout title="Lịch sử tải">
-      <div className="space-y-4 max-w-5xl">
+      <div className="space-y-4">
         {/* ── Header ────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -252,7 +252,7 @@ export function DownloadTasksPage() {
             </Table>
 
             <div className="border-t px-4 py-3">
-              <Pagination>
+              <Pagination className="w-auto">
                 <PaginationContent>
                   <PaginationItem>
                     <PaginationPrevious
@@ -262,7 +262,7 @@ export function DownloadTasksPage() {
                   {Array.from({ length: totalPages }, (_, i) => i + 1)
                     .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
                     .map((p, idx, arr) => (
-                      <span key={p}>
+                      <React.Fragment key={p}>
                         {idx > 0 && arr[idx - 1] !== p - 1 && (
                           <PaginationItem>
                             <PaginationEllipsis />
@@ -273,7 +273,7 @@ export function DownloadTasksPage() {
                             {p}
                           </PaginationLink>
                         </PaginationItem>
-                      </span>
+                      </React.Fragment>
                     ))}
                   <PaginationItem>
                     <PaginationNext
