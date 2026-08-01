@@ -613,6 +613,14 @@ export class DownloadTaskService {
     taskId: string,
     log: LogEntry,
   ): Promise<void> {
+    // Emit SSE event ngay lập tức để frontend nhận log real-time
+    this.emit(taskId, {
+      type: 'log',
+      level: log.level,
+      message: log.message,
+      time: log.time,
+    });
+
     try {
       const task = await this.prisma.downloadTask.findUnique({
         where: { id: taskId },
