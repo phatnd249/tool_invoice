@@ -101,6 +101,7 @@ export type SseEventType =
   | 'day-done'
   | 'log'
   | 'done'
+  | 'cancelled'
   | 'error';
 
 export interface SseEventData {
@@ -332,6 +333,68 @@ export class DownloadTaskService {
     };
   }
 
+  /**
+   * Huỷ task đang chạy.
+   * Set status = 'CANCELLED' trong DB. Vòng lặp executeTask sẽ
+   * kiểm tra cờ này và tự dừng.
+   */
+  async cancelTask(taskId: string): Promise<void> {
+    const task = await this.prisma.downloadTask.findUnique({
+      where: { id: taskId },
+    });
+
+    if (!task) {
+      throw new NotFoundException(`Task ${taskId} not found`);
+    }
+
+    if (task.status !== 'PENDING' && task.status !== 'RUNNING') {
+      throw new BadRequestException(
+        `Không thể huỷ task ở trạng thái ${task.status}`,
+      );
+    }
+
+    await this.prisma.downloadTask.update({
+      where: { id: taskId },
+      data: { status: 'CANCELLED' },
+    });
+
+    this.logger.log(`Task ${taskId} cancelled by user`);
+  }
+
+  /**
+   * Kiểm tra task đã bị huỷ chưa.
+   * Dùng trong vòng lặp executeTask để ngắt sớm.
+   */
+  private async isTaskCancelled(taskId: string): Promise<boolean> {
+    const task = await this.prisma.downloadTask.findUnique({
+      where: { id: taskId },
+      select: { status: true },
+    });
+    return task?.status === 'CANCELLED';
+  }
+
+  /**
+   * Xử lý khi task bị huỷ: emit event, log, cleanup.
+   */
+  private async handleCancelled(
+    taskId: string,
+    typeLabel: string,
+  ): Promise<void> {
+    this.emit(taskId, {
+      type: 'cancelled',
+      message: `Task đã bị huỷ khi đang tải ${typeLabel}`,
+    });
+
+    await this.appendLog(taskId, {
+      time: new Date().toISOString(),
+      message: `🛑 Task đã bị huỷ bởi người dùng`,
+      level: 'warn',
+    }).catch(() => {});
+
+    this.eventEmitter.removeAllListeners(taskId);
+    this.logger.log(`Task ${taskId} cancelled during ${typeLabel}`);
+  }
+
   // ─── Private: Task Execution ─────────────────────────────────────────────
 
   /**
@@ -407,6 +470,12 @@ export class DownloadTaskService {
 
         // ── Duyệt từng ngày ────────────────────────────────────────────
         for (let dayIdx = 0; dayIdx < dates.length; dayIdx++) {
+          // Kiểm tra cancel trước mỗi ngày
+          if (await this.isTaskCancelled(taskId)) {
+            await this.handleCancelled(taskId, typeLabel);
+            return;
+          }
+
           const currentDate = dates[dayIdx];
           const dateStr = this.formatDate(currentDate);
 
@@ -511,6 +580,12 @@ export class DownloadTaskService {
           let dayFailed = 0;
 
           for (let i = 0; i < dayInvoices.length; i++) {
+            // Kiểm tra cancel trước mỗi invoice
+            if (await this.isTaskCancelled(taskId)) {
+              await this.handleCancelled(taskId, typeLabel);
+              return;
+            }
+
             const inv = dayInvoices[i];
             const invNum = String(inv.shdon);
 

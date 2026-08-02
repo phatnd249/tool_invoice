@@ -144,9 +144,9 @@ export interface ApiError {
 
 // ─── Task Status ─────────────────────────────────────────────────────────────
 
-export type TaskStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'ERROR'
+export type TaskStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'ERROR' | 'CANCELLED'
 
-export type DownloadStatus = 'idle' | 'connecting' | 'running' | 'done' | 'error'
+export type DownloadStatus = 'idle' | 'connecting' | 'running' | 'done' | 'error' | 'cancelled'
 
 export interface LogEntry {
   time: string

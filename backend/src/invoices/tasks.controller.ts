@@ -56,6 +56,15 @@ export class TasksController {
   }
 
   /**
+   * Huỷ task đang chạy.
+   */
+  @Post(':taskId/cancel')
+  @RequirePermissions('invoice:download')
+  cancelTask(@Param('taskId') taskId: string) {
+    return this.downloadTaskService.cancelTask(taskId);
+  }
+
+  /**
    * Danh sách task (có phân trang + filter).
    * PHẢI ĐẶT SAU CÙNG để không bắt các route cụ thể phía trên.
    */

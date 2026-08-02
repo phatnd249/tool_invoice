@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
-import { Eye, RefreshCw } from 'lucide-react'
+import { Eye, RefreshCw, X } from 'lucide-react'
 import { invoicesApi } from '@/api/invoices'
 import { getErrorMessage } from '@/lib/apiClient'
 import { cn } from '@/lib/utils'
@@ -325,13 +325,14 @@ export function DownloadTasksPage() {
                 status={
                   selectedTask.status === 'DONE' ? 'done' :
                   selectedTask.status === 'ERROR' ? 'error' :
+                  selectedTask.status === 'CANCELLED' ? 'cancelled' :
                   selectedTask.status === 'RUNNING' ? 'running' : 'connecting'
                 }
                 progress={selectedTask.progress}
                 overallProgress={selectedTask.progress}
                 processed={selectedTask.processedInvoices}
                 total={selectedTask.totalInvoices}
-                currentInvoiceType={selectedTask.status === 'DONE' || selectedTask.status === 'ERROR' ? '' : selectedTask.invoiceType}
+                currentInvoiceType={selectedTask.status === 'DONE' || selectedTask.status === 'ERROR' || selectedTask.status === 'CANCELLED' ? '' : selectedTask.invoiceType}
                 currentDate={null}
                 dayIndex={0}
                 totalDays={0}
@@ -341,6 +342,28 @@ export function DownloadTasksPage() {
                 result={selectedTask.result}
                 errorMessage={selectedTask.errorMessage}
               />
+
+              {/* Cancel button */}
+              {(selectedTask.status === 'RUNNING' || selectedTask.status === 'PENDING') && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="w-full"
+                  onClick={async () => {
+                    try {
+                      await invoicesApi.cancelTask(selectedTask.id)
+                      toast.success('Đã huỷ task')
+                      setSelectedTask({ ...selectedTask, status: 'CANCELLED' })
+                      fetchTasks()
+                    } catch (err) {
+                      toast.error(getErrorMessage(err))
+                    }
+                  }}
+                >
+                  <X className="size-4" />
+                  Huỷ task
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>

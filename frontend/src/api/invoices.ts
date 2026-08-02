@@ -59,6 +59,10 @@ export const invoicesApi = {
   getTask: (taskId: string) =>
     apiClient.get<DownloadTask>(`/invoices/tasks/detail/${taskId}`),
 
+  /** Huỷ task đang chạy */
+  cancelTask: (taskId: string) =>
+    apiClient.post<void>(`/invoices/tasks/${taskId}/cancel`),
+
   /** Lấy HTML preview của hoá đơn */
   preview: (id: string): Promise<string> =>
     apiClient.get(`/invoices/preview/${id}`, {

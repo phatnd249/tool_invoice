@@ -70,6 +70,8 @@ export function DownloadProgress({
       }
       case 'done':
         return 'Hoàn thành'
+      case 'cancelled':
+        return 'Đã huỷ'
       case 'error':
         return 'Lỗi'
       default:
@@ -85,6 +87,8 @@ export function DownloadProgress({
           <div className="size-2 rounded-full bg-blue-500 animate-pulse" />
         ) : status === 'done' ? (
           <div className="size-2 rounded-full bg-green-500" />
+        ) : status === 'cancelled' ? (
+          <div className="size-2 rounded-full bg-yellow-500" />
         ) : status === 'error' ? (
           <div className="size-2 rounded-full bg-destructive" />
         ) : null}

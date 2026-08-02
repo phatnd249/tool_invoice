@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
-import { Download, CalendarIcon, RotateCcw } from 'lucide-react'
+import { Download, CalendarIcon, RotateCcw, X } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
 import { useDownloadTask } from '@/hooks/useDownloadTask'
 import { invoicesApi } from '@/api/invoices'
@@ -69,6 +69,7 @@ export function InvoiceDownloadForm({
     result,
     errorMessage,
     startDownload,
+    cancelDownload,
     reset,
     overallProgress,
     currentDate,
@@ -209,7 +210,21 @@ export function InvoiceDownloadForm({
           errorMessage={errorMessage}
         />
 
-        {(status === 'done' || status === 'error') && (
+        {/* Cancel button: chỉ hiện khi đang chạy */}
+        {status === 'running' && (
+          <Button
+            variant="destructive"
+            size="sm"
+            className="w-full"
+            onClick={cancelDownload}
+          >
+            <X className="size-4" />
+            Huỷ tải
+          </Button>
+        )}
+
+        {/* Reset button: hiện khi done / error / cancelled */}
+        {(status === 'done' || status === 'error' || status === 'cancelled') && (
           <Button
             variant="outline"
             size="sm"

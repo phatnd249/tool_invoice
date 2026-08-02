@@ -80,6 +80,11 @@ interface SseErrorEvent {
   message: string
 }
 
+interface SseCancelledEvent {
+  type: 'cancelled'
+  message: string
+}
+
 type SseEvent =
   | SseConnectedEvent
   | SseStartEvent
@@ -89,6 +94,7 @@ type SseEvent =
   | SseLogEvent
   | SseDoneEvent
   | SseErrorEvent
+  | SseCancelledEvent
 
 // ─── Hook State ──────────────────────────────────────────────────────────────
 
@@ -127,6 +133,8 @@ export interface UseDownloadTaskReturn {
     invoiceType?: string
     overwriteMode?: string
   }) => Promise<void>
+  /** Cancel the running download task */
+  cancelDownload: () => Promise<void>
   /** Reset to idle state (for starting a new download) */
   reset: () => void
 }
@@ -275,6 +283,12 @@ export function useDownloadTask(companyId: string): UseDownloadTaskReturn {
         closeSSE()
         break
       }
+
+      case 'cancelled': {
+        setStatus('cancelled')
+        closeSSE()
+        break
+      }
     }
   }, [closeSSE])
 
@@ -402,6 +416,23 @@ export function useDownloadTask(companyId: string): UseDownloadTaskReturn {
     [connectSSE],
   )
 
+  // ── Cancel download ────────────────────────────────────────────────────
+
+  const cancelDownload = useCallback(async () => {
+    if (!taskId) return
+
+    try {
+      await invoicesApi.cancelTask(taskId)
+      toast.info('Đã yêu cầu huỷ task. Đang dừng...')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      // Luôn đóng SSE
+      closeSSE()
+      setStatus('cancelled')
+    }
+  }, [taskId, closeSSE])
+
   // ── Reset ────────────────────────────────────────────────────────────────
 
   const reset = useCallback(() => {
@@ -449,6 +480,7 @@ export function useDownloadTask(companyId: string): UseDownloadTaskReturn {
     result,
     errorMessage,
     startDownload,
+    cancelDownload,
     reset,
   }
 }
