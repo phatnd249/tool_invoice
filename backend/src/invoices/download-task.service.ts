@@ -537,7 +537,7 @@ export class DownloadTaskService {
           });
 
           if (dayInvoices.length === 0) {
-            // Không có hoá đơn → sang ngày tiếp theo
+            // Không có hoá đơn → nghỉ 2s rồi sang ngày tiếp theo
             this.emit(taskId, {
               type: 'day-done',
               currentDate: dateStr,
@@ -553,6 +553,7 @@ export class DownloadTaskService {
                 itemsFailed: 0,
               },
             });
+            await delay(2000);
             continue;
           }
 
@@ -793,6 +794,11 @@ export class DownloadTaskService {
             message: `✅ Ngày ${dateStr}: ${dayDownloaded}/${dayInvoices.length} hoá đơn (${dayFailed} lỗi)`,
             level: dayFailed > 0 ? 'warn' : 'info',
           });
+
+          // Nghỉ 1s giữa các ngày để tránh query dồn dập gây 429
+          if (dayIdx < dates.length - 1) {
+            await delay(1000);
+          }
         }
 
         allResults.push({
