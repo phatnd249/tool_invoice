@@ -97,6 +97,8 @@ export type SseEventType =
   | 'connected'
   | 'start'
   | 'progress'
+  | 'day-start'
+  | 'day-done'
   | 'log'
   | 'done'
   | 'error';
@@ -114,6 +116,19 @@ export interface SseEventData {
   time?: string;
   result?: any;
   logs?: LogEntry[];
+  // Dành cho chế độ query theo ngày
+  currentDate?: string;
+  dayIndex?: number;
+  totalDays?: number;
+  dayInvoicesCount?: number;
+  dayProcessed?: number;
+  dayStats?: {
+    totalQueried: number;
+    created: number;
+    updated: number;
+    itemsDownloaded: number;
+    itemsFailed: number;
+  };
 }
 
 interface DownloadTaskParams {
@@ -321,7 +336,11 @@ export class DownloadTaskService {
 
   /**
    * Thực thi task tải hoá đơn.
-   * Logic tương tự InvoicesService.downloadInvoices() nhưng có emit events.
+   *
+   * Luồng mới (query theo ngày + download ngay):
+   * 1. Tính danh sách các ngày từ startDate → endDate
+   * 2. Với mỗi ngày: query → lưu metadata → download ZIP/XML/PDF từng hoá đơn
+   * 3. Emit progress real-time: "Đang tải hoá đơn ngày dd/mm/yyyy — X/Y"
    */
   private async executeTask(
     taskId: string,
@@ -350,6 +369,13 @@ export class DownloadTaskService {
           ? ['BUY', 'SELL']
           : [invoiceType as 'BUY' | 'SELL'];
 
+      // ── Tính danh sách ngày ──────────────────────────────────────────
+      const dates = this.generateDateRange(
+        new Date(startDate),
+        new Date(endDate),
+      );
+      const totalDays = dates.length;
+
       const allResults: Array<{
         type: string;
         totalQueried: number;
@@ -363,249 +389,352 @@ export class DownloadTaskService {
       const invoicesBaseDir =
         this.config.get('INVOICES_DIR') || './invoices';
 
-      // ── Tải từng loại BUY/SELL ───────────────────────────────────────
+      // ── Duyệt từng loại BUY/SELL ─────────────────────────────────────
       for (const type of types) {
         const typeLabel = type === 'BUY' ? 'Mua vào' : 'Bán ra';
 
         await this.appendLog(taskId, {
           time: new Date().toISOString(),
-          message: `Bắt đầu tải hoá đơn ${typeLabel} (${startDate} → ${endDate})`,
+          message: `Bắt đầu tải hoá đơn ${typeLabel} (${startDate} → ${endDate}, ${totalDays} ngày)`,
           level: 'info',
         });
 
-        // Query GDT
-        const invoices = await this.gdtClient.queryInvoices(
-          new Date(startDate),
-          new Date(endDate),
-          token,
-          type,
-        );
+        let typeTotalQueried = 0;
+        let typeCreated = 0;
+        let typeUpdated = 0;
+        let typeItemsDownloaded = 0;
+        let typeItemsFailed = 0;
 
-        this.emit(taskId, {
-          type: 'start',
-          invoiceType: type,
-          totalInvoices: invoices.length,
-          message: `Tìm thấy ${invoices.length} hoá đơn ${typeLabel}`,
-        });
+        // ── Duyệt từng ngày ────────────────────────────────────────────
+        for (let dayIdx = 0; dayIdx < dates.length; dayIdx++) {
+          const currentDate = dates[dayIdx];
+          const dateStr = this.formatDate(currentDate);
 
-        await this.appendLog(taskId, {
-          time: new Date().toISOString(),
-          message: `Tìm thấy ${invoices.length} hoá đơn ${typeLabel}`,
-          level: 'info',
-        });
+          // ── DAY-START ────────────────────────────────────────────────
+          this.emit(taskId, {
+            type: 'day-start',
+            currentDate: dateStr,
+            dayIndex: dayIdx + 1,
+            totalDays,
+            invoiceType: type,
+            message: `Đang query hoá đơn ${typeLabel} ngày ${dateStr} (ngày ${dayIdx + 1}/${totalDays})...`,
+          });
 
-        // Cập nhật tổng số hoá đơn
-        await this.updateTask(taskId, {
-          totalInvoices: invoices.length,
-          processedInvoices: 0,
-        });
+          await this.appendLog(taskId, {
+            time: new Date().toISOString(),
+            message: `📅 Ngày ${dateStr} (${dayIdx + 1}/${totalDays}): Đang query hoá đơn ${typeLabel}...`,
+            level: 'info',
+          });
 
-        // Lưu metadata vào DB
-        const stats = await this.persistence.bulkUpsert(
-          invoices,
-          type,
-          'query',
-          company.id,
-        );
-
-        await this.appendLog(taskId, {
-          time: new Date().toISOString(),
-          message: `Đã lưu metadata: ${stats.created} mới, ${stats.updated} cập nhật`,
-          level: 'info',
-        });
-
-        // Tải ZIP + parse XML cho từng invoice
-        const companyDir = sanitizeDirName(company.name);
-        const typeDir =
-          type === 'SELL' ? 'BanRa' : 'MuaVao';
-
-        let itemsDownloaded = 0;
-        let itemsFailed = 0;
-
-        const rateLimitHandler = new RateLimitHandler();
-
-        for (let i = 0; i < invoices.length; i++) {
-          const inv = invoices[i];
-          const invNum = String(inv.shdon);
-
-          // ── Overwrite pre-check ────────────────────────────────
-          const overwriteMode =
-            (params.overwriteMode as string) || 'SKIP';
-          let currentVersion = 0;
-
-          const invDate = new Date(inv.tdlap);
-          const outputDir = path.join(
-            invoicesBaseDir,
-            companyDir,
-            typeDir,
-            `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`,
-          );
-
-          const statusCode = getInvoiceFileStatusCode(inv);
-          const taxCode = String(inv.nbmst);
-          const baseFileName = `${taxCode}-${invNum}-${statusCode}`;
-          const zipFileName = `${baseFileName}.zip`;
-          const zipPath = path.join(outputDir, zipFileName);
-
-          if (overwriteMode === 'SKIP') {
-            if (
-              fs.existsSync(zipPath) &&
-              (fs.statSync(zipPath).size || 0) > 0
-            ) {
-              await this.appendLog(taskId, {
-                time: new Date().toISOString(),
-                message: `  ⏭ Bỏ qua ${invNum}: đã có file ZIP`,
-                level: 'info',
-              });
-              continue;
-            }
-          } else if (overwriteMode === 'OVERWRITE') {
-            removeAllRelatedFiles(zipPath);
-            await this.appendLog(taskId, {
-              time: new Date().toISOString(),
-              message: `  🔄 Ghi đè ${invNum}: đã xoá file cũ`,
-              level: 'info',
-            });
-          } else if (overwriteMode === 'NEW_VERSION') {
-            if (
-              fs.existsSync(zipPath) &&
-              (fs.statSync(zipPath).size || 0) > 0
-            ) {
-              currentVersion = findNextVersion(zipPath);
-              await this.appendLog(taskId, {
-                time: new Date().toISOString(),
-                message: `  📋 Tạo bản sao v${currentVersion} cho ${invNum}`,
-                level: 'info',
-              });
-            }
-          }
-
-          // ── Kiểm tra cooldown trước khi download ──────────────
-          if (rateLimitHandler.isInCooldown()) {
-            const waitMs = rateLimitHandler.getRemainingCooldown();
-            await this.appendLog(taskId, {
-              time: new Date().toISOString(),
-              message: `⏳ Rate limit: đang tạm dừng ${Math.round(waitMs / 1000)}s trước khi tiếp tục...`,
-              level: 'warn',
-            });
-            await delay(waitMs);
-          }
-
+          // ── QUERY một ngày ───────────────────────────────────────────
+          let dayInvoices: GdtRawInvoice[];
           try {
-            // Progress
-            const progress = Math.round(((i + 1) / invoices.length) * 100);
-
-            this.emit(taskId, {
-              type: 'progress',
-              progress,
-              processed: i + 1,
-              total: invoices.length,
-              invoiceType: type,
-              message: `Đang tải hoá đơn ${invNum} (${i + 1}/${invoices.length})...`,
-            });
-
-            await this.appendLog(taskId, {
-              time: new Date().toISOString(),
-              message: `[${i + 1}/${invoices.length}] Đang tải ZIP cho ${invNum}...`,
-              level: 'info',
-            });
-
-            // Tải ZIP + parse + save + PDF (dùng chung downloader)
-            const result = await this.downloader.downloadSingleInvoice({
-              invoice: inv,
+            dayInvoices = await this.gdtClient.queryOneDay(
+              currentDate,
               token,
               type,
-              companyName: company.name,
-              overwriteMode: overwriteMode as 'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
-              currentVersion,
-            });
-
-            itemsDownloaded++;
-
+            );
+          } catch (err: any) {
             await this.appendLog(taskId, {
               time: new Date().toISOString(),
-              message: `  ✓ Đã tải ZIP: ${result.zipPath ? path.basename(result.zipPath) : invNum + '.zip'}`,
-              level: 'info',
+              message: `  ✗ Lỗi query ngày ${dateStr}: ${err.message}`,
+              level: 'error',
             });
-
-            await this.appendLog(taskId, {
-              time: new Date().toISOString(),
-              message: `  ✓ Parse XML: ${result.itemsCount} items`,
-              level: 'info',
+            // Vẫn emit day-done để frontend biết đã xử lý ngày này
+            this.emit(taskId, {
+              type: 'day-done',
+              currentDate: dateStr,
+              dayIndex: dayIdx + 1,
+              totalDays,
+              invoiceType: type,
+              message: `❌ Ngày ${dateStr}: Lỗi query`,
+              dayStats: {
+                totalQueried: 0,
+                created: 0,
+                updated: 0,
+                itemsDownloaded: 0,
+                itemsFailed: 0,
+              },
             });
+            continue;
+          }
 
-            if (result.pdfPath) {
+          typeTotalQueried += dayInvoices.length;
+
+          await this.appendLog(taskId, {
+            time: new Date().toISOString(),
+            message: `  ✓ Tìm thấy ${dayInvoices.length} hoá đơn ngày ${dateStr}`,
+            level: 'info',
+          });
+
+          if (dayInvoices.length === 0) {
+            // Không có hoá đơn → sang ngày tiếp theo
+            this.emit(taskId, {
+              type: 'day-done',
+              currentDate: dateStr,
+              dayIndex: dayIdx + 1,
+              totalDays,
+              invoiceType: type,
+              message: `✅ Ngày ${dateStr}: Không có hoá đơn`,
+              dayStats: {
+                totalQueried: 0,
+                created: 0,
+                updated: 0,
+                itemsDownloaded: 0,
+                itemsFailed: 0,
+              },
+            });
+            continue;
+          }
+
+          // ── LƯU METADATA ──────────────────────────────────────────────
+          const stats = await this.persistence.bulkUpsert(
+            dayInvoices,
+            type,
+            'query',
+            company.id,
+          );
+          typeCreated += stats.created;
+          typeUpdated += stats.updated;
+
+          await this.appendLog(taskId, {
+            time: new Date().toISOString(),
+            message: `  ✓ Metadata: ${stats.created} mới, ${stats.updated} cập nhật`,
+            level: 'info',
+          });
+
+          // ── DOWNLOAD từng hoá đơn trong ngày ─────────────────────────
+          const companyDir = sanitizeDirName(company.name);
+          const rateLimitHandler = new RateLimitHandler();
+
+          let dayDownloaded = 0;
+          let dayFailed = 0;
+
+          for (let i = 0; i < dayInvoices.length; i++) {
+            const inv = dayInvoices[i];
+            const invNum = String(inv.shdon);
+
+            // ── Overwrite pre-check ──────────────────────────────────
+            const overwriteMode =
+              (params.overwriteMode as string) || 'SKIP';
+            let currentVersion = 0;
+
+            const invDate = new Date(inv.tdlap);
+            const typeDir =
+              type === 'SELL' ? 'BanRa' : 'MuaVao';
+            const outputDir = path.join(
+              invoicesBaseDir,
+              companyDir,
+              typeDir,
+              `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`,
+            );
+
+            const statusCode = getInvoiceFileStatusCode(inv);
+            const taxCode = String(inv.nbmst);
+            const baseFileName = `${taxCode}-${invNum}-${statusCode}`;
+            const zipFileName = `${baseFileName}.zip`;
+            const zipPath = path.join(outputDir, zipFileName);
+
+            if (overwriteMode === 'SKIP') {
+              if (
+                fs.existsSync(zipPath) &&
+                (fs.statSync(zipPath).size || 0) > 0
+              ) {
+                dayDownloaded++;
+                await this.appendLog(taskId, {
+                  time: new Date().toISOString(),
+                  message: `  ⏭ Bỏ qua ${invNum}: đã có file ZIP`,
+                  level: 'info',
+                });
+                continue;
+              }
+            } else if (overwriteMode === 'OVERWRITE') {
+              removeAllRelatedFiles(zipPath);
               await this.appendLog(taskId, {
                 time: new Date().toISOString(),
-                message: `  ✓ PDF: ${path.basename(result.pdfPath)}`,
+                message: `  🔄 Ghi đè ${invNum}: đã xoá file cũ`,
                 level: 'info',
               });
+            } else if (overwriteMode === 'NEW_VERSION') {
+              if (
+                fs.existsSync(zipPath) &&
+                (fs.statSync(zipPath).size || 0) > 0
+              ) {
+                currentVersion = findNextVersion(zipPath);
+                await this.appendLog(taskId, {
+                  time: new Date().toISOString(),
+                  message: `  📋 Tạo bản sao v${currentVersion} cho ${invNum}`,
+                  level: 'info',
+                });
+              }
             }
 
-            // Báo thành công cho rate limit handler
-            rateLimitHandler.handleSuccess();
-
-            // Cập nhật processedInvoices
-            await this.updateTask(taskId, {
-              progress,
-              processedInvoices: i + 1,
-            });
-          } catch (error: any) {
-            itemsFailed++;
-
-            const statusCode = error?.statusCode || 0;
-
-            if (statusCode === 429) {
-              // ── Rate limit: tạm dừng và chờ, KHÔNG ghi markError ──
-              const cooldownMs = rateLimitHandler.handle429();
+            // ── Kiểm tra cooldown trước khi download ────────────────
+            if (rateLimitHandler.isInCooldown()) {
+              const waitMs = rateLimitHandler.getRemainingCooldown();
               await this.appendLog(taskId, {
                 time: new Date().toISOString(),
-                message: `⏳ GDT rate limit (HTTP 429) cho hoá đơn ${invNum}. Tạm dừng ${Math.round(cooldownMs / 1000)}s...`,
+                message: `⏳ Rate limit: đang tạm dừng ${Math.round(waitMs / 1000)}s trước khi tiếp tục...`,
                 level: 'warn',
               });
-              this.logger.warn(
-                `Task ${taskId}: Rate limited on invoice ${invNum}. Cooling down ${Math.round(cooldownMs / 1000)}s`,
+              await delay(waitMs);
+            }
+
+            try {
+              // Progress: dựa trên số invoice trong ngày hiện tại
+              const dayProgress = Math.round(
+                ((i + 1) / dayInvoices.length) * 100,
               );
-              await delay(cooldownMs);
-            } else {
-              // ── Lỗi thực sự (500, timeout, etc.): ghi log + mark error ──
-              await this.appendLog(taskId, {
-                time: new Date().toISOString(),
-                message: `  ✗ Lỗi hoá đơn ${invNum}: ${error.message}`,
-                level: 'error',
+
+              this.emit(taskId, {
+                type: 'progress',
+                progress: dayProgress,
+                processed: i + 1,
+                total: dayInvoices.length,
+                invoiceType: type,
+                currentDate: dateStr,
+                dayIndex: dayIdx + 1,
+                totalDays,
+                dayInvoicesCount: dayInvoices.length,
+                dayProcessed: i + 1,
+                message: `Đang tải hoá đơn ngày ${dateStr} — ${i + 1}/${dayInvoices.length}...`,
               });
 
-              this.logger.warn(
-                `Task ${taskId}: Failed invoice ${invNum}: ${error.message}`,
-              );
+              await this.appendLog(taskId, {
+                time: new Date().toISOString(),
+                message: `[${dayIdx + 1}/${totalDays}][${i + 1}/${dayInvoices.length}] Đang tải ZIP cho ${invNum}...`,
+                level: 'info',
+              });
 
-              // Lưu error vào DB
-              await this.persistence
-                .markError(inv, type, error.message)
-                .catch(() => {});
+              // Tải ZIP + parse + save + PDF
+              const result = await this.downloader.downloadSingleInvoice({
+                invoice: inv,
+                token,
+                type,
+                companyName: company.name,
+                overwriteMode: overwriteMode as
+                  | 'SKIP'
+                  | 'OVERWRITE'
+                  | 'NEW_VERSION',
+                currentVersion,
+              });
+
+              dayDownloaded++;
+
+              await this.appendLog(taskId, {
+                time: new Date().toISOString(),
+                message: `  ✓ Đã tải ZIP: ${result.zipPath ? path.basename(result.zipPath) : invNum + '.zip'}`,
+                level: 'info',
+              });
+
+              await this.appendLog(taskId, {
+                time: new Date().toISOString(),
+                message: `  ✓ Parse XML: ${result.itemsCount} items`,
+                level: 'info',
+              });
+
+              if (result.pdfPath) {
+                await this.appendLog(taskId, {
+                  time: new Date().toISOString(),
+                  message: `  ✓ PDF: ${path.basename(result.pdfPath)}`,
+                  level: 'info',
+                });
+              }
+
+              // Báo thành công cho rate limit handler
+              rateLimitHandler.handleSuccess();
+
+              // Cập nhật processedInvoices (tích luỹ toàn bộ task)
+              await this.updateTask(taskId, {
+                progress: dayProgress,
+                processedInvoices:
+                  typeItemsDownloaded + dayDownloaded,
+                totalInvoices:
+                  typeTotalQueried,
+              });
+            } catch (error: any) {
+              dayFailed++;
+
+              const statusCode = error?.statusCode || 0;
+
+              if (statusCode === 429) {
+                // Rate limit: tạm dừng và chờ
+                const cooldownMs = rateLimitHandler.handle429();
+                await this.appendLog(taskId, {
+                  time: new Date().toISOString(),
+                  message: `⏳ GDT rate limit (HTTP 429) cho hoá đơn ${invNum}. Tạm dừng ${Math.round(cooldownMs / 1000)}s...`,
+                  level: 'warn',
+                });
+                this.logger.warn(
+                  `Task ${taskId}: Rate limited on invoice ${invNum}. Cooling down ${Math.round(cooldownMs / 1000)}s`,
+                );
+                await delay(cooldownMs);
+              } else {
+                // Lỗi thực sự
+                await this.appendLog(taskId, {
+                  time: new Date().toISOString(),
+                  message: `  ✗ Lỗi hoá đơn ${invNum}: ${error.message}`,
+                  level: 'error',
+                });
+
+                this.logger.warn(
+                  `Task ${taskId}: Failed invoice ${invNum}: ${error.message}`,
+                );
+
+                await this.persistence
+                  .markError(inv, type, error.message)
+                  .catch(() => {});
+              }
+            }
+
+            // Delay 500ms giữa các request
+            if (i < dayInvoices.length - 1) {
+              await delay(500);
             }
           }
 
-          // Delay 500ms giữa các request
-          if (i < invoices.length - 1) {
-            await delay(500);
-          }
+          typeItemsDownloaded += dayDownloaded;
+          typeItemsFailed += dayFailed;
+
+          // ── DAY-DONE ──────────────────────────────────────────────────
+          this.emit(taskId, {
+            type: 'day-done',
+            currentDate: dateStr,
+            dayIndex: dayIdx + 1,
+            totalDays,
+            invoiceType: type,
+            message: `✅ Ngày ${dateStr}: ${dayDownloaded}/${dayInvoices.length} hoá đơn (${dayFailed} lỗi)`,
+            dayStats: {
+              totalQueried: dayInvoices.length,
+              created: stats.created,
+              updated: stats.updated,
+              itemsDownloaded: dayDownloaded,
+              itemsFailed: dayFailed,
+            },
+          });
+
+          await this.appendLog(taskId, {
+            time: new Date().toISOString(),
+            message: `✅ Ngày ${dateStr}: ${dayDownloaded}/${dayInvoices.length} hoá đơn (${dayFailed} lỗi)`,
+            level: dayFailed > 0 ? 'warn' : 'info',
+          });
         }
 
         allResults.push({
           type,
-          totalQueried: invoices.length,
-          ...stats,
-          itemsDownloaded,
-          itemsFailed,
+          totalQueried: typeTotalQueried,
+          created: typeCreated,
+          updated: typeUpdated,
+          itemsDownloaded: typeItemsDownloaded,
+          itemsFailed: typeItemsFailed,
         });
 
-        grandTotal += stats.created + stats.updated;
+        grandTotal += typeCreated + typeUpdated;
 
         await this.appendLog(taskId, {
           time: new Date().toISOString(),
-          message: `Hoàn thành ${typeLabel}: ${itemsDownloaded}/${invoices.length} hoá đơn (${itemsFailed} lỗi)`,
-          level: itemsFailed > 0 ? 'warn' : 'info',
+          message: `Hoàn thành ${typeLabel}: ${typeItemsDownloaded}/${typeTotalQueried} hoá đơn (${typeItemsFailed} lỗi)`,
+          level: typeItemsFailed > 0 ? 'warn' : 'info',
         });
       }
 
@@ -744,6 +873,46 @@ export class DownloadTaskService {
         `Failed to append log for task ${taskId}: ${err.message}`,
       );
     }
+  }
+
+  /**
+   * Tạo mảng các ngày từ startDate đến endDate (không tính múi giờ).
+   * Ví dụ: 01/04/2026 → 03/04/2026 → [2026-04-01, 2026-04-02, 2026-04-03]
+   */
+  private generateDateRange(startDate: Date, endDate: Date): Date[] {
+    const dates: Date[] = [];
+    // Chuẩn hoá về đầu ngày (UTC) để tránh lệch múi giờ
+    const current = new Date(
+      Date.UTC(
+        startDate.getFullYear(),
+        startDate.getMonth(),
+        startDate.getDate(),
+      ),
+    );
+    const end = new Date(
+      Date.UTC(
+        endDate.getFullYear(),
+        endDate.getMonth(),
+        endDate.getDate(),
+      ),
+    );
+
+    while (current <= end) {
+      dates.push(new Date(current));
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    return dates;
+  }
+
+  /**
+   * Format Date thành dd/mm/yyyy (VN locale).
+   */
+  private formatDate(date: Date): string {
+    const dd = String(date.getUTCDate()).padStart(2, '0');
+    const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = date.getUTCFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   }
 
   /**

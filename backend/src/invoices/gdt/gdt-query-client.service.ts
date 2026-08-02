@@ -16,8 +16,68 @@ export class GdtQueryClientService {
   constructor(private readonly http: GdtHttpClientService) {}
 
   /**
+   * Query hoá đơn từ GDT cho một ngày duy nhất.
+   * Tự động gọi cả 2 API (query chuẩn + sco-query) và merge kết quả.
+   * Vẫn hỗ trợ pagination nếu số hoá đơn trong ngày > PAGE_SIZE.
+   */
+  async queryOneDay(
+    date: Date,
+    token: string,
+    type: 'BUY' | 'SELL',
+  ): Promise<GdtRawInvoice[]> {
+    const searchStr = this.http.buildSearchString(date, date);
+    const headers = this.http.buildHeaders(token);
+    const apiPath = type === 'BUY' ? 'purchase' : 'sold';
+
+    const results: GdtRawInvoice[] = [];
+
+    // Query standard invoices
+    try {
+      const standard = await this.queryAllPages(
+        `${this.http.GDT_BASE}/query/invoices/${apiPath}`,
+        searchStr,
+        headers,
+        'query',
+      );
+      results.push(...standard);
+      this.logger.log(
+        `Standard API (${date.toISOString().slice(0, 10)}): ${standard.length} invoices (${type})`,
+      );
+    } catch (error: any) {
+      this.logger.warn(
+        `Standard API failed for ${type} on ${date.toISOString().slice(0, 10)}: ${error.message}`,
+      );
+    }
+
+    // Query sco (cash register) invoices
+    try {
+      const sco = await this.queryAllPages(
+        `${this.http.GDT_BASE}/sco-query/invoices/${apiPath}`,
+        searchStr,
+        headers,
+        'sco-query',
+      );
+      results.push(...sco);
+      this.logger.log(
+        `SCO API (${date.toISOString().slice(0, 10)}): ${sco.length} invoices (${type})`,
+      );
+    } catch (error: any) {
+      this.logger.warn(
+        `SCO API failed for ${type} on ${date.toISOString().slice(0, 10)}: ${error.message}`,
+      );
+    }
+
+    return results;
+  }
+
+  /**
    * Query hoá đơn từ GDT trong khoảng thời gian.
    * Tự động gọi cả 2 API (query chuẩn + sco-query) và merge kết quả.
+   *
+   * @deprecated Dùng queryOneDay() lặp theo từng ngày để tránh mất dữ liệu
+   *             khi khoảng thời gian dài (GDT trả thiếu data ở các trang sau).
+   *             Giữ lại cho backward compatibility và các use-case cần query
+   *             nhanh khoảng ngắn.
    */
   async queryInvoices(
     startDate: Date,

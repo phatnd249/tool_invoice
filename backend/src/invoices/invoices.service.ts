@@ -98,6 +98,12 @@ export class InvoicesService {
         ? ['BUY', 'SELL']
         : [invoiceType as 'BUY' | 'SELL'];
 
+    // 3. Tính danh sách ngày
+    const dates = this.generateDateRange(
+      new Date(startDate),
+      new Date(endDate),
+    );
+
     const results: Array<{
       type: string;
       totalQueried: number;
@@ -109,90 +115,109 @@ export class InvoicesService {
 
     let grandTotal = 0;
 
-    const invoicesBaseDir =
-      this.config.get('INVOICES_DIR') || './invoices';
-
     for (const type of types) {
       this.logger.log(
-        `Downloading ${type} invoices for ${company.taxCode} (${startDate} → ${endDate})`,
+        `Downloading ${type} invoices for ${company.taxCode} (${startDate} → ${endDate}, ${dates.length} days)`,
       );
 
-      // 3. Query GDT
-      const invoices = await this.gdtClient.queryInvoices(
-        new Date(startDate),
-        new Date(endDate),
-        token,
-        type,
-      );
+      let typeTotalQueried = 0;
+      let typeCreated = 0;
+      let typeUpdated = 0;
+      let typeItemsDownloaded = 0;
+      let typeItemsFailed = 0;
 
-      // 4. Lưu metadata vào DB
-      const stats = await this.persistence.bulkUpsert(
-        invoices,
-        type,
-        'query',
-        company.id,
-      );
+      // 4. Query + download từng ngày
+      for (const date of dates) {
+        const dateStr = date.toISOString().slice(0, 10);
 
-      // 5. Tải ZIP + parse XML + lưu items cho từng invoice
-      const companyDir = sanitizeDirName(company.name);
-      const typeDir =
-        type === 'SELL' ? 'BanRa' : 'MuaVao';
-
-      let itemsDownloaded = 0;
-      let itemsFailed = 0;
-
-      for (let i = 0; i < invoices.length; i++) {
-        const inv = invoices[i];
-
+        // Query một ngày
+        let dayInvoices: GdtRawInvoice[];
         try {
-          this.logger.debug(
-            `[${i + 1}/${invoices.length}] Downloading ZIP for ${inv.shdon}...`,
-          );
-
-          const result = await this.downloader.downloadSingleInvoice({
-            invoice: inv,
+          dayInvoices = await this.gdtClient.queryOneDay(
+            date,
             token,
             type,
-            companyName: company.name,
-          });
-
-          if (result.success) {
-            itemsDownloaded++;
-            this.logger.debug(
-              `  ✓ Downloaded: ${result.itemsCount} items`,
-            );
-          }
-        } catch (error: any) {
-          itemsFailed++;
-          this.logger.warn(
-            `Failed to process invoice ${inv.shdon}: ${error.message}`,
           );
-          // Lưu error message
-          await this.persistence.markError(
-            inv,
-            type,
-            error.message,
-          ).catch(() => {});
+        } catch (err: any) {
+          this.logger.warn(
+            `Query failed for ${dateStr} (${type}): ${err.message}`,
+          );
+          continue;
         }
 
-        // Delay 500ms giữa các request
-        if (i < invoices.length - 1) {
-          await delay(500);
+        typeTotalQueried += dayInvoices.length;
+        this.logger.log(
+          `  ${dateStr}: ${dayInvoices.length} invoices`,
+        );
+
+        if (dayInvoices.length === 0) continue;
+
+        // Lưu metadata
+        const stats = await this.persistence.bulkUpsert(
+          dayInvoices,
+          type,
+          'query',
+          company.id,
+        );
+        typeCreated += stats.created;
+        typeUpdated += stats.updated;
+
+        // Tải ZIP + parse XML
+        for (let i = 0; i < dayInvoices.length; i++) {
+          const inv = dayInvoices[i];
+
+          try {
+            this.logger.debug(
+              `[${dateStr}][${i + 1}/${dayInvoices.length}] Downloading ZIP for ${inv.shdon}...`,
+            );
+
+            const result = await this.downloader.downloadSingleInvoice({
+              invoice: inv,
+              token,
+              type,
+              companyName: company.name,
+            });
+
+            if (result.success) {
+              typeItemsDownloaded++;
+              this.logger.debug(
+                `  ✓ Downloaded: ${result.itemsCount} items`,
+              );
+            }
+          } catch (error: any) {
+            typeItemsFailed++;
+            this.logger.warn(
+              `Failed to process invoice ${inv.shdon}: ${error.message}`,
+            );
+            await this.persistence
+              .markError(inv, type, error.message)
+              .catch(() => {});
+          }
+
+          if (i < dayInvoices.length - 1) {
+            await delay(500);
+          }
+        }
+
+        // Delay giữa các ngày
+        if (dates.length > 1) {
+          await delay(300);
         }
       }
 
       results.push({
         type,
-        totalQueried: invoices.length,
-        ...stats,
-        itemsDownloaded,
-        itemsFailed,
+        totalQueried: typeTotalQueried,
+        created: typeCreated,
+        updated: typeUpdated,
+        itemsDownloaded: typeItemsDownloaded,
+        itemsFailed: typeItemsFailed,
       });
 
-      grandTotal += stats.created + stats.updated;
+      grandTotal += typeCreated + typeUpdated;
     }
 
-    // 6. Cập nhật downloadCount
+    // 5. Cập nhật downloadCount
     if (grandTotal > 0) {
       await this.prisma.company.update({
         where: { id: company.id },
@@ -210,6 +235,36 @@ export class InvoicesService {
       results,
       totalSaved: grandTotal,
     };
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  /**
+   * Tạo mảng các ngày từ startDate đến endDate (UTC, không lệch múi giờ).
+   */
+  private generateDateRange(startDate: Date, endDate: Date): Date[] {
+    const dates: Date[] = [];
+    const current = new Date(
+      Date.UTC(
+        startDate.getFullYear(),
+        startDate.getMonth(),
+        startDate.getDate(),
+      ),
+    );
+    const end = new Date(
+      Date.UTC(
+        endDate.getFullYear(),
+        endDate.getMonth(),
+        endDate.getDate(),
+      ),
+    );
+
+    while (current <= end) {
+      dates.push(new Date(current));
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    return dates;
   }
 
   // ─── Query (datatable) ──────────────────────────────────────────────────

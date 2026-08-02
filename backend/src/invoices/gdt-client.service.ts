@@ -47,8 +47,20 @@ export class GdtClientService {
   ) {}
 
   /**
+   * Query hoá đơn từ GDT cho một ngày duy nhất.
+   * Gọi cả 2 API (chuẩn + sco) và merge, có pagination nếu > 50.
+   */
+  async queryOneDay(
+    date: Date,
+    token: string,
+    type: 'BUY' | 'SELL',
+  ): Promise<GdtRawInvoice[]> {
+    return this.queryClient.queryOneDay(date, token, type);
+  }
+
+  /**
    * Query hoá đơn từ GDT trong khoảng thời gian.
-   * @deprecated Dùng trực tiếp GdtQueryClientService.queryInvoices().
+   * @deprecated Dùng queryOneDay() lặp theo từng ngày để tránh mất dữ liệu.
    */
   async queryInvoices(
     startDate: Date,
