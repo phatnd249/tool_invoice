@@ -53,7 +53,7 @@ export class GdtHttpClientService {
     config: any,
     retries: number = 3,
   ): Promise<any> {
-    let delayMs = 1000;
+    let delayMs = 10000; // Bắt đầu 10s, tăng dần để thoát khỏi 429 của GDT
 
     for (let i = 0; i <= retries; i++) {
       try {
