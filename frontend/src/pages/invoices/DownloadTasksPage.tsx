@@ -328,9 +328,15 @@ export function DownloadTasksPage() {
                   selectedTask.status === 'RUNNING' ? 'running' : 'connecting'
                 }
                 progress={selectedTask.progress}
+                overallProgress={selectedTask.progress}
                 processed={selectedTask.processedInvoices}
                 total={selectedTask.totalInvoices}
                 currentInvoiceType={selectedTask.status === 'DONE' || selectedTask.status === 'ERROR' ? '' : selectedTask.invoiceType}
+                currentDate={null}
+                dayIndex={0}
+                totalDays={0}
+                startDate={selectedTask.dateStart}
+                endDate={selectedTask.dateEnd}
                 logs={selectedTask.logs || []}
                 result={selectedTask.result}
                 errorMessage={selectedTask.errorMessage}

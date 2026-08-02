@@ -70,6 +70,10 @@ export function InvoiceDownloadForm({
     errorMessage,
     startDownload,
     reset,
+    overallProgress,
+    currentDate,
+    dayIndex,
+    totalDays,
   } = useDownloadTask(company.id)
 
   // Watch for done results
@@ -191,9 +195,15 @@ export function InvoiceDownloadForm({
         <DownloadProgress
           status={status}
           progress={progress}
+          overallProgress={overallProgress}
           processed={processed}
           total={total}
           currentInvoiceType={currentInvoiceType}
+          currentDate={currentDate}
+          dayIndex={dayIndex}
+          totalDays={totalDays}
+          startDate={dateRange.from?.toISOString() ?? null}
+          endDate={dateRange.to?.toISOString() ?? null}
           logs={logs}
           result={result}
           errorMessage={errorMessage}

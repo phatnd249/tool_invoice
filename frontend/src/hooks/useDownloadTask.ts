@@ -31,6 +31,36 @@ interface SseProgressEvent {
   total: number
   invoiceType: string
   message: string
+  currentDate?: string
+  dayIndex?: number
+  totalDays?: number
+  dayInvoicesCount?: number
+  dayProcessed?: number
+}
+
+interface SseDayStartEvent {
+  type: 'day-start'
+  currentDate: string
+  dayIndex: number
+  totalDays: number
+  invoiceType?: string
+  message: string
+}
+
+interface SseDayDoneEvent {
+  type: 'day-done'
+  currentDate: string
+  dayIndex: number
+  totalDays: number
+  invoiceType?: string
+  message: string
+  dayStats: {
+    totalQueried: number
+    created: number
+    updated: number
+    itemsDownloaded: number
+    itemsFailed: number
+  }
 }
 
 interface SseLogEvent {
@@ -54,6 +84,8 @@ type SseEvent =
   | SseConnectedEvent
   | SseStartEvent
   | SseProgressEvent
+  | SseDayStartEvent
+  | SseDayDoneEvent
   | SseLogEvent
   | SseDoneEvent
   | SseErrorEvent
@@ -65,14 +97,22 @@ export interface UseDownloadTaskReturn {
   taskId: string | null
   /** Current download status */
   status: DownloadStatus
-  /** Progress percentage (0-100) */
+  /** Progress percentage (0-100) within current day */
   progress: number
-  /** Number of invoices processed */
+  /** Overall progress across all days (0-100) */
+  overallProgress: number
+  /** Number of invoices processed in current day */
   processed: number
-  /** Total number of invoices to download */
+  /** Total number of invoices in current day */
   total: number
   /** Current invoice type being downloaded */
   currentInvoiceType: string
+  /** Current date being processed (dd/mm/yyyy) */
+  currentDate: string | null
+  /** Current day index (1-based) */
+  dayIndex: number
+  /** Total number of days to process */
+  totalDays: number
   /** Log entries from the task execution */
   logs: LogEntry[]
   /** Final result (only when status === 'done') */
@@ -105,6 +145,11 @@ export function useDownloadTask(companyId: string): UseDownloadTaskReturn {
   const [processed, setProcessed] = useState(0)
   const [total, setTotal] = useState(0)
   const [currentInvoiceType, setCurrentInvoiceType] = useState('')
+  const [currentDate, setCurrentDate] = useState<string | null>(null)
+  const [dayIndex, setDayIndex] = useState(0)
+  const [totalDays, setTotalDays] = useState(0)
+  const [dayInvoicesCount, setDayInvoicesCount] = useState(0)
+  const [dayProcessed, setDayProcessed] = useState(0)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [result, setResult] = useState<DownloadResult | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -160,10 +205,39 @@ export function useDownloadTask(companyId: string): UseDownloadTaskReturn {
         break
       }
 
+      case 'day-start': {
+        setCurrentDate(event.currentDate)
+        setDayIndex(event.dayIndex)
+        setTotalDays(event.totalDays)
+        if (event.invoiceType) {
+          setCurrentInvoiceType(event.invoiceType)
+        }
+        // Reset per-day counters
+        setDayProcessed(0)
+        setDayInvoicesCount(0)
+        setProgress(0)
+        setProcessed(0)
+        setTotal(0)
+        break
+      }
+
       case 'progress': {
         setProgress(event.progress)
         setProcessed(event.processed)
         setTotal(event.total)
+        if (event.currentDate) setCurrentDate(event.currentDate)
+        if (event.dayIndex != null) setDayIndex(event.dayIndex)
+        if (event.totalDays != null) setTotalDays(event.totalDays)
+        if (event.dayInvoicesCount != null) setDayInvoicesCount(event.dayInvoicesCount)
+        if (event.dayProcessed != null) setDayProcessed(event.dayProcessed)
+        break
+      }
+
+      case 'day-done': {
+        // Mark day as fully processed
+        setDayProcessed(event.dayStats.totalQueried)
+        setDayInvoicesCount(event.dayStats.totalQueried)
+        setProgress(100)
         break
       }
 
@@ -311,6 +385,11 @@ export function useDownloadTask(companyId: string): UseDownloadTaskReturn {
       setResult(null)
       setErrorMessage(null)
       setCurrentInvoiceType('')
+      setCurrentDate(null)
+      setDayIndex(0)
+      setTotalDays(0)
+      setDayInvoicesCount(0)
+      setDayProcessed(0)
 
       try {
         const { data } = await invoicesApi.createDownloadTask(params)
@@ -336,15 +415,36 @@ export function useDownloadTask(companyId: string): UseDownloadTaskReturn {
     setResult(null)
     setErrorMessage(null)
     setCurrentInvoiceType('')
+    setCurrentDate(null)
+    setDayIndex(0)
+    setTotalDays(0)
+    setDayInvoicesCount(0)
+    setDayProcessed(0)
   }, [closeSSE])
+
+  // ── Computed: overall progress across all days ──────────────────────
+  const overallProgress = (() => {
+    if (totalDays === 0) return progress
+    // Fraction completed so far: (completed days + progress within current day)
+    const completedDays = dayIndex - 1
+    const currentDayFraction =
+      dayInvoicesCount > 0 ? dayProcessed / dayInvoicesCount : 0
+    return Math.round(
+      ((completedDays + currentDayFraction) / totalDays) * 100,
+    )
+  })()
 
   return {
     taskId,
     status,
     progress,
+    overallProgress,
     processed,
     total,
     currentInvoiceType,
+    currentDate,
+    dayIndex,
+    totalDays,
     logs,
     result,
     errorMessage,

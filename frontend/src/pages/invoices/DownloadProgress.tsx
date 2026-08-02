@@ -7,9 +7,15 @@ import type { LogEntry, DownloadResult, DownloadStatus } from '@/types'
 interface DownloadProgressProps {
   status: DownloadStatus
   progress: number
+  overallProgress: number
   processed: number
   total: number
   currentInvoiceType: string
+  currentDate: string | null
+  dayIndex: number
+  totalDays: number
+  startDate: string | null
+  endDate: string | null
   logs: LogEntry[]
   result: DownloadResult | null
   errorMessage: string | null
@@ -23,9 +29,15 @@ const INVOICE_TYPE_LABELS: Record<string, string> = {
 export function DownloadProgress({
   status,
   progress,
+  overallProgress,
   processed,
   total,
   currentInvoiceType,
+  currentDate,
+  dayIndex,
+  totalDays,
+  startDate,
+  endDate,
   logs,
   result,
   errorMessage,
@@ -43,10 +55,19 @@ export function DownloadProgress({
     switch (status) {
       case 'connecting':
         return 'Đang kết nối...'
-      case 'running':
-        return currentInvoiceType
-          ? `Đang tải hoá đơn ${INVOICE_TYPE_LABELS[currentInvoiceType] || currentInvoiceType}...`
-          : 'Đang tải...'
+      case 'running': {
+        const typeLabel =
+          currentInvoiceType
+            ? INVOICE_TYPE_LABELS[currentInvoiceType] || currentInvoiceType
+            : ''
+        const range =
+          startDate && endDate
+            ? ` từ ngày ${format(new Date(startDate), 'dd/MM')} đến ${format(new Date(endDate), 'dd/MM')}`
+            : ''
+        return typeLabel
+          ? `Đang tải hoá đơn ${typeLabel}${range}`
+          : `Đang tải...${range}`
+      }
       case 'done':
         return 'Hoàn thành'
       case 'error':
@@ -70,7 +91,7 @@ export function DownloadProgress({
         <span className="text-sm font-medium">{statustext}</span>
         {status !== 'connecting' && (
           <span className="text-sm text-muted-foreground ml-auto tabular-nums">
-            {progress}%
+            {overallProgress}%
           </span>
         )}
       </div>
@@ -83,21 +104,17 @@ export function DownloadProgress({
               'h-full transition-all duration-300 rounded-full',
               status === 'error' ? 'bg-destructive' : 'bg-primary',
             )}
-            style={{ width: `${Math.max(progress, 2)}%` }}
+            style={{ width: `${Math.max(overallProgress, totalDays > 0 ? 1 : 2)}%` }}
           />
         </div>
-        {total > 0 && (
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>
-              {processed}/{total} hoá đơn
-            </span>
-            {currentInvoiceType && (
-              <span>
-                {INVOICE_TYPE_LABELS[currentInvoiceType] || currentInvoiceType}
-              </span>
-            )}
-          </div>
-        )}
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>
+            {currentDate && `Ngày: ${currentDate}`}
+          </span>
+          <span>
+            {total > 0 && `Hoá đơn: ${processed}/${total}`}
+          </span>
+        </div>
       </div>
 
       {/* ── Log stream ────────────────────────────────────────────────── */}
