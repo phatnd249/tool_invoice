@@ -26,7 +26,7 @@ export function RegisterPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (form.password !== form.confirmPassword) {
-      toast.error('Passwords do not match')
+      toast.error('Mật khẩu không khớp')
       return
     }
     setLoading(true)
@@ -48,45 +48,45 @@ export function RegisterPage() {
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-xl mb-3">
             B
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Create an account</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Get started for free</p>
+          <h1 className="text-2xl font-bold text-foreground">Tạo tài khoản</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Bắt đầu miễn phí</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Sign up</CardTitle>
-            <CardDescription>Fill in your details to create an account</CardDescription>
+            <CardTitle>Đăng ký</CardTitle>
+            <CardDescription>Điền thông tin của bạn để tạo tài khoản</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="fullName">Full name</Label>
+                <Label htmlFor="fullName">Họ và tên</Label>
                 <Input id="fullName" type="text" value={form.fullName} onChange={set('fullName')} placeholder="John Doe" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email">Địa chỉ email</Label>
                 <Input id="email" type="email" value={form.email} onChange={set('email')} placeholder="you@example.com" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" value={form.password} onChange={set('password')} placeholder="Min 8 chars, letters & numbers" required />
+                <Label htmlFor="password">Mật khẩu</Label>
+                <Input id="password" type="password" value={form.password} onChange={set('password')} placeholder="Tối thiểu 8 ký tự, chữ và số" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm password</Label>
-                <Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={set('confirmPassword')} placeholder="Re-enter your password" required />
+                <Label htmlFor="confirmPassword">Xác nhận mật khẩu</Label>
+                <Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={set('confirmPassword')} placeholder="Nhập lại mật khẩu" required />
               </div>
               <LoadingButton type="submit" loading={loading} className="w-full">
                 <UserPlus className="size-4" />
-                Create account
+                Tạo tài khoản
               </LoadingButton>
             </form>
           </CardContent>
         </Card>
 
         <p className="mt-4 text-center text-sm text-muted-foreground">
-          Already have an account?{' '}
+          Đã có tài khoản?{' '}
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Sign in
+            Đăng nhập
           </Link>
         </p>
       </div>

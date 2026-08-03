@@ -45,19 +45,19 @@ export function LoginPage() {
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-xl mb-3">
             B
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Sign in to your account</p>
+          <h1 className="text-2xl font-bold text-foreground">Chào mừng trở lại</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Đăng nhập vào tài khoản của bạn</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Sign in</CardTitle>
-            <CardDescription>Enter your credentials to continue</CardDescription>
+            <CardTitle>Đăng nhập</CardTitle>
+            <CardDescription>Nhập thông tin đăng nhập để tiếp tục</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email">Địa chỉ email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -70,9 +70,9 @@ export function LoginPage() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">Mật khẩu</Label>
                   <Link to="/forgot-password" className="text-xs text-primary hover:underline">
-                    Forgot password?
+                    Quên mật khẩu?
                   </Link>
                 </div>
                 <Input
@@ -88,16 +88,16 @@ export function LoginPage() {
 
               <LoadingButton type="submit" loading={loading} className="w-full">
                 <LogIn className="size-4" />
-                Sign in
+                Đăng nhập
               </LoadingButton>
             </form>
           </CardContent>
         </Card>
 
         <p className="mt-4 text-center text-sm text-muted-foreground">
-          Don't have an account?{' '}
+          Chưa có tài khoản?{' '}
           <Link to="/register" className="font-medium text-primary hover:underline">
-            Sign up
+            Đăng ký
           </Link>
         </p>
       </div>

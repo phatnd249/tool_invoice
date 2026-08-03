@@ -28,7 +28,7 @@ export function ResetPasswordPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!token) { toast.error('Invalid reset token'); return }
-    if (form.password !== form.confirmPassword) { toast.error('Passwords do not match'); return }
+    if (form.password !== form.confirmPassword) { toast.error('Mật khẩu không khớp'); return }
     setLoading(true)
     try {
       const { data } = await authApi.resetPassword({ token, ...form })
@@ -48,29 +48,29 @@ export function ResetPasswordPage() {
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-3">
             <KeyRound className="size-6" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Set new password</h1>
+          <h1 className="text-2xl font-bold text-foreground">Đặt mật khẩu mới</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Must be at least 8 characters with letters and numbers.
+            Phải có ít nhất 8 ký tự bao gồm chữ cái và số.
           </p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Reset password</CardTitle>
-            <CardDescription>Enter your new password below</CardDescription>
+            <CardTitle>Đặt lại mật khẩu</CardTitle>
+            <CardDescription>Nhập mật khẩu mới của bạn bên dưới</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="password">New password</Label>
+                <Label htmlFor="password">Mật khẩu mới</Label>
                 <Input id="password" type="password" value={form.password} onChange={set('password')} placeholder="••••••••" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm password</Label>
+                <Label htmlFor="confirmPassword">Xác nhận mật khẩu</Label>
                 <Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={set('confirmPassword')} placeholder="••••••••" required />
               </div>
               <LoadingButton type="submit" loading={loading} className="w-full">
-                Reset password
+                Đặt lại mật khẩu
               </LoadingButton>
             </form>
           </CardContent>
@@ -78,7 +78,7 @@ export function ResetPasswordPage() {
 
         <p className="mt-4 text-center text-sm text-muted-foreground">
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Back to sign in
+            Quay lại đăng nhập
           </Link>
         </p>
       </div>

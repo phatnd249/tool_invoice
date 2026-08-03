@@ -56,10 +56,10 @@ const navGroups = [
   {
     label: 'Quản trị',
     items: [
+      { to: '/companies', icon: Building2, label: 'Doanh nghiệp', permission: 'company:read' },
       { to: '/users', icon: Users, label: 'Người dùng', permission: 'user:read' },
       { to: '/roles', icon: Shield, label: 'Vai trò', permission: 'role:read' },
       { to: '/permissions', icon: Key, label: 'Quyền hạn', permission: 'permission:read' },
-      { to: '/companies', icon: Building2, label: 'Doanh nghiệp', permission: 'company:read' },
     ],
   },
 ]

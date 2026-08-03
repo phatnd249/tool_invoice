@@ -27,7 +27,7 @@ export function VerifyEmailPage() {
   }, [token])
 
   const handleResend = async () => {
-    if (!email) { toast.error('Please enter your email'); return }
+    if (!email) { toast.error('Vui lòng nhập email của bạn'); return }
     setResending(true)
     try {
       const { data } = await authApi.resendVerification(email)
@@ -45,17 +45,17 @@ export function VerifyEmailPage() {
         {status === 'loading' && (
           <div className="space-y-3">
             <Loader2 className="mx-auto size-12 animate-spin text-primary" />
-            <p className="text-muted-foreground">Verifying your email…</p>
+            <p className="text-muted-foreground">Đang xác thực email của bạn…</p>
           </div>
         )}
 
         {status === 'success' && (
           <div className="space-y-4">
             <CheckCircle className="mx-auto size-14 text-green-500" />
-            <h1 className="text-2xl font-bold text-foreground">Email verified!</h1>
+            <h1 className="text-2xl font-bold text-foreground">Email đã được xác thực!</h1>
             <p className="text-sm text-muted-foreground">{message}</p>
             <Link to="/login">
-              <Button className="mx-auto">Go to sign in</Button>
+              <Button className="mx-auto">Đi đến đăng nhập</Button>
             </Link>
           </div>
         )}
@@ -63,10 +63,10 @@ export function VerifyEmailPage() {
         {status === 'error' && (
           <div className="space-y-4">
             <XCircle className="mx-auto size-14 text-destructive" />
-            <h1 className="text-2xl font-bold text-foreground">Verification failed</h1>
+            <h1 className="text-2xl font-bold text-foreground">Xác thực thất bại</h1>
             <p className="text-sm text-muted-foreground">{message}</p>
             <Button variant="outline" onClick={() => setStatus('resend')}>
-              Resend verification email
+              Gửi lại email xác thực
             </Button>
           </div>
         )}
@@ -74,13 +74,13 @@ export function VerifyEmailPage() {
         {status === 'resend' && (
           <Card>
             <CardContent className="p-6 space-y-4">
-              <h1 className="text-xl font-bold text-foreground">Resend verification</h1>
+              <h1 className="text-xl font-bold text-foreground">Gửi lại xác thực</h1>
               <div className="text-left space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email">Địa chỉ email</Label>
                 <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
               </div>
               <LoadingButton onClick={handleResend} loading={resending} className="w-full">
-                Send verification email
+                Gửi email xác thực
               </LoadingButton>
             </CardContent>
           </Card>

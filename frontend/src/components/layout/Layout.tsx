@@ -43,21 +43,21 @@ export function Layout({ children, title }: LayoutProps) {
             <DropdownMenuTrigger render={
               <Button variant="ghost" size="icon">
                 <ThemeIcon className="size-4" />
-                <span className="sr-only">Toggle theme</span>
+                <span className="sr-only">Đổi giao diện</span>
               </Button>
             } />
             <DropdownMenuContent align="end" className="w-36">
               <DropdownMenuItem onClick={() => setTheme('light')}>
                 <Sun className="mr-2 size-4" />
-                Light
+                Sáng
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme('dark')}>
                 <Moon className="mr-2 size-4" />
-                Dark
+                Tối
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme('system')}>
                 <Monitor className="mr-2 size-4" />
-                System
+                Hệ thống
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
