@@ -42,8 +42,8 @@ export function LoginPage() {
     <div className="flex min-h-svh items-center justify-center bg-muted/50 p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-xl mb-3">
-            B
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-lg mb-3">
+            HĐ
           </div>
           <h1 className="text-2xl font-bold text-foreground">Chào mừng trở lại</h1>
           <p className="mt-1 text-sm text-muted-foreground">Đăng nhập vào tài khoản của bạn</p>
