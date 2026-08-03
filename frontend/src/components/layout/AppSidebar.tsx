@@ -39,7 +39,15 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
-const navGroups = [
+interface NavItem {
+  to: string
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  permission: string | null
+  newTab?: boolean
+}
+
+const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: 'Tổng quan',
     items: [

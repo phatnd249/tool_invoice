@@ -206,7 +206,7 @@ export function GuidePage() {
       </div>
 
       {/* Guide sections */}
-      <Accordion type="multiple" className="space-y-3">
+      <Accordion className="space-y-3">
         {sections.map((section) => (
           <AccordionItem
             key={section.value}
