@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
 import { LogIn } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -69,12 +69,7 @@ export function LoginPage() {
                 />
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Mật khẩu</Label>
-                  <Link to="/forgot-password" className="text-xs text-primary hover:underline">
-                    Quên mật khẩu?
-                  </Link>
-                </div>
+                <Label htmlFor="password">Mật khẩu</Label>
                 <Input
                   id="password"
                   type="password"
@@ -94,12 +89,7 @@ export function LoginPage() {
           </CardContent>
         </Card>
 
-        <p className="mt-4 text-center text-sm text-muted-foreground">
-          Chưa có tài khoản?{' '}
-          <Link to="/register" className="font-medium text-primary hover:underline">
-            Đăng ký
-          </Link>
-        </p>
+
       </div>
     </div>
   )
