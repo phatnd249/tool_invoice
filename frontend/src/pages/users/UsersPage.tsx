@@ -50,16 +50,16 @@ import { UserCompaniesDialog } from './UserCompaniesDialog'
 import type { User, Role } from '@/types'
 
 const STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'ACTIVE', label: 'Active' },
-  { value: 'INACTIVE', label: 'Inactive' },
-  { value: 'BANNED', label: 'Banned' },
+  { value: '', label: 'Tất cả trạng thái' },
+  { value: 'ACTIVE', label: 'Hoạt động' },
+  { value: 'INACTIVE', label: 'Không hoạt động' },
+  { value: 'BANNED', label: 'Đã khoá' },
 ]
 
 function statusBadge(status: string) {
-  if (status === 'ACTIVE') return <Badge variant="default">Active</Badge>
-  if (status === 'BANNED') return <Badge variant="destructive">Banned</Badge>
-  return <Badge variant="secondary">Inactive</Badge>
+  if (status === 'ACTIVE') return <Badge variant="default">Hoạt động</Badge>
+  if (status === 'BANNED') return <Badge variant="destructive">Đã khoá</Badge>
+  return <Badge variant="secondary">Không hoạt động</Badge>
 }
 
 // ─── User Form Dialog ─────────────────────────────────────────────────────────
@@ -99,16 +99,16 @@ function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles }: UserFo
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!isEdit && !form.password) { toast.error('Password is required'); return }
-    if (form.roleIds.length === 0) { toast.error('Assign at least one role'); return }
+    if (!isEdit && !form.password) { toast.error('Vui lòng nhập mật khẩu'); return }
+    if (form.roleIds.length === 0) { toast.error('Phải gán ít nhất một vai trò'); return }
     setLoading(true)
     try {
       if (isEdit) {
         await usersApi.update(editUser.id, { fullName: form.fullName, email: form.email, status: form.status, roleIds: form.roleIds })
-        toast.success('User updated successfully')
+        toast.success('Đã cập nhật người dùng')
       } else {
         await usersApi.create({ fullName: form.fullName, email: form.email, password: form.password, roleIds: form.roleIds })
-        toast.success('User created successfully')
+        toast.success('Đã tạo người dùng')
       }
       onSaved()
       onOpenChange(false)
@@ -123,29 +123,29 @@ function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles }: UserFo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit User' : 'Create User'}</DialogTitle>
+          <DialogTitle>{isEdit ? 'Chỉnh sửa người dùng' : 'Tạo người dùng'}</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Update user details and role assignments.' : 'Create a new user account.'}
+            {isEdit ? 'Cập nhật thông tin và vai trò của người dùng.' : 'Tạo tài khoản người dùng mới.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="fullName">Full name</Label>
+            <Label htmlFor="fullName">Họ và tên</Label>
             <Input id="fullName" value={form.fullName} onChange={(e) => setForm((p) => ({ ...p, fullName: e.target.value }))} required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">Email address</Label>
+            <Label htmlFor="email">Địa chỉ email</Label>
             <Input id="email" type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} required />
           </div>
           {!isEdit && (
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} placeholder="Min 8 chars" required />
+              <Label htmlFor="password">Mật khẩu</Label>
+              <Input id="password" type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} placeholder="Tối thiểu 8 ký tự" required />
             </div>
           )}
           {isEdit && (
             <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="status">Trạng thái</Label>
               <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v ?? 'ACTIVE' }))}>
                 <SelectTrigger id="status">
                   <SelectValue />
@@ -159,7 +159,7 @@ function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles }: UserFo
             </div>
           )}
           <div className="space-y-2">
-            <Label>Roles</Label>
+            <Label>Vai trò</Label>
             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-lg p-3">
               {roles.map((role) => (
                 <label key={role.id} className="flex items-center gap-2 cursor-pointer text-sm">
@@ -171,10 +171,10 @@ function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles }: UserFo
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>
-              Cancel
+              Huỷ
             </DialogClose>
             <LoadingButton type="submit" loading={loading}>
-              {isEdit ? 'Save changes' : 'Create user'}
+              {isEdit ? 'Lưu thay đổi' : 'Tạo người dùng'}
             </LoadingButton>
           </DialogFooter>
         </form>
@@ -200,7 +200,7 @@ function DeleteUserDialog({ open, onOpenChange, user, onDeleted }: DeleteDialogP
     setDeleting(true)
     try {
       await usersApi.delete(user.id)
-      toast.success('User deleted successfully')
+      toast.success('Đã xoá người dùng')
       onOpenChange(false)
       onDeleted()
     } catch (err) {
@@ -214,17 +214,17 @@ function DeleteUserDialog({ open, onOpenChange, user, onDeleted }: DeleteDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Delete User</DialogTitle>
+          <DialogTitle>Xoá người dùng</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete <strong>{user?.fullName}</strong>? This action cannot be undone.
+            Bạn có chắc muốn xoá <strong>{user?.fullName}</strong> không? Hành động này không thể hoàn tác.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
-            Cancel
+            Huỷ
           </DialogClose>
           <LoadingButton variant="destructive" onClick={handleDelete} loading={deleting}>
-            Delete
+            Xoá
           </LoadingButton>
         </DialogFooter>
       </DialogContent>
@@ -281,7 +281,7 @@ export function UsersPage() {
   const handleToggleStatus = async (user: User) => {
     try {
       await usersApi.toggleStatus(user.id)
-      toast.success(`User ${user.status === 'ACTIVE' ? 'deactivated' : 'activated'} successfully`)
+      toast.success(user.status === 'ACTIVE' ? 'Đã vô hiệu hoá người dùng' : 'Đã kích hoạt người dùng')
       fetchUsers()
     } catch (err) {
       toast.error(getErrorMessage(err))
@@ -299,13 +299,13 @@ export function UsersPage() {
               <Input
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-                placeholder="Search by name or email…"
+                placeholder="Tìm theo tên hoặc email…"
                 className="pl-9"
               />
             </div>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v ?? ''); setPage(1) }}>
               <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="All statuses" />
+                <SelectValue placeholder="Tất cả trạng thái" />
               </SelectTrigger>
               <SelectContent>
                 {STATUS_OPTIONS.map(({ value, label }) => (
@@ -318,7 +318,7 @@ export function UsersPage() {
             <Button variant="ghost" size="icon" onClick={fetchUsers}><RefreshCw className="size-4" /></Button>
             {canCreate && (
               <Button size="sm" onClick={() => { setEditUser(null); setModalOpen(true) }}>
-                <Plus className="size-4" /> Add user
+                <Plus className="size-4" /> Thêm người dùng
               </Button>
             )}
           </div>
@@ -329,11 +329,11 @@ export function UsersPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead className="hidden sm:table-cell">Roles</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">Last login</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>Người dùng</TableHead>
+                <TableHead className="hidden sm:table-cell">Vai trò</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead className="hidden md:table-cell">Đăng nhập cuối</TableHead>
+                <TableHead className="text-right">Thao tác</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -352,7 +352,7 @@ export function UsersPage() {
               ) : users.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
-                    No users found
+                    Không tìm thấy người dùng
                   </TableCell>
                 </TableRow>
               ) : users.map((u) => (
@@ -376,7 +376,7 @@ export function UsersPage() {
                   </TableCell>
                   <TableCell>{statusBadge(u.status)}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground text-xs">
-                    {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Never'}
+                    {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('vi-VN') : 'Chưa từng'
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">

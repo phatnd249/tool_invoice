@@ -72,10 +72,10 @@ function RoleFormDialog({ open, onOpenChange, onSaved, editRole, permissions }: 
     try {
       if (isEdit) {
         await rolesApi.update(editRole.id, { name: form.name, description: form.description, permissionIds: form.permissionIds })
-        toast.success('Role updated successfully')
+        toast.success('Đã cập nhật vai trò')
       } else {
         await rolesApi.create({ name: form.name, description: form.description, permissionIds: form.permissionIds })
-        toast.success('Role created successfully')
+        toast.success('Đã tạo vai trò')
       }
       onSaved()
       onOpenChange(false)
@@ -90,23 +90,23 @@ function RoleFormDialog({ open, onOpenChange, onSaved, editRole, permissions }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit Role' : 'Create Role'}</DialogTitle>
+          <DialogTitle>{isEdit ? 'Chỉnh sửa vai trò' : 'Tạo vai trò'}</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Update role name, description, and permissions.' : 'Create a new role with specific permissions.'}
+            {isEdit ? 'Cập nhật tên, mô tả và quyền của vai trò.' : 'Tạo vai trò mới với các quyền cụ thể.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="roleName">Role name</Label>
+            <Label htmlFor="roleName">Tên vai trò</Label>
             <Input id="roleName" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. EDITOR" required disabled={editRole?.isSystem} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="roleDesc">Description</Label>
-            <Input id="roleDesc" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} placeholder="Optional description" />
+            <Label htmlFor="roleDesc">Mô tả</Label>
+            <Input id="roleDesc" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} placeholder="Mô tả (tuỳ chọn)" />
           </div>
 
           <div className="space-y-2">
-            <Label>Permissions</Label>
+            <Label>Quyền hạn</Label>
             <div className="border rounded-lg overflow-y-auto max-h-64 divide-y">
               {groups.map((group) => {
                 const groupPerms = permissions.filter((p) => p.group === group)
@@ -131,15 +131,15 @@ function RoleFormDialog({ open, onOpenChange, onSaved, editRole, permissions }: 
                 )
               })}
             </div>
-            <p className="text-xs text-muted-foreground">{form.permissionIds.length} permission(s) selected</p>
+            <p className="text-xs text-muted-foreground">Đã chọn {form.permissionIds.length} quyền</p>
           </div>
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>
-              Cancel
+              Huỷ
             </DialogClose>
             <LoadingButton type="submit" loading={loading}>
-              {isEdit ? 'Save changes' : 'Create role'}
+              {isEdit ? 'Lưu thay đổi' : 'Tạo vai trò'}
             </LoadingButton>
           </DialogFooter>
         </form>
@@ -165,7 +165,7 @@ function DeleteRoleDialog({ open, onOpenChange, role, onDeleted }: DeleteDialogP
     setDeleting(true)
     try {
       await rolesApi.delete(role.id)
-      toast.success('Role deleted successfully')
+      toast.success('Đã xoá vai trò')
       onOpenChange(false)
       onDeleted()
     } catch (err) {
@@ -179,17 +179,17 @@ function DeleteRoleDialog({ open, onOpenChange, role, onDeleted }: DeleteDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Delete Role</DialogTitle>
+          <DialogTitle>Xoá vai trò</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete role <strong>{role?.name}</strong>?
+            Bạn có chắc muốn xoá vai trò <strong>{role?.name}</strong> không?
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
-            Cancel
+            Huỷ
           </DialogClose>
           <LoadingButton variant="destructive" onClick={handleDelete} loading={deleting}>
-            Delete
+            Xoá
           </LoadingButton>
         </DialogFooter>
       </DialogContent>
@@ -232,12 +232,12 @@ export function RolesPage() {
     <Layout title="Vai trò">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">{roles.length} role(s) total</p>
+          <p className="text-sm text-muted-foreground">Tổng cộng {roles.length} vai trò</p>
           <div className="flex gap-2">
             <Button variant="ghost" size="icon" onClick={fetchRoles}><RefreshCw className="size-4" /></Button>
             {canCreate && (
               <Button size="sm" onClick={() => { setEditRole(null); setModalOpen(true) }}>
-                <Plus className="size-4" /> Add role
+                <Plus className="size-4" /> Thêm vai trò
               </Button>
             )}
           </div>
@@ -256,10 +256,10 @@ export function RolesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Role</TableHead>
-                  <TableHead className="hidden sm:table-cell">Permissions</TableHead>
-                  <TableHead className="hidden md:table-cell">Users</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>Vai trò</TableHead>
+                  <TableHead className="hidden sm:table-cell">Quyền hạn</TableHead>
+                  <TableHead className="hidden md:table-cell">Người dùng</TableHead>
+                  <TableHead className="text-right">Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -272,14 +272,14 @@ export function RolesPage() {
                           <p className="font-medium text-foreground">{role.name}</p>
                           {role.description && <p className="text-xs text-muted-foreground">{role.description}</p>}
                         </div>
-                        {role.isSystem && <Badge variant="outline">System</Badge>}
+                        {role.isSystem && <Badge variant="outline">Hệ thống</Badge>}
                       </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {role.permissions.slice(0, 3).map((p) => <Badge key={p.id} variant="secondary">{p.name}</Badge>)}
                         {role.permissions.length > 3 && <Badge variant="secondary">+{role.permissions.length - 3}</Badge>}
-                        {role.permissions.length === 0 && <span className="text-muted-foreground text-xs">None</span>}
+                        {role.permissions.length === 0 && <span className="text-muted-foreground text-xs">Không có</span>}
                       </div>
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground">{role.userCount}</TableCell>
@@ -295,7 +295,7 @@ export function RolesPage() {
                             <Trash2 className="size-4" />
                           </Button>
                         )}
-                        {role.isSystem && <span className="text-xs text-muted-foreground px-2">Protected</span>}
+                        {role.isSystem && <span className="text-xs text-muted-foreground px-2">Được bảo vệ</span>}
                       </div>
                     </TableCell>
                   </TableRow>
