@@ -376,7 +376,7 @@ export function UsersPage() {
                   </TableCell>
                   <TableCell>{statusBadge(u.status)}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground text-xs">
-                    {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('vi-VN') : 'Chưa từng'
+                    {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('vi-VN') : 'Chưa từng'}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
