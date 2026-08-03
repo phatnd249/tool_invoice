@@ -70,7 +70,12 @@ apiClient.interceptors.response.use(
     }
 
     // ── 401 Unauthorized → try refresh ───────────────────────────────────
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Skip refresh for login and refresh-token requests themselves
+    const isAuthRequest =
+      originalRequest.url?.includes('/auth/login') ||
+      originalRequest.url?.includes('/auth/refresh')
+
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
       const refreshToken = tokenStore.getRefresh()
 
       if (!refreshToken) {
