@@ -14,6 +14,7 @@ import {
   Clock,
   BookOpen,
   MessageSquareText,
+  GitCommit,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -44,8 +45,6 @@ const navGroups = [
     items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', permission: null },
       { to: '/profile', icon: User, label: 'Hồ sơ', permission: null },
-      { to: '/guide', icon: BookOpen, label: 'Hướng dẫn', permission: null },
-      { to: '/feedback', icon: MessageSquareText, label: 'Góp ý', permission: null },
     ],
   },
   {
@@ -64,6 +63,14 @@ const navGroups = [
       { to: '/users', icon: Users, label: 'Người dùng', permission: 'user:read' },
       { to: '/roles', icon: Shield, label: 'Vai trò', permission: 'role:read' },
       { to: '/permissions', icon: Key, label: 'Quyền hạn', permission: 'permission:read' },
+    ],
+  },
+  {
+    label: 'Khác',
+    items: [
+      { to: '/guide', icon: BookOpen, label: 'Hướng dẫn', permission: null, newTab: true },
+      { to: '/feedback', icon: MessageSquareText, label: 'Góp ý', permission: null, newTab: true },
+      { to: '/changelog', icon: GitCommit, label: 'Changelog', permission: null, newTab: true },
     ],
   },
 ]
@@ -111,9 +118,18 @@ export function AppSidebar() {
               <SidebarMenu>
                 {group.items
                   .filter(({ permission }) => !permission || hasPermission(permission))
-                  .map(({ to, icon: Icon, label }) => (
+                  .map(({ to, icon: Icon, label, newTab }) => (
                     <SidebarMenuItem key={to}>
-                      <SidebarMenuButton isActive={location.pathname === to} render={<NavLink to={to} />}>
+                      <SidebarMenuButton
+                        isActive={!newTab && location.pathname === to}
+                        render={
+                          newTab ? (
+                            <a href={to} target="_blank" rel="noopener noreferrer" />
+                          ) : (
+                            <NavLink to={to} />
+                          )
+                        }
+                      >
                         <Icon className="size-4" />
                         <span>{label}</span>
                       </SidebarMenuButton>
