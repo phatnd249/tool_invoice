@@ -11,6 +11,7 @@ import {
   FileText,
   ListTodo,
   List,
+  Clock,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -49,6 +50,7 @@ const navGroups = [
       { to: '/invoices', icon: FileText, label: 'Tải hoá đơn', permission: 'invoice:read' },
       { to: '/invoices/list', icon: List, label: 'Hoá đơn đã tải', permission: 'invoice:read' },
       { to: '/invoices/tasks', icon: ListTodo, label: 'Lịch sử tải', permission: 'invoice:read' },
+      { to: '/schedules', icon: Clock, label: 'Lịch tải tự động', permission: 'invoice:download' },
     ],
   },
   {

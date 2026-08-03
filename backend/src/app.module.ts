@@ -11,6 +11,7 @@ import { MailModule } from './mail/mail.module';
 import { AiModule } from './ai/ai.module';
 import { CompaniesModule } from './companies/companies.module';
 import { InvoicesModule } from './invoices/invoices.module';
+import { SchedulesModule } from './schedules/schedules.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { InvoicesModule } from './invoices/invoices.module';
     PermissionsModule,
     CompaniesModule,
     InvoicesModule,
+    SchedulesModule,
   ],
 })
 export class AppModule {}

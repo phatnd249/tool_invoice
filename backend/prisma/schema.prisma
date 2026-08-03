@@ -134,9 +134,10 @@ model Company {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  creator        User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
-  invoices       Invoice[]
-  downloadTasks  DownloadTask[]
+  creator         User?              @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  invoices        Invoice[]
+  downloadTasks   DownloadTask[]
+  scheduleCompanies ScheduleCompany[]
 
   @@map("companies")
 }
@@ -232,4 +233,35 @@ model DownloadTask {
 
   @@index([companyId, status])
   @@map("download_tasks")
+}
+
+model Schedule {
+  id             String    @id @default(cuid())
+  name           String?
+  cronExpression String    @default("")
+  repeatMode     String    @default("weekly")
+  scheduledAt    DateTime?
+  dateRangeDays  Int?
+  invoiceType    String    @default("SELL")
+  overwriteMode  String    @default("SKIP")
+  isActive       Boolean   @default(true)
+  lastRun        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  companies ScheduleCompany[]
+
+  @@map("schedules")
+}
+
+model ScheduleCompany {
+  scheduleId String
+  companyId  String
+  createdAt  DateTime @default(now())
+
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([scheduleId, companyId])
+  @@map("schedule_companies")
 }

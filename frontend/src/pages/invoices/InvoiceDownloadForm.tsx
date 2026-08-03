@@ -188,7 +188,8 @@ export function InvoiceDownloadForm({
     status === 'connecting' ||
     status === 'running' ||
     status === 'done' ||
-    status === 'error'
+    status === 'error' ||
+    status === 'cancelled'
 
   if (isActive) {
     return (

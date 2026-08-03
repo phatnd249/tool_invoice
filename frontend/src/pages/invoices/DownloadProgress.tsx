@@ -28,13 +28,13 @@ const INVOICE_TYPE_LABELS: Record<string, string> = {
 
 export function DownloadProgress({
   status,
-  progress,
+  progress: _progress,
   overallProgress,
   processed,
   total,
   currentInvoiceType,
   currentDate,
-  dayIndex,
+  dayIndex: _dayIndex,
   totalDays,
   startDate,
   endDate,

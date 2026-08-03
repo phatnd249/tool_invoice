@@ -21,6 +21,7 @@ import { CompaniesPage } from '@/pages/companies/CompaniesPage'
 import { InvoicesPage } from '@/pages/invoices/InvoicesPage'
 import { InvoiceListPage } from '@/pages/invoices/InvoiceListPage'
 import { DownloadTasksPage } from '@/pages/invoices/DownloadTasksPage'
+import { SchedulesPage } from '@/pages/schedules/SchedulesPage'
 
 // Error pages
 import { ForbiddenPage } from '@/pages/errors/ForbiddenPage'
@@ -102,6 +103,14 @@ function ProtectedRoutes() {
           element={
             <ProtectedRoute permission="invoice:read">
               <DownloadTasksPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/schedules"
+          element={
+            <ProtectedRoute permission="invoice:download">
+              <SchedulesPage />
             </ProtectedRoute>
           }
         />
