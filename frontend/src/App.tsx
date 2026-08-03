@@ -6,7 +6,7 @@ import { SidebarProvider } from '@/components/ui/sidebar'
 
 // Auth pages
 import { LoginPage } from '@/pages/auth/LoginPage'
-import { ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
+import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage'
 
 // App pages
