@@ -12,6 +12,7 @@ import { AiModule } from './ai/ai.module';
 import { CompaniesModule } from './companies/companies.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { SchedulesModule } from './schedules/schedules.module';
+import { FeedbackModule } from './feedback/feedback.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { SchedulesModule } from './schedules/schedules.module';
     CompaniesModule,
     InvoicesModule,
     SchedulesModule,
+    FeedbackModule,
   ],
 })
 export class AppModule {}

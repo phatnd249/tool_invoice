@@ -9,6 +9,11 @@ import { LoginPage } from '@/pages/auth/LoginPage'
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage'
 
+// Public info pages
+import { GuidePage } from '@/pages/GuidePage'
+import { ChangelogPage } from '@/pages/ChangelogPage'
+import { FeedbackPage } from '@/pages/FeedbackPage'
+
 // App pages
 import { DashboardPage } from '@/pages/DashboardPage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
@@ -41,8 +46,16 @@ function ProtectedRoutes() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route
+          path="/guide"
+          element={<ProtectedRoute><GuidePage /></ProtectedRoute>}
+        />
+        <Route
           path="/dashboard"
           element={<ProtectedRoute><DashboardPage /></ProtectedRoute>}
+        />
+        <Route
+          path="/feedback"
+          element={<ProtectedRoute><FeedbackPage /></ProtectedRoute>}
         />
         <Route
           path="/profile"
@@ -126,6 +139,10 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+
+          {/* Public info pages */}
+          <Route path="/guide" element={<GuidePage />} />
+          <Route path="/changelog" element={<ChangelogPage />} />
 
           {/* Error pages */}
           <Route path="/403" element={<ForbiddenPage />} />

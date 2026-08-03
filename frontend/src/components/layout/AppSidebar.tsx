@@ -12,6 +12,8 @@ import {
   ListTodo,
   List,
   Clock,
+  BookOpen,
+  MessageSquareText,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -42,6 +44,8 @@ const navGroups = [
     items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', permission: null },
       { to: '/profile', icon: User, label: 'Hồ sơ', permission: null },
+      { to: '/guide', icon: BookOpen, label: 'Hướng dẫn', permission: null },
+      { to: '/feedback', icon: MessageSquareText, label: 'Góp ý', permission: null },
     ],
   },
   {
