@@ -300,6 +300,42 @@ export class UsersService {
     return this.formatUser(user);
   }
 
+  // ─── Admin: Assign Companies ──────────────────────────────────────────────
+
+  async getUserCompanies(userId: string) {
+    await this.findUserOrFail(userId);
+    const companies = await this.prisma.userCompany.findMany({
+      where: { userId },
+      select: {
+        company: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return companies.map((uc) => uc.company);
+  }
+
+  async assignCompanies(userId: string, companyIds: string[]) {
+    await this.findUserOrFail(userId);
+
+    // Validate all companies exist
+    const companies = await this.prisma.company.findMany({
+      where: { id: { in: companyIds } },
+    });
+    if (companies.length !== companyIds.length) {
+      throw new BadRequestException('One or more companies not found');
+    }
+
+    // Replace all assignments atomically
+    await this.prisma.userCompany.deleteMany({ where: { userId } });
+    if (companyIds.length > 0) {
+      await this.prisma.userCompany.createMany({
+        data: companyIds.map((companyId) => ({ userId, companyId })),
+      });
+    }
+
+    return this.getUserCompanies(userId);
+  }
+
   // ─── Profile: Change Password ─────────────────────────────────────────────
 
   async changePassword(userId: string, dto: ChangePasswordDto) {

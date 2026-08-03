@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import { toast } from 'sonner'
-import { Plus, Search, Pencil, Trash2, ToggleLeft, ToggleRight, RefreshCw } from 'lucide-react'
+import { Plus, Search, Pencil, Trash2, ToggleLeft, ToggleRight, RefreshCw, Building2 } from 'lucide-react'
 import { usersApi } from '@/api/users'
 import { rolesApi } from '@/api/roles'
 import { getErrorMessage } from '@/lib/apiClient'
@@ -46,6 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { UserCompaniesDialog } from './UserCompaniesDialog'
 import type { User, Role } from '@/types'
 
 const STATUS_OPTIONS = [
@@ -254,6 +255,10 @@ export function UsersPage() {
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
+  const [companiesTarget, setCompaniesTarget] = useState<User | null>(null)
+  const [companiesDialogOpen, setCompaniesDialogOpen] = useState(false)
+  const hasCompanyScope = hasPermission('company:scope')
+
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     try {
@@ -385,6 +390,11 @@ export function UsersPage() {
                           </Button>
                         </>
                       )}
+                      {hasCompanyScope && (
+                        <Button variant="ghost" size="icon-xs" onClick={() => { setCompaniesTarget(u); setCompaniesDialogOpen(true) }} title="Gán công ty">
+                          <Building2 className="size-4" />
+                        </Button>
+                      )}
                       {canDelete && (
                         <Button variant="ghost" size="icon-xs" onClick={() => { setDeleteTarget(u); setDeleteDialogOpen(true) }} title="Delete">
                           <Trash2 className="size-4" />
@@ -429,6 +439,15 @@ export function UsersPage() {
 
       <UserFormDialog open={modalOpen} onOpenChange={setModalOpen} onSaved={fetchUsers} editUser={editUser} roles={roles} />
       <DeleteUserDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} user={deleteTarget} onDeleted={fetchUsers} />
+      {companiesTarget && (
+        <UserCompaniesDialog
+          open={companiesDialogOpen}
+          onOpenChange={setCompaniesDialogOpen}
+          userId={companiesTarget.id}
+          userName={companiesTarget.fullName}
+          onSaved={fetchUsers}
+        />
+      )}
     </Layout>
   )
 }

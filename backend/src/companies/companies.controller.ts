@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Req,
+  Request,
 } from '@nestjs/common';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
@@ -27,8 +28,9 @@ export class CompaniesController {
 
   @Get()
   @RequirePermissions('company:read')
-  findAll(@Query() query: QueryCompaniesDto) {
-    return this.companiesService.findAll(query);
+  findAll(@Query() query: QueryCompaniesDto, @Request() req: any) {
+    const user: AuthUser = req.user;
+    return this.companiesService.findAll(query, user.id);
   }
 
   @Get(':id')

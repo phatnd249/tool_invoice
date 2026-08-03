@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/apiClient'
-import type { User, PaginatedResult } from '@/types'
+import type { User, PaginatedResult, Company } from '@/types'
 
 export interface QueryUsersParams {
   page?: number
@@ -49,4 +49,10 @@ export const usersApi = {
 
   revokeRole: (id: string, roleId: string) =>
     apiClient.delete<User>(`/users/${id}/roles/${roleId}`),
+
+  getUserCompanies: (id: string) =>
+    apiClient.get<Company[]>(`/users/${id}/companies`),
+
+  assignCompanies: (id: string, companyIds: string[]) =>
+    apiClient.post<Company[]>(`/users/${id}/companies`, { companyIds }),
 }

@@ -122,4 +122,23 @@ export class UsersController {
   revokeRole(@Param('id') id: string, @Param('roleId') roleId: string) {
     return this.usersService.revokeRole(id, roleId);
   }
+
+  // ─── Admin: Company Assignments ──────────────────────────────────────────
+
+  // GET /api/users/:id/companies
+  @Get('users/:id/companies')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions('user:read')
+  getUserCompanies(@Param('id') id: string) {
+    return this.usersService.getUserCompanies(id);
+  }
+
+  // POST /api/users/:id/companies
+  @Post('users/:id/companies')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions('company:scope')
+  assignCompanies(@Param('id') id: string, @Body() dto: { companyIds: string[] }) {
+    return this.usersService.assignCompanies(id, dto.companyIds);
+  }
 }

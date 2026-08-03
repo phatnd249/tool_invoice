@@ -26,6 +26,7 @@ model User {
   deletedAt           DateTime?
 
   userRoles      UserRole[]
+  userCompanies  UserCompany[]
   refreshTokens  RefreshToken[]
   tokenBlacklist TokenBlacklist[]
   createdCompanies Company[]
@@ -138,6 +139,7 @@ model Company {
   invoices        Invoice[]
   downloadTasks   DownloadTask[]
   scheduleCompanies ScheduleCompany[]
+  userCompanies   UserCompany[]
 
   @@map("companies")
 }
@@ -264,4 +266,16 @@ model ScheduleCompany {
 
   @@id([scheduleId, companyId])
   @@map("schedule_companies")
+}
+
+model UserCompany {
+  userId    String
+  companyId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([userId, companyId])
+  @@map("user_companies")
 }

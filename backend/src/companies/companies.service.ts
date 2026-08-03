@@ -26,7 +26,7 @@ export class CompaniesService {
 
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
-  async findAll(query: QueryCompaniesDto): Promise<PaginatedResult<any>> {
+  async findAll(query: QueryCompaniesDto, userId?: string): Promise<PaginatedResult<any>> {
     const {
       page = 1,
       limit = 10,
@@ -37,6 +37,12 @@ export class CompaniesService {
     } = query;
     const skip = (page - 1) * limit;
 
+    // Check if user has global scope (SUPER_ADMIN or company:scope permission)
+    let hasGlobalScope = false;
+    if (userId) {
+      hasGlobalScope = await this.hasCompanyScope(userId);
+    }
+
     const where: any = {
       ...(search && {
         OR: [
@@ -45,6 +51,12 @@ export class CompaniesService {
         ],
       }),
       ...(loginMode && { loginMode }),
+      // If user has no global scope, restrict to assigned companies only
+      ...(userId && !hasGlobalScope && {
+        userCompanies: {
+          some: { userId },
+        },
+      }),
     };
 
     const [companies, total] = await Promise.all([
@@ -58,6 +70,30 @@ export class CompaniesService {
     ]);
 
     return paginate(companies, total, page, limit);
+  }
+
+  private async hasCompanyScope(userId: string): Promise<boolean> {
+    const isSuperAdmin = await this.prisma.role.findFirst({
+      where: {
+        name: 'SUPER_ADMIN',
+        userRoles: { some: { userId } },
+      },
+    });
+    if (isSuperAdmin) return true;
+
+    const hasScope = await this.prisma.permission.findFirst({
+      where: {
+        name: 'company:scope',
+        rolePermissions: {
+          some: {
+            role: {
+              userRoles: { some: { userId } },
+            },
+          },
+        },
+      },
+    });
+    return !!hasScope;
   }
 
   async findOne(id: string) {

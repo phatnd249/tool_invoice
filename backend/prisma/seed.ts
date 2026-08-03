@@ -66,6 +66,8 @@ async function main() {
 
     { name: 'invoice:read', group: 'invoice', description: 'Xem danh sách và chi tiết hoá đơn' },
     { name: 'invoice:download', group: 'invoice', description: 'Tải hoá đơn từ Tổng cục Thuế' },
+
+    { name: 'company:scope', group: 'company', description: 'Xem tất cả doanh nghiệp (toàn cục). Nếu không có, user chỉ thấy công ty được gán.' },
   ];
 
   const permissionIds: Record<string, string> = {};
