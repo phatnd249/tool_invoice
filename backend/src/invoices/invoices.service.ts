@@ -17,7 +17,7 @@ import { PdfService } from './pdf.service';
 import { DownloadInvoicesDto } from './dto/download-invoices.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
-import { sanitizeDirName, delay } from '../common/invoice-utils';
+import { sanitizeDirName, delay, resolveInvoicePath } from '../common/invoice-utils';
 import { TokenResolverService } from '../common/token-resolver.service';
 import { InvoiceDownloaderService } from './invoice-downloader.service';
 
@@ -387,11 +387,15 @@ export class InvoicesService {
     }
 
     // Nếu đã có pdfPath và file tồn tại, trả luôn
-    if (invoice.pdfPath && fs.existsSync(invoice.pdfPath)) {
-      return {
-        pdfPath: invoice.pdfPath,
-        fileName: path.basename(invoice.pdfPath),
-      };
+    const baseDir = this.config.get('INVOICES_DIR') || './invoices';
+    if (invoice.pdfPath) {
+      const absolutePdfPath = resolveInvoicePath(baseDir, invoice.pdfPath);
+      if (fs.existsSync(absolutePdfPath)) {
+        return {
+          pdfPath: absolutePdfPath,
+          fileName: path.basename(invoice.pdfPath),
+        };
+      }
     }
 
     // Lấy HTML preview
@@ -414,20 +418,21 @@ export class InvoicesService {
     );
 
     const pdfFileName = this.pdfService.getPdfFileName(invoice);
-    const pdfPath = await this.pdfService.getOrCreatePdf(
+    const absolutePdfPath = await this.pdfService.getOrCreatePdf(
       id,
       cacheHtmlPath,
       pdfDir,
       pdfFileName,
     );
 
-    // Cập nhật pdfPath vào DB
+    // Lưu relative path vào DB
+    const relativePdfPath = path.relative(baseDir, absolutePdfPath);
     await this.prisma.invoice.update({
       where: { id },
-      data: { pdfPath },
+      data: { pdfPath: relativePdfPath },
     });
 
-    return { pdfPath, fileName: pdfFileName };
+    return { pdfPath: absolutePdfPath, fileName: pdfFileName };
   }
 
   async getZipPath(
@@ -441,12 +446,18 @@ export class InvoicesService {
       throw new NotFoundException('Invoice not found');
     }
 
-    if (!invoice.zipPath || !fs.existsSync(invoice.zipPath)) {
+    if (!invoice.zipPath) {
+      throw new NotFoundException('ZIP path not found in DB');
+    }
+
+    const baseDir = this.config.get('INVOICES_DIR') || './invoices';
+    const absoluteZipPath = resolveInvoicePath(baseDir, invoice.zipPath);
+    if (!fs.existsSync(absoluteZipPath)) {
       throw new NotFoundException('ZIP file not found');
     }
 
     return {
-      zipPath: invoice.zipPath,
+      zipPath: absoluteZipPath,
       fileName: path.basename(invoice.zipPath),
     };
   }

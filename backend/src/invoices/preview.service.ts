@@ -1,17 +1,28 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import AdmZip from 'adm-zip';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveInvoicePath } from '../common/invoice-utils';
 
 @Injectable()
 export class PreviewService {
   private readonly logger = new Logger(PreviewService.name);
   private readonly cacheDir: string;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {
     this.cacheDir = path.join(process.cwd(), 'public', 'preview');
     fs.mkdirSync(this.cacheDir, { recursive: true });
+  }
+
+  /** Resolve absolute path từ relative path trong DB + INVOICES_DIR */
+  private resolvePath(relativePath: string): string {
+    const baseDir = this.config.get('INVOICES_DIR') || './invoices';
+    return resolveInvoicePath(baseDir, relativePath);
   }
 
   /**
@@ -41,12 +52,13 @@ export class PreviewService {
       throw new NotFoundException('Invoice ZIP file not found');
     }
 
-    if (!fs.existsSync(invoice.zipPath)) {
+    const absoluteZipPath = this.resolvePath(invoice.zipPath);
+    if (!fs.existsSync(absoluteZipPath)) {
       throw new NotFoundException('ZIP file not found on disk');
     }
 
     // 3. Giải nén ZIP, tìm HTML
-    const htmlContent = this.extractHtmlFromZip(invoice.zipPath);
+    const htmlContent = this.extractHtmlFromZip(absoluteZipPath);
     if (!htmlContent) {
       throw new NotFoundException('No HTML file found in ZIP');
     }

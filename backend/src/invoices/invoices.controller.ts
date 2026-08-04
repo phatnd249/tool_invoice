@@ -110,13 +110,12 @@ export class InvoicesController {
   async downloadPdf(@Param('id') id: string, @Res() res: Response) {
     const { pdfPath, fileName } =
       await this.invoicesService.downloadPdf(id);
-    const absolutePath = path.resolve(pdfPath);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="${fileName}"`,
     );
-    res.sendFile(absolutePath);
+    res.sendFile(pdfPath);
   }
 
   @Get('zip/:id')
@@ -124,12 +123,11 @@ export class InvoicesController {
   async downloadZip(@Param('id') id: string, @Res() res: Response) {
     const { zipPath, fileName } =
       await this.invoicesService.getZipPath(id);
-    const absolutePath = path.resolve(zipPath);
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="${fileName}"`,
     );
-    res.sendFile(absolutePath);
+    res.sendFile(zipPath);
   }
 }

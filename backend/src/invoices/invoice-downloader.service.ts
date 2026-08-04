@@ -66,15 +66,21 @@ export class InvoiceDownloaderService {
   ) {}
 
   /**
-   * Xác định outputDir cho một invoice dựa trên company + type + tháng.
+   * Trả về INVOICES_DIR từ config.
+   */
+  getBaseDir(): string {
+    return this.config.get('INVOICES_DIR') || './invoices';
+  }
+
+  /**
+   * Xác định absolute outputDir cho một invoice dựa trên company + type + tháng.
    */
   getOutputDir(
     companyName: string,
     type: 'BUY' | 'SELL',
     invoiceDate: Date,
   ): string {
-    const invoicesBaseDir =
-      this.config.get('INVOICES_DIR') || './invoices';
+    const invoicesBaseDir = this.getBaseDir();
     const companyDir = sanitizeDirName(companyName);
     const typeDir = type === 'SELL' ? 'BanRa' : 'MuaVao';
     const monthDir = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`;
@@ -175,12 +181,16 @@ export class InvoiceDownloaderService {
     const parsed = this.xmlParser.parseInvoiceXml(xmlPath);
 
     // ── Save items + paths vào DB ────────────────────────────────
+    // Lưu relative path (không bao gồm INVOICES_DIR) để dễ migrate
+    const baseDir = this.getBaseDir();
+    const relativeZipPath = path.relative(baseDir, finalZipPath);
+    const relativeXmlPath = path.relative(baseDir, xmlPath);
     const invoiceId = await this.persistence.saveItemsFromZip(
       invoice,
       type,
       parsed.items,
-      finalZipPath,
-      xmlPath,
+      relativeZipPath,
+      relativeXmlPath,
     );
 
     // ── Tạo PDF tự động ─────────────────────────────────────────
@@ -204,9 +214,10 @@ export class InvoiceDownloaderService {
           outputDir,
           pdfFileName,
         );
+        const relativePdfPath = path.relative(baseDir, pdfPath);
         await this.prisma.invoice.update({
           where: { id: invoiceId },
-          data: { pdfPath },
+          data: { pdfPath: relativePdfPath },
         });
       } catch (pdfErr: any) {
         this.logger.warn(
