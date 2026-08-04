@@ -1,0 +1,25 @@
+# Build artifacts / dependencies (reproduced inside the image)
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+backend/dist/
+backend/public/
+frontend/dist/
+
+backend/prisma/*.db*
+backend/prisma/dev.db*
+
+# Git
+.git/
+.gitignore
+
+# Runtime / temp files
+temp/
+backend/invoices/
+*.log
+.env
+backend/.env
+
+# OS
+.DS_Store
