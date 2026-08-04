@@ -4,34 +4,66 @@ Công cụ tải hoá đơn điện tử từ Tổng cục Thuế (GDT), hỗ tr
 
 ## Yêu cầu
 
-- [Bun](https://bun.sh) (recommended) hoặc Node.js 20+
-- SQLite (tích hợp sẵn qua `@libsql/client`)
-- [Gotenberg](https://gotenberg.dev) để convert HTML → PDF (chạy Docker)
+- Node.js 20+ và npm
+- [Gotenberg](https://gotenberg.dev) — convert HTML → PDF (chạy Docker)
+
+> SQLite được tích hợp sẵn qua `@libsql/client`, không cần cài riêng.
+
+## Hướng dẫn nhanh
+
+```bash
+npm install
+cd backend
+npx prisma migrate deploy
+npx prisma generate
+npx tsx prisma/seed.ts
+cd ..
+npm run dev
+```
 
 ## Cài đặt
 
 ```bash
-# Cài dependencies cho cả backend & frontend
-bun install
+# 1. Cài dependencies cho toàn bộ workspace (backend + frontend)
+npm install
+npm install --prefix backend
+npm install --prefix frontend
 
-# Tạo file .env từ mẫu
+# 2. Tạo file .env từ mẫu
 cp backend/.env.example backend/.env
 
-# Setup database (generate Prisma client + migrate + seed)
-bun run db:setup
+# 3. Setup database
+cd backend
+npx prisma generate
+npx prisma migrate dev
+npx prisma db seed
+cd ..
 ```
 
-Cấu hình các biến trong `backend/.env`:
+## Cấu hình .env
 
-| Biến | Mô tả | Mặc định |
+File `backend/.env` — các biến bắt buộc và quan trọng:
+
+| Biến | Mô tả | Bắt buộc |
 |------|-------|----------|
-| `PORT` | Cổng chạy backend | `3000` |
-| `JWT_ACCESS_SECRET` | Khóa JWT (bắt buộc đổi ở production) | — |
-| `GEMINI_API_KEY` | API key Gemini để giải captcha GDT | — |
-| `GDT_BASE_URL` | API GDT | `https://hoadondientu.gdt.gov.vn/api` |
-| `GOTENBERG_URL` | URL Gotenberg | `http://localhost:3001` |
-| `INVOICES_DIR` | Thư mục lưu file hoá đơn | `./invoices` |
-| `SMTP_*` | Cấu hình email (tùy chọn) | — |
+| `JWT_ACCESS_SECRET` | Khóa ký JWT access token | Có |
+| `JWT_REFRESH_SECRET` | Khóa ký JWT refresh token | Có |
+| `GEMINI_API_KEY` | API key Gemini để giải captcha khi đăng nhập GDT | Có |
+| `GDT_BASE_URL` | API endpoint của Tổng cục Thuế | Có |
+| `GOTENBERG_URL` | URL dịch vụ Gotenberg convert PDF | Có |
+
+Các biến còn lại đã có giá trị mặc định:
+
+| Biến | Mặc định | Mô tả |
+|------|----------|-------|
+| `PORT` | `3000` | Cổng backend |
+| `APP_URL` | `http://localhost:5173` | URL frontend (dùng cho CORS) |
+| `DATABASE_URL` | `file:./prisma/dev.db` | Đường dẫn SQLite |
+| `JWT_ACCESS_EXPIRES_IN` | `15m` | Thời hạn access token |
+| `JWT_REFRESH_EXPIRES_IN` | `7d` | Thời hạn refresh token |
+| `INVOICES_DIR` | `./invoices` | Thư mục lưu file ZIP/XML/PDF |
+| `SMTP_HOST` | — | SMTP server (để trống = log ra console) |
+| `FEEDBACK_TO_EMAIL` | — | Email nhận feedback |
 
 ### Gotenberg (PDF)
 
@@ -43,46 +75,63 @@ docker run -d --name gotenberg -p 3001:3000 gotenberg/gotenberg:8
 
 ```bash
 # Chạy đồng thời backend + frontend
-bun run dev
+npm run dev
 
 # Hoặc chạy riêng
-bun run dev:backend   # NestJS dev server (port 3000)
-bun run dev:frontend  # Vite dev server (port 5173)
+npm run dev:backend   # NestJS dev server (port 3000)
+npm run dev:frontend  # Vite dev server (port 5173)
 ```
 
-Frontend chạy tại `http://localhost:5173`, backend tại `http://localhost:3000`.
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:3000`
 
-## Build
+## Build & Deploy
 
 ```bash
-# Build cả backend & frontend, copy frontend vào backend/public
-bun run build
+# Build backend + frontend, copy frontend vào backend/public/
+npm run build
 
 # Chạy production
-bun run start
+NODE_ENV=production npm run start
 ```
 
-Backend serve frontend từ `backend/public/` ở chế độ production.
+Ở chế độ production, backend serve frontend từ `backend/public/`.
 
 ## Database
 
 ```bash
-bun run prisma:migrate        # Tạo migration mới
-bun run prisma:migrate:deploy # Deploy migration lên production
-bun run prisma:studio         # Mở Prisma Studio
-bun run prisma:seed           # Seed dữ liệu mẫu
+# Tạo migration từ thay đổi schema
+npx prisma migrate dev --name <tên>
+
+# Deploy migration (production)
+npx prisma migrate deploy
+
+# Reset database (xoá toàn bộ dữ liệu)
+npx prisma migrate reset
+
+# Seed dữ liệu mẫu
+npx prisma db seed
+
+# Mở Prisma Studio xem dữ liệu
+npx prisma studio
 ```
+
+> Chạy trong thư mục `backend/` hoặc thêm `--prefix backend`.
 
 ## Cấu trúc thư mục
 
 ```
-├── backend/          # NestJS backend
-│   ├── prisma/       # Schema + migrations
+├── backend/               # NestJS backend
+│   ├── prisma/            # Schema + migrations + seed
+│   │   └── schema.prisma
 │   └── src/
-│       ├── auth/     # Xác thực, phân quyền
-│       ├── invoices/ # Tải/xử lý hoá đơn
-│       ├── common/   # Utilities chung
-│       └── prisma/   # Prisma service
-├── frontend/         # React + Vite frontend
-└── package.json      # Workspace root
+│       ├── auth/          # Xác thực, phân quyền, JWT
+│       ├── invoices/      # Tải/xử lý hoá đơn, XML, PDF, Excel
+│       ├── company/       # Quản lý doanh nghiệp
+│       ├── common/        # Utilities dùng chung
+│       └── prisma/        # Prisma service
+├── frontend/              # React + Vite frontend
+│   └── src/
+├── .env.example           # Mẫu biến môi trường
+└── package.json           # Workspace root
 ```
