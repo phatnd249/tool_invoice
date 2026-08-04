@@ -1,86 +1,137 @@
-# Tool Invoice — Invoice Downloader & Manager
+# Invoice Download Tool
 
-Hệ thống tải và quản lý hóa đơn điện tử từ cổng thông tin GDT (General Department of Taxation).
+Công cụ tải hoá đơn điện tử từ Tổng cục Thuế (GDT), hỗ trợ tải ZIP/XML/PDF, xem trước hoá đơn, export Excel.
 
 ## Yêu cầu
 
-- **Node.js** >= 20
-- **npm** >= 9
-- **SQLite** (tự động qua Prisma)
+- Node.js 20+ và npm
+- [Gotenberg](https://gotenberg.dev) — convert HTML → PDF (chạy Docker)
 
-## Cấu hình môi trường
+> SQLite được tích hợp sẵn qua `@libsql/client`, không cần cài riêng.
 
-1. Copy file `.env.example` thành `.env`:
+## Hướng dẫn nhanh
 
 ```bash
-cp backend/.env.example backend/.env
+npm install
+cd backend
+npx prisma migrate deploy
+npx prisma generate
+npx tsx prisma/seed.ts
+cd ..
+npm run dev
 ```
 
-2. Chỉnh sửa `backend/.env` với các giá trị phù hợp:
+## Cài đặt
+
+```bash
+# 1. Cài dependencies cho toàn bộ workspace (backend + frontend)
+npm install
+npm install --prefix backend
+npm install --prefix frontend
+
+# 2. Tạo file .env từ mẫu
+cp backend/.env.example backend/.env
+
+# 3. Setup database
+cd backend
+npx prisma generate
+npx prisma migrate dev
+npx prisma db seed
+cd ..
+```
+
+## Cấu hình .env
+
+File `backend/.env` — các biến bắt buộc và quan trọng:
 
 | Biến | Mô tả | Bắt buộc |
 |------|-------|----------|
-| `PORT` | Cổng backend server (mặc định: 3000) | ✘ |
-| `DATABASE_URL` | Đường dẫn SQLite database | ✘ |
-| `GEMINI_API_KEY` | API key Google Gemini (dùng OCR captcha) | **✔** |
+| `JWT_ACCESS_SECRET` | Khóa ký JWT access token | Có |
+| `JWT_REFRESH_SECRET` | Khóa ký JWT refresh token | Có |
+| `GEMINI_API_KEY` | API key Gemini để giải captcha khi đăng nhập GDT | Có |
+| `GDT_BASE_URL` | API endpoint của Tổng cục Thuế | Có |
+| `GOTENBERG_URL` | URL dịch vụ Gotenberg convert PDF | Có |
 
-> **Lưu ý:** File `.env` nằm trong `.gitignore`, không bao giờ commit lên git.
+Các biến còn lại đã có giá trị mặc định:
 
-## Build
+| Biến | Mặc định | Mô tả |
+|------|----------|-------|
+| `PORT` | `3000` | Cổng backend |
+| `APP_URL` | `http://localhost:5173` | URL frontend (dùng cho CORS) |
+| `DATABASE_URL` | `file:./prisma/dev.db` | Đường dẫn SQLite |
+| `JWT_ACCESS_EXPIRES_IN` | `15m` | Thời hạn access token |
+| `JWT_REFRESH_EXPIRES_IN` | `7d` | Thời hạn refresh token |
+| `INVOICES_DIR` | `./invoices` | Thư mục lưu file ZIP/XML/PDF |
+| `SMTP_HOST` | — | SMTP server (để trống = log ra console) |
+| `FEEDBACK_TO_EMAIL` | — | Email nhận feedback |
 
-Build backend bundle với esbuild:
+### Gotenberg (PDF)
 
 ```bash
-# Từ thư mục gốc (recommended)
-npm run build
-
-# Hoặc chỉ build backend
-npm run build -w backend
+docker run -d --name gotenberg -p 3001:3000 gotenberg/gotenberg:8
 ```
-
-Output: `backend/dist/server.cjs`
-
-## Chạy code đã build
-
-```bash
-# Từ thư mục gốc (recommended)
-npm start
-
-# Hoặc trực tiếp
-NODE_ENV=production node backend/dist/server.cjs
-```
-
-Server sẽ chạy tại `http://localhost:3000`.
 
 ## Development
 
-Chạy backend ở chế độ hot-reload:
+```bash
+# Chạy đồng thời backend + frontend
+npm run dev
+
+# Hoặc chạy riêng
+npm run dev:backend   # NestJS dev server (port 3000)
+npm run dev:frontend  # Vite dev server (port 5173)
+```
+
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:3000`
+
+## Build & Deploy
 
 ```bash
-npm run dev
-# hoặc: npm run dev -w backend
+# Build backend + frontend, copy frontend vào backend/public/
+npm run build
+
+# Chạy production
+NODE_ENV=production npm run start
 ```
+
+Ở chế độ production, backend serve frontend từ `backend/public/`.
+
+## Database
+
+```bash
+# Tạo migration từ thay đổi schema
+npx prisma migrate dev --name <tên>
+
+# Deploy migration (production)
+npx prisma migrate deploy
+
+# Reset database (xoá toàn bộ dữ liệu)
+npx prisma migrate reset
+
+# Seed dữ liệu mẫu
+npx prisma db seed
+
+# Mở Prisma Studio xem dữ liệu
+npx prisma studio
+```
+
+> Chạy trong thư mục `backend/` hoặc thêm `--prefix backend`.
 
 ## Cấu trúc thư mục
 
 ```
-tool-invoice/
-├── backend/             # Backend API (Express + Prisma + SQLite)
-│   ├── src/
-│   │   ├── controllers/ # HTTP request handlers
-│   │   ├── services/    # Business logic
-│   │   ├── utils/       # Helpers (paths, db, rate-limiter...)
-│   │   └── server.ts    # Entry point
-│   ├── prisma/          # Schema & migrations
-│   ├── dist/            # Build output (gitignored)
-│   └── .env             # Environment variables (gitignored)
-├── frontend/            # Frontend (Vite + React)
-├── invoices/            # Thư mục lưu hóa đơn đã tải
-└── package.json         # Root workspace config
+├── backend/               # NestJS backend
+│   ├── prisma/            # Schema + migrations + seed
+│   │   └── schema.prisma
+│   └── src/
+│       ├── auth/          # Xác thực, phân quyền, JWT
+│       ├── invoices/      # Tải/xử lý hoá đơn, XML, PDF, Excel
+│       ├── company/       # Quản lý doanh nghiệp
+│       ├── common/        # Utilities dùng chung
+│       └── prisma/        # Prisma service
+├── frontend/              # React + Vite frontend
+│   └── src/
+├── .env.example           # Mẫu biến môi trường
+└── package.json           # Workspace root
 ```
-
-## Lưu ý khi build
-
-- **Định dạng output:** CJS (`server.cjs`) — tương thích với cả Node.js `require` và `pkg` đóng gói.
-- **Warning `import.meta.url`:** Đã được xử lý qua esbuild `define` và fallback trong `paths.ts`. Không ảnh hưởng đến runtime.
-- **Prisma:** Engine files không cần thiết (schema-engine, introspection-engine) được tự động xoá sau build để giảm dung lượng.

@@ -1,86 +1,71 @@
-FROM node:20-slim AS builder
+# =============================================================================
+# Invoice Download Tool - Docker image
+# -----------------------------------------------------------------------------
+# Build (backed by a .dockerignore to keep the build context small):
+#   npm run build -> builds backend, builds frontend, then copies
+#   frontend/dist/* into backend/public/.
+#
+# Runtime:
+#   backend serves the frontend (../public) + the JSON API on port 3000.
+#   SQLite (via libsql/Prisma) + invoice files persist in ./data (a volume).
+# =============================================================================
+
+# ------------------------------- BUILD STAGE --------------------------------
+FROM node:22-slim AS build
 
 WORKDIR /app
 
-# Copy root package files
-COPY package.json package-lock.json* ./
-COPY backend/package.json backend/
-COPY frontend/package.json frontend/
+# Copy package manifests first so dependency layers benefit from Docker cache
+COPY package.json ./
+COPY backend/package.json ./backend/
+COPY frontend/package.json ./frontend/
 
-# Install dependencies for the whole workspace. Puppeteer needs unzip to extract Chrome, Prisma needs openssl
-RUN apt-get update && apt-get install -y unzip openssl && rm -rf /var/lib/apt/lists/*
-ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
+# Install all dependencies (npm workspaces install backend + frontend together)
 RUN npm install
 
-# Copy source code
+# Add `tsx` (not in package.json) to run the TypeScript seed script at runtime
+RUN npm install --prefix backend --no-save --no-package-lock tsx
+
+# Copy the rest of the source (node_modules / dist are excluded by .dockerignore)
 COPY . .
 
-# Build backend, frontend, and copy frontend to backend/public
+# Provide the same env defaults used at runtime so build-time tooling
+# (prisma config, ConfigModule) can resolve variables.
+COPY backend/.env.example backend/.env
+
+# Generate the Prisma client BEFORE compiling the backend (it is imported by code).
+# backend/.env (copied above, from .env.example) provides DATABASE_URL to prisma.config.ts.
+RUN cd backend && npx prisma generate
+
+# npm run build = build:backend + build:frontend + copy:frontend -> backend/public
 RUN npm run build
 
+# ------------------------------ RUNTIME STAGE -------------------------------
+FROM node:22-slim AS runner
 
-# Stage 2: Production
-FROM node:20-slim AS runner
-
-# Install Puppeteer dependencies
-# (We need these libraries to run Headless Chrome on Debian/Ubuntu slim)
-RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    ca-certificates \
-    procps \
-    libnss3 \
-    libxss1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdrm2 \
-    libdbus-1-3 \
-    libexpat1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libxcb1 \
-    libx11-xcb1 \
-    libx11-6 \
-    libglib2.0-0 \
-    fonts-liberation \
-    openssl \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Copy the build artifacts and node_modules from builder
-# We just need the backend folder since frontend is copied into backend/public
-COPY --from=builder /app/backend/dist ./backend/dist
-COPY --from=builder /app/backend/public ./backend/public
-COPY --from=builder /app/backend/node_module[s] ./backend/node_modules/
-COPY --from=builder /app/backend/package.json ./backend/package.json
-COPY --from=builder /app/backend/prisma ./backend/prisma
-
-# We also need the root node_modules for hoisted dependencies
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.puppeteer-cache /app/.puppeteer-cache
-
-ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
-
+ENV NODE_ENV=production
 WORKDIR /app/backend
 
-# Create a directory for sqlite db and invoices
-RUN mkdir -p /app/data
-ENV DATABASE_URL="file:/app/data/database.db"
-ENV INVOICES_DIR="/app/data/invoices"
-ENV PORT=3000
-ENV NODE_ENV=production
-ENV TZ=Asia/Ho_Chi_Minh
+# Compiled backend + bundled frontend (served from ./public)
+COPY --from=build /app/backend/dist ./dist
+COPY --from=build /app/backend/public ./public
+
+# Prisma schema + migrations + config (needed for migrate deploy & seed)
+COPY --from=build /app/backend/prisma ./prisma
+COPY --from=build /app/backend/prisma.config.ts ./prisma.config.ts
+
+# Installed dependencies: root workspace deps + backend deps (+ tsx)
+COPY --from=build /app/node_modules /app/node_modules
+COPY --from=build /app/backend/node_modules ./node_modules
+COPY --from=build /app/backend/package.json ./package.json
+
+# Default env file; secrets are overridden via docker-compose `environment`/env_file
+COPY --from=build /app/backend/.env.example ./.env
+
+# Entrypoint: migrate -> (optional seed) -> start the API
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3000
 
-# Start the application using the pre-built server.cjs
-CMD ["npm", "run", "production"]
+ENTRYPOINT ["bash", "/usr/local/bin/docker-entrypoint.sh"]

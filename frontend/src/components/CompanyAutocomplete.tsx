@@ -1,20 +1,15 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { Check, ChevronsUpDown, X } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
-
-interface Company {
-  id: number;
-  taxCode: string;
-  name: string;
-}
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Check, ChevronsUpDown, X } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
+import type { Company } from '@/types'
 
 interface CompanyAutocompleteProps {
-  companies: Company[];
-  value: string; // selected taxCode
-  onChange: (taxCode: string) => void;
-  placeholder?: string;
-  disabled?: boolean;
+  companies: Company[]
+  value: string // selected companyId
+  onChange: (companyId: string) => void
+  placeholder?: string
+  disabled?: boolean
 }
 
 export default function CompanyAutocomplete({
@@ -24,106 +19,126 @@ export default function CompanyAutocomplete({
   placeholder = 'Chọn công ty...',
   disabled = false,
 }: CompanyAutocompleteProps) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [highlightIndex, setHighlightIndex] = useState(-1);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [highlightIndex, setHighlightIndex] = useState(-1)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   // Selected company object
-  const selectedCompany = value ? companies.find(c => c.taxCode === value) : null;
+  const selectedCompany = value
+    ? companies.find((c) => c.id === value)
+    : null
 
   // Filter companies based on query
-  const filtered = companies.filter(c => {
-    if (!query) return true;
-    const q = query.toLowerCase().trim();
+  const filtered = companies.filter((c) => {
+    if (!query) return true
+    const q = query.toLowerCase().trim()
     return (
       c.name.toLowerCase().includes(q) ||
       c.taxCode.toLowerCase().includes(q)
-    );
-  });
+    )
+  })
 
   // Reset highlight when filtered list changes
   useEffect(() => {
-    setHighlightIndex(-1);
-  }, [query, companies]);
+    setHighlightIndex(-1)
+  }, [query, companies])
 
   // Close on click outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false)
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('mousedown', handleClickOutside)
+    return () =>
+      document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Scroll highlighted item into view
   useEffect(() => {
     if (highlightIndex >= 0 && listRef.current) {
-      const items = listRef.current.querySelectorAll('[data-autocomplete-item]');
+      const items = listRef.current.querySelectorAll(
+        '[data-autocomplete-item]',
+      )
       if (items[highlightIndex]) {
-        items[highlightIndex].scrollIntoView({ block: 'nearest' });
+        items[highlightIndex].scrollIntoView({ block: 'nearest' })
       }
     }
-  }, [highlightIndex]);
+  }, [highlightIndex])
 
-  const selectCompany = useCallback((taxCode: string) => {
-    onChange(taxCode);
-    setOpen(false);
-    setQuery('');
-  }, [onChange]);
+  const selectCompany = useCallback(
+    (companyId: string) => {
+      onChange(companyId)
+      setOpen(false)
+      setQuery('')
+    },
+    [onChange],
+  )
 
   const handleClear = useCallback(() => {
-    onChange('');
-    setQuery('');
-    setOpen(false);
-    inputRef.current?.focus();
-  }, [onChange]);
+    onChange('')
+    setQuery('')
+    setOpen(false)
+    inputRef.current?.focus()
+  }, [onChange])
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!open) {
-      if (e.key === 'ArrowDown' || e.key === 'Enter') {
-        setOpen(true);
-        e.preventDefault();
-      }
-      return;
-    }
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setHighlightIndex(prev => Math.min(prev + 1, filtered.length - 1));
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setHighlightIndex(prev => Math.max(prev - 1, 0));
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (highlightIndex >= 0 && highlightIndex < filtered.length) {
-          selectCompany(filtered[highlightIndex].taxCode);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!open) {
+        if (e.key === 'ArrowDown' || e.key === 'Enter') {
+          setOpen(true)
+          e.preventDefault()
         }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        setOpen(false);
-        break;
-    }
-  }, [open, filtered, highlightIndex, selectCompany]);
+        return
+      }
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault()
+          setHighlightIndex((prev) =>
+            Math.min(prev + 1, filtered.length - 1),
+          )
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          setHighlightIndex((prev) => Math.max(prev - 1, 0))
+          break
+        case 'Enter':
+          e.preventDefault()
+          if (
+            highlightIndex >= 0 &&
+            highlightIndex < filtered.length
+          ) {
+            selectCompany(filtered[highlightIndex].id)
+          }
+          break
+        case 'Escape':
+          e.preventDefault()
+          setOpen(false)
+          break
+      }
+    },
+    [open, filtered, highlightIndex, selectCompany],
+  )
 
   return (
     <div ref={containerRef} className="relative">
       {/* Trigger / Input */}
       <div className="relative">
         {selectedCompany ? (
-          // Show selected company name as a "chip" with clear button
           <div className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs">
             <span className="flex-1 truncate">
               {selectedCompany.name}
-              <span className="ml-1 text-muted-foreground">({selectedCompany.taxCode})</span>
+              <span className="ml-1 text-muted-foreground">
+                ({selectedCompany.taxCode})
+              </span>
             </span>
             <button
               type="button"
@@ -138,7 +153,10 @@ export default function CompanyAutocomplete({
             ref={inputRef}
             type="text"
             value={query}
-            onChange={e => { setQuery(e.target.value); setOpen(true); }}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setOpen(true)
+            }}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
@@ -167,38 +185,60 @@ export default function CompanyAutocomplete({
                 aria-selected={value === ''}
                 className={cn(
                   'flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm',
-                  value === '' ? 'bg-accent text-accent-foreground' : '',
-                  highlightIndex === -1 ? 'bg-accent/50' : 'hover:bg-accent/50',
+                  value === ''
+                    ? 'bg-accent text-accent-foreground'
+                    : '',
+                  highlightIndex === -1
+                    ? 'bg-accent/50'
+                    : 'hover:bg-accent/50',
                 )}
                 onClick={() => {
-                  onChange('');
-                  setOpen(false);
-                  setQuery('');
+                  onChange('')
+                  setOpen(false)
+                  setQuery('')
                 }}
                 onMouseEnter={() => setHighlightIndex(-1)}
               >
-                <Check className={cn('h-4 w-4', value === '' ? 'opacity-100' : 'opacity-0')} />
-                <span className="text-muted-foreground italic">Tất cả công ty</span>
+                <Check
+                  className={cn(
+                    'h-4 w-4',
+                    value === '' ? 'opacity-100' : 'opacity-0',
+                  )}
+                />
+                <span className="text-muted-foreground italic">
+                  Tất cả công ty
+                </span>
               </div>
 
               {filtered.map((c, idx) => (
                 <div
-                  key={c.taxCode}
+                  key={c.id}
                   data-autocomplete-item
                   role="option"
-                  aria-selected={value === c.taxCode}
+                  aria-selected={value === c.id}
                   className={cn(
                     'flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm',
-                    value === c.taxCode ? 'bg-accent text-accent-foreground' : '',
-                    highlightIndex === idx ? 'bg-accent/50' : 'hover:bg-accent/50',
+                    value === c.id
+                      ? 'bg-accent text-accent-foreground'
+                      : '',
+                    highlightIndex === idx
+                      ? 'bg-accent/50'
+                      : 'hover:bg-accent/50',
                   )}
-                  onClick={() => selectCompany(c.taxCode)}
+                  onClick={() => selectCompany(c.id)}
                   onMouseEnter={() => setHighlightIndex(idx)}
                 >
-                  <Check className={cn('h-4 w-4', value === c.taxCode ? 'opacity-100' : 'opacity-0')} />
+                  <Check
+                    className={cn(
+                      'h-4 w-4',
+                      value === c.id ? 'opacity-100' : 'opacity-0',
+                    )}
+                  />
                   <div className="flex flex-col">
                     <span className="truncate">{c.name}</span>
-                    <span className="text-[10px] text-muted-foreground">{c.taxCode}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {c.taxCode}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -207,5 +247,5 @@ export default function CompanyAutocomplete({
         </div>
       )}
     </div>
-  );
+  )
 }

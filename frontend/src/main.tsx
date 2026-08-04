@@ -1,13 +1,18 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { Toaster } from 'sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { ThemeProvider } from '@/contexts/ThemeContext'
 import './index.css'
 import App from './App.tsx'
-import { ThemeProvider } from './context/ThemeContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
-      <App />
+      <TooltipProvider>
+        <Toaster position="top-right" closeButton />
+        <App />
+      </TooltipProvider>
     </ThemeProvider>
   </StrictMode>,
 )

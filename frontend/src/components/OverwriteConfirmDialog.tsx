@@ -34,19 +34,24 @@ const OPTIONS: Array<{
     value: 'OVERWRITE',
     icon: <FileDown className="w-5 h-5 text-orange-500" />,
     label: 'Ghi đè',
-    description: 'Xoá các file hoá đơn cũ và tải lại file mới.',
+    description:
+      'Xoá các file hoá đơn cũ và tải lại file mới.',
   },
   {
     value: 'NEW_VERSION',
     icon: <Copy className="w-5 h-5 text-blue-500" />,
     label: 'Tạo bản sao',
-    description: 'Tải hoá đơn mới với số phiên bản (v1, v2, ...) trong tên file.',
+    description:
+      'Tải hoá đơn mới với số phiên bản (v1, v2, ...) trong tên file.',
   },
   {
     value: 'SKIP',
-    icon: <SkipForward className="w-5 h-5 text-muted-foreground" />,
+    icon: (
+      <SkipForward className="w-5 h-5 text-muted-foreground" />
+    ),
     label: 'Bỏ qua',
-    description: 'Giữ nguyên các hoá đơn đã tải trước đó, không tải lại.',
+    description:
+      'Giữ nguyên các hoá đơn đã tải trước đó, không tải lại.',
   },
 ];
 
@@ -59,17 +64,17 @@ export default function OverwriteConfirmDialog({
   existingCount,
   onConfirm,
 }: OverwriteConfirmDialogProps) {
-  const [selected, setSelected] = useState<OverwriteMode | null>(null);
+  const [selected, setSelected] = useState<OverwriteMode | null>(
+    null,
+  );
 
   const handleConfirm = () => {
     if (!selected) return;
-    // Gọi callback ngay, không cần isConfirming vì dialog sẽ đóng ngay sau đó
     onConfirm(selected);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
-      // Reset state khi đóng
       setSelected(null);
     }
     onOpenChange(newOpen);
@@ -87,8 +92,9 @@ export default function OverwriteConfirmDialog({
               <DialogTitle>Hoá đơn đã tồn tại</DialogTitle>
               <DialogDescription className="mt-1">
                 Doanh nghiệp <strong>{companyName}</strong> đã có{' '}
-                <strong>{existingCount} hoá đơn</strong> được tải trong khoảng
-                thời gian từ <strong>{startDate}</strong> đến{' '}
+                <strong>{existingCount} hoá đơn</strong> được tải
+                trong khoảng thời gian từ{' '}
+                <strong>{startDate}</strong> đến{' '}
                 <strong>{endDate}</strong>.
               </DialogDescription>
             </div>
@@ -98,7 +104,9 @@ export default function OverwriteConfirmDialog({
         <Separator />
 
         <div className="space-y-3 py-2">
-          <Label className="text-sm font-medium">Bạn muốn xử lý thế nào?</Label>
+          <Label className="text-sm font-medium">
+            Bạn muốn xử lý thế nào?
+          </Label>
 
           <div className="space-y-2">
             {OPTIONS.map((option) => (
@@ -112,9 +120,13 @@ export default function OverwriteConfirmDialog({
                     : 'border-border hover:bg-muted/50'
                 }`}
               >
-                <div className="mt-0.5 shrink-0">{option.icon}</div>
+                <div className="mt-0.5 shrink-0">
+                  {option.icon}
+                </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{option.label}</p>
+                  <p className="text-sm font-medium">
+                    {option.label}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {option.description}
                   </p>
@@ -142,10 +154,7 @@ export default function OverwriteConfirmDialog({
           >
             Huỷ
           </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={!selected}
-          >
+          <Button onClick={handleConfirm} disabled={!selected}>
             Xác nhận
           </Button>
         </DialogFooter>

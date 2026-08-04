@@ -1,16 +1,71 @@
+# =============================================================================
+# Invoice Download Tool - full stack
+#   - backend : built from this repo (NestJS API + serves the built frontend)
+#   - gotenberg : HTML -> PDF conversion used by the invoice PDF export
+#
+# Quick start:  docker compose up -d --build
+# App         -> http://localhost:3000
+# Gotenberg   -> internal only, reached by the backend at http://gotenberg:3000
+# =============================================================================
+
 services:
-  app:
-    build: .
-    container_name: tool-invoice
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: backend
     restart: unless-stopped
     ports:
-      - "8080:3000"
-    volumes:
-      - ./data/db:/app/data/db
-      - ./data/invoices:/app/data/invoices
+      - "9000:3000"
     environment:
-      - PORT=3000
-      - NODE_ENV=production
-      - DATABASE_URL=file:/app/data/db/database.db
-      - INVOICES_DIR=/app/data/invoices
-      - TZ=Asia/Ho_Chi_Minh
+      NODE_ENV: production
+      PORT: 3000
+      # Origin the API is served on / used for CORS
+      APP_URL: http://localhost:3000
+      # SQLite DB + invoice files live in ./data (persisted via the volume)
+      DATABASE_URL: file:./data/dev.db
+      INVOICES_DIR: ./data/invoices
+      # Reach Gotenberg through the Docker network
+      GOTENBERG_URL: http://gotenberg:3000
+      # Security secrets (override these in production!)
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-me-access-secret}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh-secret}
+      # Optional integrations
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      FEEDBACK_TO_EMAIL: ${FEEDBACK_TO_EMAIL:-}
+      GDT_BASE_URL: ${GDT_BASE_URL:-https://hoadondientu.gdt.gov.vn/api}
+      # Set to "false" to skip seeding on every boot
+      SEED_ON_START: ${SEED_ON_START:-true}
+    volumes:
+      # Persist SQLite database + generated invoice files across restarts
+      - app_data:/app/backend/data
+    networks:
+      - app
+    depends_on:
+      - gotenberg
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: gotenberg
+    restart: unless-stopped
+    # Internal only - not exposed to the host
+    networks:
+      - app
+
+volumes:
+  app_data:
+
+networks:
+  app:
+    driver: bridge
