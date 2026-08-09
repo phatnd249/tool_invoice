@@ -307,7 +307,27 @@ export class UsersService {
     const companies = await this.prisma.userCompany.findMany({
       where: { userId },
       select: {
-        company: true,
+        company: {
+          select: {
+            id: true,
+            taxCode: true,
+            name: true,
+            loginMode: true,
+            downloadCount: true,
+            address: true,
+            taxAddress: true,
+            representative: true,
+            phone: true,
+            activeDate: true,
+            managedBy: true,
+            companyType: true,
+            status: true,
+            lastSyncedAt: true,
+            createdBy: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
       },
       orderBy: { createdAt: 'asc' },
     });

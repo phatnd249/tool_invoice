@@ -26,6 +26,17 @@ export class CompaniesService {
 
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Loại bỏ các trường nhạy cảm (password, token) khỏi đối tượng company
+   * trước khi trả về cho client.
+   */
+  private sanitizeCompany<T extends { lookupPassword?: any; token?: any; tokenExpiredAt?: any }>(
+    company: T,
+  ): Omit<T, 'lookupPassword' | 'token' | 'tokenExpiredAt'> {
+    const { lookupPassword, token, tokenExpiredAt, ...safe } = company;
+    return safe;
+  }
+
   async findAll(query: QueryCompaniesDto, userId?: string): Promise<PaginatedResult<any>> {
     const {
       page = 1,
@@ -69,7 +80,7 @@ export class CompaniesService {
       this.prisma.company.count({ where }),
     ]);
 
-    return paginate(companies, total, page, limit);
+    return paginate(companies.map((c) => this.sanitizeCompany(c)), total, page, limit);
   }
 
   private async hasCompanyScope(userId: string): Promise<boolean> {
@@ -97,6 +108,18 @@ export class CompaniesService {
   }
 
   async findOne(id: string) {
+    const company = await this.prisma.company.findUnique({ where: { id } });
+    if (!company) {
+      throw new NotFoundException('Company not found');
+    }
+    return this.sanitizeCompany(company);
+  }
+
+  /**
+   * Lấy company đầy đủ (gồm cả password/token) — chỉ dùng nội bộ,
+   * KHÔNG trả về cho client.
+   */
+  private async findCompanyRaw(id: string) {
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) {
       throw new NotFoundException('Company not found');
@@ -137,26 +160,30 @@ export class CompaniesService {
     const resolvedName =
       dto.name || (await this.gdtAuth.getTaxpayerName(token)) || dto.taxCode;
 
-    return this.prisma.company.create({
-      data: {
-        taxCode: dto.taxCode,
-        name: resolvedName,
-        lookupPassword: dto.lookupPassword,
-        loginMode,
-        token,
-        tokenExpiredAt,
-        createdBy: userId,
-      },
-    });
+    return this.sanitizeCompany(
+      await this.prisma.company.create({
+        data: {
+          taxCode: dto.taxCode,
+          name: resolvedName,
+          lookupPassword: dto.lookupPassword,
+          loginMode,
+          token,
+          tokenExpiredAt,
+          createdBy: userId,
+        },
+      }),
+    );
   }
 
   async update(id: string, dto: UpdateCompanyDto) {
     await this.findOne(id);
 
-    return this.prisma.company.update({
-      where: { id },
-      data: dto,
-    });
+    return this.sanitizeCompany(
+      await this.prisma.company.update({
+        where: { id },
+        data: dto,
+      }),
+    );
   }
 
   async delete(id: string) {
@@ -168,7 +195,7 @@ export class CompaniesService {
   // ─── Token & Login ────────────────────────────────────────────────────────
 
   async refreshToken(id: string) {
-    const company = await this.findOne(id);
+    const company = await this.findCompanyRaw(id);
 
     if (company.loginMode !== 'AUTO') {
       throw new BadRequestException(
@@ -184,14 +211,16 @@ export class CompaniesService {
     const resolvedName =
       (await this.gdtAuth.getTaxpayerName(token)) || company.name;
 
-    return this.prisma.company.update({
-      where: { id },
-      data: { token, tokenExpiredAt, name: resolvedName },
-    });
+    return this.sanitizeCompany(
+      await this.prisma.company.update({
+        where: { id },
+        data: { token, tokenExpiredAt, name: resolvedName },
+      }),
+    );
   }
 
   async loginManual(id: string, dto: ManualLoginDto) {
-    const company = await this.findOne(id);
+    const company = await this.findCompanyRaw(id);
 
     const token = await this.gdtAuth.authenticate(
       company.taxCode,
@@ -203,24 +232,27 @@ export class CompaniesService {
     const resolvedName =
       (await this.gdtAuth.getTaxpayerName(token)) || company.name;
 
-    return this.prisma.company.update({
-      where: { id },
-      data: { token, tokenExpiredAt, name: resolvedName },
-    });
+    return this.sanitizeCompany(
+      await this.prisma.company.update({
+        where: { id },
+        data: { token, tokenExpiredAt, name: resolvedName },
+      }),
+    );
   }
 
   // ─── Sync Info ────────────────────────────────────────────────────────────
 
   async syncCompanyInfo(id: string) {
-    const company = await this.findOne(id);
+    const company = await this.findCompanyRaw(id);
 
     try {
       const info = await this.maSoThueService.lookup(company.taxCode);
 
-      return this.prisma.company.update({
-        where: { id },
-        data: {
-          name: info.name !== 'Không xác định' ? info.name : company.name,
+      return this.sanitizeCompany(
+        await this.prisma.company.update({
+          where: { id },
+          data: {
+            name: info.name !== 'Không xác định' ? info.name : company.name,
           address:
             info.address !== 'Đang cập nhật' ? info.address : null,
           taxAddress:
@@ -239,7 +271,8 @@ export class CompaniesService {
           status: info.status !== 'Đang cập nhật' ? info.status : null,
           lastSyncedAt: new Date(),
         },
-      });
+      }),
+    );
     } catch (error: any) {
       this.logger.error(
         `Failed to sync company info for ${company.taxCode}: ${error.message}`,
