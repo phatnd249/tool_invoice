@@ -175,4 +175,82 @@ export class GdtDownloadClientService {
       return null;
     }
   }
+
+  /**
+   * Tải file Excel bảng kê (export-excel) từ GDT cho một khoảng thời gian.
+   * Gọi cả 2 API (query chuẩn + sco-query), lưu mỗi file hợp lệ về outputDir
+   * với tên theo quy ước `{MST}-{ngayBatDau}-{ngayKetThuc}.xlsx`.
+   *
+   * @returns danh sách các file đã lưu (đường dẫn tuyệt đối)
+   */
+  async downloadInvoiceExcel(
+    startDate: Date,
+    endDate: Date,
+    token: string,
+    outputDir: string,
+    companyTaxCode: string,
+  ): Promise<string[]> {
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    const fmt = (d: Date, endOfDay: boolean) => {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      const time = endOfDay ? '23:59:59' : '00:00:00';
+      return `${dd}/${mm}/${yyyy}T${time}`;
+    };
+
+    const startStr = fmt(startDate, false);
+    const endStr = fmt(endDate, true);
+    const searchStr =
+      `tdlap=ge=${startStr};tdlap=le=${endStr}`;
+
+    // Ngày theo quy ước tên file (dd-mm-yyyy)
+    const fileStart =
+      `${String(startDate.getDate()).padStart(2, '0')}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${startDate.getFullYear()}`;
+    const fileEnd =
+      `${String(endDate.getDate()).padStart(2, '0')}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${endDate.getFullYear()}`;
+    const fileName =
+      `${companyTaxCode}-${fileStart}-${fileEnd}.xlsx`;
+    const filePath = path.join(outputDir, fileName);
+
+    // Nếu đã có file hợp lệ → bỏ qua (idempotent)
+    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+      this.logger.debug(`Excel report already exists: ${filePath}`);
+      return [filePath];
+    }
+
+    const apiPaths = ['query', 'sco-query'];
+    for (const apiPath of apiPaths) {
+      const url =
+        `${this.http.GDT_BASE}/${apiPath}/invoices/export-excel?sort=tdlap:desc&search=${encodeURIComponent(searchStr)}`;
+
+      try {
+        const response = await this.http.fetchWithRetry(url, {
+          headers: this.http.buildHeaders(token),
+          responseType: 'arraybuffer',
+          timeout: 60000,
+          validateStatus: () => true,
+        }, 0);
+
+        if (response.status === 200 && response.data) {
+          fs.writeFileSync(filePath, Buffer.from(response.data));
+          this.logger.log(
+            `Downloaded Excel report (${apiPath}): ${filePath}`,
+          );
+          return [filePath];
+        }
+
+        this.logger.warn(
+          `GDT export-excel (${apiPath}) returned ${response.status} for range ${startStr}→${endStr}`,
+        );
+      } catch (error: any) {
+        this.logger.warn(
+          `Failed to download Excel report (${apiPath}) for ${startStr}→${endStr}: ${error.message}`,
+        );
+      }
+    }
+
+    return [];
+  }
 }

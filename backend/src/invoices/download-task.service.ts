@@ -8,6 +8,7 @@ import { EventEmitter } from 'events';
 import { Observable } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { GdtClientService, GdtRawInvoice } from './gdt-client.service';
+import { GdtDownloadClientService } from './gdt/gdt-download-client.service';
 import { InvoicesPersistenceService } from './invoices-persistence.service';
 import { XmlParserService } from './xml-parser.service';
 import { PreviewService } from './preview.service';
@@ -160,6 +161,7 @@ export class DownloadTaskService {
     private readonly tokenResolver: TokenResolverService,
     private readonly downloader: InvoiceDownloaderService,
     private readonly gdtClient: GdtClientService,
+    private readonly gdtDownload: GdtDownloadClientService,
     private readonly persistence: InvoicesPersistenceService,
     private readonly xmlParser: XmlParserService,
     private readonly previewService: PreviewService,
@@ -461,6 +463,18 @@ export class DownloadTaskService {
           message: `Bắt đầu tải hoá đơn ${typeLabel} (${startDate} → ${endDate}, ${totalDays} ngày)`,
           level: 'info',
         });
+
+        // ── BẢNG KÊ: tải file Excel (export-excel) cho toàn bộ khoảng thời gian ──
+        await this.downloadBangKeExcel(
+          taskId,
+          type,
+          typeLabel,
+          company,
+          token,
+          new Date(startDate),
+          new Date(endDate),
+          invoicesBaseDir,
+        );
 
         let typeTotalQueried = 0;
         let typeCreated = 0;
@@ -995,6 +1009,95 @@ export class DownloadTaskService {
     const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
     const yyyy = date.getUTCFullYear();
     return `${dd}/${mm}/${yyyy}`;
+  }
+
+  /**
+   * Tải file Excel bảng kê (export-excel) cho một khoảng thời gian.
+   * Chia khoảng thành các chunk ≤ 31 ngày (giới hạn GDT) rồi tải từng chunk
+   * vào thư mục {INVOICES_DIR}/{company}/BangKe/{BanRa|MuaVao}/.
+   * Lỗi tải từng chunk không làm dừng task.
+   */
+  private async downloadBangKeExcel(
+    taskId: string,
+    type: 'BUY' | 'SELL',
+    typeLabel: string,
+    company: any,
+    token: string,
+    startDate: Date,
+    endDate: Date,
+    invoicesBaseDir: string,
+  ): Promise<void> {
+    try {
+      const companyDir = sanitizeDirName(company.name || company.taxCode);
+      const typeDir = type === 'SELL' ? 'BanRa' : 'MuaVao';
+      const bangKeDir = path.join(invoicesBaseDir, companyDir, 'BangKe', typeDir);
+
+      const chunks = this.splitDateRange(startDate, endDate, 31);
+
+      this.logger.log(
+        `BangKe Excel: chia ${startDate.toISOString().slice(0, 10)} → ${endDate.toISOString().slice(0, 10)} (${typeLabel}) thành ${chunks.length} chunk`,
+      );
+
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const chunk = chunks[ci];
+        const saved = await this.gdtDownload.downloadInvoiceExcel(
+          chunk.start,
+          chunk.end,
+          token,
+          bangKeDir,
+          company.taxCode,
+        );
+
+        await this.appendLog(taskId, {
+          time: new Date().toISOString(),
+          message:
+            saved.length > 0
+              ? `  📊 Bảng kê (${typeLabel}) chunk ${ci + 1}/${chunks.length}: ${path.basename(saved[0])}`
+              : `  ⚠️ Bảng kê (${typeLabel}) chunk ${ci + 1}/${chunks.length}: GDT không trả file Excel`,
+          level: saved.length > 0 ? 'info' : 'warn',
+        });
+
+        // Delay nhẹ giữa các chunk để tránh rate-limit
+        if (ci < chunks.length - 1) {
+          await delay(1000);
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `BangKe Excel download failed (${typeLabel}): ${err.message}`,
+      );
+      await this.appendLog(taskId, {
+        time: new Date().toISOString(),
+        message: `  ⚠️ Lỗi tải bảng kê Excel (${typeLabel}): ${err.message}`,
+        level: 'warn',
+      });
+    }
+  }
+
+  /**
+   * Chia khoảng thời gian thành nhiều chunk, mỗi chunk có span ≤ maxDays.
+   */
+  private splitDateRange(
+    startDate: Date,
+    endDate: Date,
+    maxDays: number,
+  ): Array<{ start: Date; end: Date }> {
+    const chunks: Array<{ start: Date; end: Date }> = [];
+    let currentStart = new Date(startDate.getTime());
+
+    while (currentStart <= endDate) {
+      const currentEnd = new Date(currentStart.getTime());
+      currentEnd.setDate(currentEnd.getDate() + (maxDays - 1));
+      const actualEnd =
+        currentEnd > endDate
+          ? new Date(endDate.getTime())
+          : currentEnd;
+      chunks.push({ start: new Date(currentStart), end: new Date(actualEnd) });
+      currentStart = new Date(actualEnd.getTime());
+      currentStart.setDate(currentStart.getDate() + 1);
+    }
+
+    return chunks;
   }
 
   /**
