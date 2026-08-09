@@ -232,6 +232,97 @@ export class InvoicesPersistenceService {
     );
   }
 
+  /**
+   * Lưu items + metadata từ GDT detail API (fallback khi không có ZIP).
+   * Thay items cũ, cập nhật thông tin bên mua/phần tiền từ detail, và set
+   * downloadStatus = 'PARSED'. Không gán zipPath/xmlPath vì không có hồ sơ gốc.
+   *
+   * @param inv - Dữ liệu query GDT
+   * @param items - Items từ detail API (đã parse field chuẩn hoá)
+   * @param detail - Dữ liệu detail thô (dùng để bổ sung thông tin)
+   * @returns invoiceId nếu tìm thấy, ngược lại chuỗi rỗng
+   */
+  async saveItemsFromDetail(
+    inv: GdtRawInvoice,
+    type: 'BUY' | 'SELL',
+    items: Array<{
+      lineNumber?: string;
+      name: string;
+      unit?: string;
+      quantity?: number;
+      price?: number;
+      amount: number;
+      taxRate?: string;
+    }>,
+    detail?: Record<string, any> | null,
+  ): Promise<string> {
+    const where = this.buildWhere(inv, type);
+    const invoice = await this.prisma.invoice.findFirst({ where });
+    if (!invoice) {
+      this.logger.warn(
+        `Invoice not found for ${inv.shdon}, skipping detail items`,
+      );
+      return '';
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Xoá items cũ
+      await tx.invoiceItem.deleteMany({
+        where: { invoiceId: invoice.id },
+      });
+
+      // Tạo items mới nếu có
+      if (items.length > 0) {
+        await tx.invoiceItem.createMany({
+          data: items.map((item, idx) => ({
+            invoiceId: invoice.id,
+            lineNumber: item.lineNumber
+              ? Number(item.lineNumber)
+              : idx + 1,
+            name: item.name,
+            unit: item.unit || null,
+            quantity: item.quantity ?? null,
+            price: item.price ?? null,
+            amount: item.amount,
+            taxRate: item.taxRate || null,
+          })),
+        });
+      }
+
+      // Bổ sung thông tin từ detail nếu có
+      const updateData: Prisma.InvoiceUpdateInput = {
+        downloadStatus: 'PARSED',
+        errorMessage: null,
+      };
+      if (detail) {
+        if (detail.nmten || detail.nmtnmua) {
+          updateData.buyerName =
+            String(detail.nmten || detail.nmtnmua || '').trim() || null;
+        }
+        if (detail.tgtcthue != null) {
+          updateData.totalBeforeTax = Number(detail.tgtcthue);
+        }
+        if (detail.tgtthue != null) {
+          updateData.taxAmount = Number(detail.tgtthue);
+        }
+        if (detail.tgtttbso != null) {
+          updateData.totalAmount = Number(detail.tgtttbso);
+        }
+      }
+
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: updateData,
+      });
+    });
+
+    this.logger.debug(
+      `Saved ${items.length} detail items for invoice ${inv.shdon} (no ZIP)`,
+    );
+
+    return invoice.id;
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────
 
   private buildWhere(

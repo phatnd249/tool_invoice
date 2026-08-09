@@ -152,22 +152,99 @@ export class InvoiceDownloaderService {
     }
 
     // ── Tải ZIP ──────────────────────────────────────────────────
-    const { zipPath: downloadedZipPath } =
-      await this.gdtDownload.downloadInvoiceZip(
+    let downloadedZipPath: string | undefined;
+    let finalZipPath: string | undefined;
+    let isNoZip = false;
+
+    try {
+      const res = await this.gdtDownload.downloadInvoiceZip(
         invoice,
         token,
         outputDir,
       );
-
-    let finalZipPath = downloadedZipPath;
-
-    // ── NEW_VERSION: đổi tên nếu cần ────────────────────────────
-    if (overwriteMode === 'NEW_VERSION' && actualVersion > 0) {
-      const versionedZipPath = getVersionedFilePath(
-        expectedZipPath,
-        actualVersion,
+      downloadedZipPath = res.zipPath;
+    } catch (err: any) {
+      // Nếu lỗi không phải do GDT thiếu hồ sơ gốc (404/500) → cứ lan truyền
+      // (để tầng trên xử lý rate-limit 429 hoặc báo lỗi thật).
+      const statusCode = err?.statusCode;
+      if (
+        statusCode !== 404 &&
+        statusCode !== 500
+      ) {
+        throw err;
+      }
+      isNoZip = true;
+      this.logger.warn(
+        `Không có file ZIP cho hoá đơn ${invNum} (status ${statusCode}), fallback dùng dữ liệu query.`,
       );
-      fs.renameSync(downloadedZipPath, versionedZipPath);
+    }
+
+    // ── Trường hợp có ZIP: extract + parse XML ───────────────────
+    if (!isNoZip && downloadedZipPath) {
+      const parsedItems = await this.processZipFlow(
+        downloadedZipPath!,
+        outputDir,
+        invoice,
+        type,
+        {
+          overwriteMode,
+          actualVersion,
+          expectedZipPath,
+        },
+      );
+      finalZipPath = parsedItems.finalZipPath;
+      return {
+        success: true,
+        invoiceId: parsedItems.invoiceId,
+        zipPath: finalZipPath,
+        xmlPath: parsedItems.xmlPath,
+        itemsCount: parsedItems.itemsCount,
+        pdfPath: parsedItems.pdfPath,
+      };
+    }
+
+    // ── Trường hợp không có ZIP: fallback dùng dữ liệu query/detail ──
+    return await this.processNoZipFlow(
+      invoice,
+      token,
+      type,
+      outputDir,
+      {
+        previousOverwriteMode: overwriteMode,
+        previousVersion: actualVersion,
+      },
+    );
+  }
+
+  /**
+   * Xử lý khi có ZIP: extract XML → parse items → save DB → tạo PDF.
+   */
+  private async processZipFlow(
+    zipPath: string,
+    outputDir: string,
+    invoice: GdtRawInvoice,
+    type: 'BUY' | 'SELL',
+    opts: {
+      overwriteMode: 'SKIP' | 'OVERWRITE' | 'NEW_VERSION';
+      actualVersion: number;
+      expectedZipPath: string;
+    },
+  ): Promise<{
+    invoiceId: string;
+    xmlPath: string;
+    itemsCount: number;
+    pdfPath?: string;
+    finalZipPath: string;
+  }> {
+    let finalZipPath = zipPath;
+
+    // ── NEW_VERSION: đổi tên ZIP nếu cần ────────────────────────
+    if (opts.overwriteMode === 'NEW_VERSION' && opts.actualVersion > 0) {
+      const versionedZipPath = getVersionedFilePath(
+        opts.expectedZipPath,
+        opts.actualVersion,
+      );
+      fs.renameSync(zipPath, versionedZipPath);
       finalZipPath = versionedZipPath;
     }
 
@@ -181,7 +258,6 @@ export class InvoiceDownloaderService {
     const parsed = this.xmlParser.parseInvoiceXml(xmlPath);
 
     // ── Save items + paths vào DB ────────────────────────────────
-    // Lưu relative path (không bao gồm INVOICES_DIR) để dễ migrate
     const baseDir = this.getBaseDir();
     const relativeZipPath = path.relative(baseDir, finalZipPath);
     const relativeXmlPath = path.relative(baseDir, xmlPath);
@@ -194,45 +270,155 @@ export class InvoiceDownloaderService {
     );
 
     // ── Tạo PDF tự động ─────────────────────────────────────────
+    const pdfPath = await this.generatePdf(invoice, type, outputDir, invoiceId);
+
+    return {
+      invoiceId: invoiceId || '',
+      xmlPath,
+      itemsCount: parsed.items.length,
+      pdfPath,
+      finalZipPath,
+    };
+  }
+
+  /**
+   * Fallback khi không có ZIP: dùng GDT detail API +
+   * dữ liệu query để lưu items và tạo PDF.
+   */
+  private async processNoZipFlow(
+    invoice: GdtRawInvoice,
+    token: string,
+    type: 'BUY' | 'SELL',
+    outputDir: string,
+    _opts: {
+      previousOverwriteMode: 'SKIP' | 'OVERWRITE' | 'NEW_VERSION';
+      previousVersion: number;
+    },
+  ): Promise<DownloadSingleResult> {
+    const invNum = String(invoice.shdon);
+
+    // 1. Lấy chi tiết hoá đơn (items) từ GDT detail API
+    let detail: Record<string, any> | null = null;
+    try {
+      detail = await this.gdtDownload.downloadInvoiceDetail(invoice, token);
+    } catch (detailErr: any) {
+      this.logger.warn(
+        `Không lấy được detail cho ${invNum}: ${detailErr.message}`,
+      );
+    }
+
+    // 2. Parse items từ detail (hdhhdvu / cttkhac)
+    const detailItems =
+      detail?.hdhhdvu || detail?.cttkhac || [];
+    const items = this.mapDetailItems(detailItems);
+
+    // 3. Lưu metadata + items vào DB (không có zip/xml path)
+    const invoiceId = await this.persistence.saveItemsFromDetail(
+      invoice,
+      type,
+      items,
+      detail,
+    );
+
+    // 4. Tạo PDF từ dữ liệu query/detail (không cần ZIP)
     let pdfPath: string | undefined;
     if (invoiceId) {
       try {
-        await this.previewService.getPreviewHtml(invoiceId);
-        const cacheHtmlPath = this.previewService.getCachePath(invoiceId);
-        const pdfFileName = this.pdfService.getPdfFileName({
-          sellerTaxCode: invoice.nbmst || '',
-          buyerTaxCode: invoice.nmmst || null,
-          invoiceNumber: String(invoice.shdon),
-          invoiceSymbol: invoice.khhdon || '',
-          processStatus: invoice.ttxly ?? null,
-          invoiceStatus: invoice.tthai ?? null,
+        // Build HTML preview từ DB rồi lưu cache → render PDF
+        await this.previewService.buildPreviewHtml(invoiceId);
+        pdfPath = await this.generatePdf(
+          invoice,
           type,
-        });
-        pdfPath = await this.pdfService.getOrCreatePdf(
-          invoiceId,
-          cacheHtmlPath,
           outputDir,
-          pdfFileName,
+          invoiceId,
         );
-        const relativePdfPath = path.relative(baseDir, pdfPath);
-        await this.prisma.invoice.update({
-          where: { id: invoiceId },
-          data: { pdfPath: relativePdfPath },
-        });
       } catch (pdfErr: any) {
         this.logger.warn(
-          `Failed to auto-generate PDF for ${invNum}: ${pdfErr.message}`,
+          `Không tạo được PDF fallback cho ${invNum}: ${pdfErr.message}`,
         );
       }
     }
 
+    this.logger.log(
+      `Đã lưu hoá đơn ${invNum} từ dữ liệu query (không có ZIP), ${items.length} items`,
+    );
+
     return {
       success: true,
       invoiceId,
-      zipPath: finalZipPath,
-      xmlPath,
-      itemsCount: parsed.items.length,
+      itemsCount: items.length,
       pdfPath,
+      error: undefined,
     };
+  }
+
+  /**
+   * Map items từ detail API GDT sang dạng chuẩn hoá trong DB.
+   */
+  private mapDetailItems(detailItems: any[]): Array<{
+    lineNumber?: string;
+    name: string;
+    unit?: string;
+    quantity?: number;
+    price?: number;
+    amount: number;
+    taxRate?: string;
+  }> {
+    return (detailItems || []).map((item: any, idx: number) => ({
+      name: String(item.ten || item.thdon || item.tchat || '').trim(),
+      unit:
+        String(item.dvtinh || '').trim() || undefined,
+      quantity:
+        item.sluong != null ? Number(item.sluong) : undefined,
+      price:
+        item.dgia != null ? Number(item.dgia) : undefined,
+      amount: Number(item.thtien) || 0,
+      taxRate:
+        String(item.ltsuat || item.tsuat || '').trim() || undefined,
+    })).filter((it: any) => it.name);
+  }
+
+  /**
+   * Tạo PDF cho một invoice đã có HTML cache.
+   */
+  private async generatePdf(
+    invoice: GdtRawInvoice,
+    type: 'BUY' | 'SELL',
+    outputDir: string,
+    invoiceId: string,
+  ): Promise<string | undefined> {
+    if (!invoiceId) return undefined;
+    try {
+      await this.previewService.getPreviewHtml(invoiceId);
+      const cacheHtmlPath =
+        this.previewService.getCachePath(invoiceId);
+      const pdfFileName = this.pdfService.getPdfFileName({
+        sellerTaxCode: invoice.nbmst || '',
+        buyerTaxCode: invoice.nmmst || null,
+        invoiceNumber: String(invoice.shdon),
+        invoiceSymbol: invoice.khhdon || '',
+        processStatus: invoice.ttxly ?? null,
+        invoiceStatus: invoice.tthai ?? null,
+        type,
+      });
+      const pdfPath = await this.pdfService.getOrCreatePdf(
+        invoiceId,
+        cacheHtmlPath,
+        outputDir,
+        pdfFileName,
+      );
+      const baseDir = this.getBaseDir();
+      const relativePdfPath = path.relative(baseDir, pdfPath);
+      await this.prisma.invoice.update({
+        where: { id: invoiceId },
+        data: { pdfPath: relativePdfPath },
+      });
+      return pdfPath;
+    } catch (pdfErr: any) {
+      this.logger.warn(
+        `Failed to auto-generate PDF for ${invoice.shdon}: ${pdfErr.message}`,
+      );
+      return undefined;
+    }
   }
 }
