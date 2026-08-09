@@ -58,10 +58,44 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 
 // ─── Response Interceptor ─────────────────────────────────────────────────────
 
+// ── Error Body Normalizer ───────────────────────────────────────────────────
+// Khi responseType là 'blob' hoặc 'text' (download/export/preview), Axios trả
+// error response data dưới dạng Blob hoặc chuỗi text chứa JSON error của
+// backend. Cần parse về object để các hàm xử lý lỗi (getErrorMessage) đọc
+// được `message` và hiển thị đúng thông báo.
+async function normalizeErrorData(error: AxiosError): Promise<void> {
+  const data = error.response?.data as unknown
+  if (!data) return
+
+  // Blob → đọc text rồi parse
+  if (data instanceof Blob) {
+    try {
+      const text = await data.text()
+      const json = JSON.parse(text)
+      error.response!.data = json
+    } catch {
+      // Không phải JSON hợp lệ → giữ nguyên
+    }
+    return
+  }
+
+  // Chuỗi text → parse nếu là JSON error object
+  if (typeof data === 'string' && data.trim().startsWith('{')) {
+    try {
+      error.response!.data = JSON.parse(data)
+    } catch {
+      // Không phải JSON hợp lệ → giữ nguyên
+    }
+  }
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+
+    // ── Parse error body nếu là Blob/chuỗi JSON ──────────────────────────
+    await normalizeErrorData(error)
 
     // ── 403 Forbidden ──────────────────────────────────────────────────────
     if (error.response?.status === 403) {
@@ -121,10 +155,16 @@ apiClient.interceptors.response.use(
 
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const data = error.response?.data
-    if (!data) return 'Network error. Please try again.'
+    const rawData = error.response?.data as unknown
+    if (rawData == null) return 'Network error. Please try again.'
+    // Trường hợp data vẫn là chuỗi text plain (không phải JSON)
+    if (typeof rawData === 'string') return rawData.trim() || 'Something went wrong.'
+    const data = rawData as { message?: string | string[]; error?: string }
     if (Array.isArray(data.message)) return data.message.join(', ')
-    return data.message ?? 'Something went wrong.'
+    if (typeof data.message === 'string' && data.message) return data.message
+    // Dự phòng: nếu backend trả lỗi ở field `error`
+    if (typeof data.error === 'string' && data.error) return data.error
+    return 'Something went wrong.'
   }
   return 'Something went wrong.'
 }
