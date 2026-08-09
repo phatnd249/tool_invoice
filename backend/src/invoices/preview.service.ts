@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveInvoicePath } from '../common/invoice-utils';
+import { renderInvoiceTemplate } from './templates/invoice-template';
 
 @Injectable()
 export class PreviewService {
@@ -229,7 +230,10 @@ export class PreviewService {
       throw new NotFoundException('Invoice not found');
     }
 
-    const htmlContent = this.renderInvoiceHtml(invoice);
+    // Map dữ liệu chuẩn hoá trong DB sang cấu trúc detail của GDT để
+    // template hoá đơn chuẩn (`renderInvoiceTemplate`) render đúng mẫu.
+    const detail = this.mapInvoiceToDetail(invoice);
+    const htmlContent = renderInvoiceTemplate(detail);
     const cachePath = path.join(this.cacheDir, `${invoiceId}.html`);
 
     try {
@@ -244,168 +248,49 @@ export class PreviewService {
   }
 
   /**
-   * Render HTML hoá đơn từ dữ liệu invoice đã chuẩn hoá trong DB.
+   * Map invoice + items (dạng DB chuẩn hoá) sang cấu trúc detail JSON.
    */
-  private renderInvoiceHtml(invoice: any): string {
-    const fmt = (v: any) =>
-      v == null || isNaN(v) ? '0' : new Intl.NumberFormat('vi-VN').format(v);
-    const fmtDate = (d: any) =>
-      d ? new Date(d).toLocaleDateString('vi-VN') : '—';
+  private mapInvoiceToDetail(invoice: any): Record<string, any> {
+    const items = (invoice.items || []).map((it: any) => ({
+      ten: it.name || '',
+      thdon: it.name || '',
+      dvtinh: it.unit || '',
+      sluong: it.quantity != null ? String(it.quantity) : '',
+      dgia: it.price ?? 0,
+      thtien: it.amount ?? 0,
+      tsuat: it.taxRate || '',
+    }));
 
-    const typeLabel = invoice.type === 'SELL' ? 'Bán ra' : 'Mua vào';
+    const buyerName =
+      invoice.buyerName || invoice.buyerTaxCode || '';
 
-    const items = (invoice.items || []).map((it: any, i: number) => {
-      const qty =
-        it.quantity != null ? new Intl.NumberFormat('vi-VN').format(it.quantity) : '';
-      const price =
-        it.price != null ? new Intl.NumberFormat('vi-VN').format(it.price) : '';
-      return `
-        <tr>
-          <td class="tx-center">${i + 1}</td>
-          <td class="tx-left">${this.escapeHtml(String(it.name || ''))}</td>
-          <td class="tx-center">${this.escapeHtml(String(it.unit || ''))}</td>
-          <td class="tx-center">${qty}</td>
-          <td class="tx-right">${price}</td>
-          <td class="tx-center">${this.escapeHtml(String(it.taxRate || ''))}</td>
-          <td class="tx-right">${fmt(it.amount)}</td>
-        </tr>`;
-    }).join('');
+    return {
+      khmshdon: invoice.templateSymbol,
+      khhdon: invoice.invoiceSymbol,
+      shdon: invoice.invoiceNumber,
+      tdlap: invoice.invoiceDate
+        ? new Date(invoice.invoiceDate).toISOString()
+        : '',
+      thdon: 'HÓA ĐƠN GIÁ TRỊ GIA TĂNG',
+      mccqt: '',
 
-    const totalBeforeTax = invoice.totalBeforeTax ?? 0;
-    const totalTax = invoice.taxAmount ?? 0;
-    const totalAmount = invoice.totalAmount ?? 0;
+      nbmst: invoice.sellerTaxCode,
+      nbten: invoice.sellerName || '',
+      nbdchi: '',
+      nbstk: '',
 
-    return `<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hoá đơn ${this.escapeHtml(String(invoice.invoiceNumber ?? ''))}</title>
-<style>
-  * { box-sizing: border-box; }
-  body {
-    font-family: "Times New Roman", serif;
-    margin: 0 auto;
-    padding: 0;
-    font-size: 13pt;
-    color: #000;
-  }
-  .page {
-    width: 210mm;
-    margin: 0 auto;
-    padding: 20px;
-  }
-  .header {
-    text-align: center;
-    border-bottom: 1px solid #000;
-    padding-bottom: 8px;
-  }
-  .title {
-    font-size: 16pt;
-    font-weight: bold;
-    text-transform: uppercase;
-    margin: 6px 0;
-  }
-  .subtitle {
-    font-size: 11pt;
-    color: #333;
-  }
-  .meta {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11pt;
-    margin: 8px 0;
-  }
-  .party {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    margin: 10px 0;
-    font-size: 12pt;
-  }
-  .party .col { flex: 1; }
-  .label { font-weight: bold; }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 10px 0;
-    font-size: 11pt;
-  }
-  th, td {
-    border: 1px solid #000;
-    padding: 4px 6px;
-  }
-  th { text-align: center; background: #f1f1f1; }
-  .tx-left { text-align: left; }
-  .tx-right { text-align: right; }
-  .tx-center { text-align: center; }
-  .total { font-size: 12pt; }
-  .total td { border: none; padding: 2px 6px; }
-  .words { margin-top: 8px; font-size: 12pt; }
-</style>
-</head>
-<body>
-  <div class="page">
-    <div class="header">
-      <div class="title">HOÁ ĐƠN ${this.escapeHtml(typeLabel)}</div>
-      <div class="subtitle">${this.escapeHtml(String(invoice.invoiceNumber || ''))}</div>
-      <div class="meta">
-        <div>Mẫu số: ${this.escapeHtml(String(invoice.templateSymbol || ''))}</div>
-        <div>Ký hiệu: ${this.escapeHtml(String(invoice.invoiceSymbol || ''))}</div>
-        <div>Ngày: ${fmtDate(invoice.invoiceDate)}</div>
-      </div>
-    </div>
+      nmmst: invoice.buyerTaxCode || '',
+      nmten: buyerName,
+      nmuaten: buyerName,
+      nmtnmua: buyerName,
+      nmdchi: '',
+      nmuadchi: '',
+      htttoan: '',
 
-    <div class="party">
-      <div class="col">
-        <div class="label">Người bán:</div>
-        <div>${this.escapeHtml(String(invoice.sellerName || '—'))}</div>
-        <div>MST: ${this.escapeHtml(String(invoice.sellerTaxCode || ''))}</div>
-      </div>
-      <div class="col">
-        <div class="label">Người mua:</div>
-        <div>${this.escapeHtml(String(invoice.buyerName || '—'))}</div>
-        <div>MST: ${this.escapeHtml(String(invoice.buyerTaxCode || '—'))}</div>
-      </div>
-    </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th style="width:32px">STT</th>
-          <th>Tên hàng hoá, dịch vụ</th>
-          <th style="width:64px">ĐVT</th>
-          <th style="width:72px">Số lượng</th>
-          <th style="width:96px">Đơn giá</th>
-          <th style="width:72px">Thuế suất</th>
-          <th style="width:112px">Thành tiền</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${items || '<tr><td colspan="7" class="tx-center">Không có dữ liệu hàng hoá</td></tr>'}
-      </tbody>
-    </table>
-
-    <table class="total">
-      <tr><td class="tx-left">Tổng cộng tiền trước thuế:</td><td class="tx-right">${fmt(totalBeforeTax)}</td></tr>
-      <tr><td class="tx-left">Tổng tiền thuế:</td><td class="tx-right">${fmt(totalTax)}</td></tr>
-      <tr><td class="tx-left"><b>Tổng tiền thanh toán:</b></td><td class="tx-right"><b>${fmt(totalAmount)}</b></td></tr>
-    </table>
-
-    ${invoice.totalAmountInWords
-      ? `<div class="words">Bằng chữ: ${this.escapeHtml(String(invoice.totalAmountInWords))}</div>`
-      : ''}
-  </div>
-</body>
-</html>`;
-  }
-
-  private escapeHtml(value: string): string {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+      cttkhac: items,
+      tgtcthue: invoice.totalBeforeTax ?? 0,
+      tgtthue: invoice.taxAmount ?? 0,
+      tgtttbso: invoice.totalAmount ?? 0,
+    };
   }
 }
