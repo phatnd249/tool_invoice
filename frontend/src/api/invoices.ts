@@ -96,6 +96,12 @@ export const invoicesApi = {
       responseType: 'blob',
     }).then(res => res.data),
 
+  /** Tải file XML của hoá đơn */
+  downloadXml: (id: string) =>
+    apiClient.get(`/invoices/xml/${id}`, {
+      responseType: 'blob',
+    }).then(res => res.data),
+
   /** Tải ZIP của hoá đơn */
   downloadZip: (id: string) =>
     apiClient.get(`/invoices/zip/${id}`, {

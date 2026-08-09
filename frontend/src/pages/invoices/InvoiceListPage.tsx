@@ -10,6 +10,7 @@ import {
   FileText,
   FileSpreadsheet,
   FileArchive,
+  FileCode,
   Eye,
   RotateCcw,
   CalendarIcon,
@@ -616,6 +617,22 @@ export function InvoiceListPage() {
     }
   }
 
+  const handleDownloadXml = async (invoiceId: string) => {
+    try {
+      const blob = await invoicesApi.downloadXml(invoiceId)
+      const url = window.URL.createObjectURL(blob as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `invoice.xml`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    }
+  }
+
   const handleRetryFailed = async () => {
     const retryableIds = selectedIds.filter((id) => {
       const inv = invoices.find((i) => i.id === id)
@@ -940,6 +957,16 @@ export function InvoiceListPage() {
                           disabled={inv.downloadStatus !== 'PARSED'}
                         >
                           <FileText className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
+                          onClick={() => handleDownloadXml(inv.id)}
+                          title="Tải XML"
+                          disabled={!inv.xmlPath}
+                        >
+                          <FileCode className="size-3.5" />
                         </Button>
                         <Button
                           variant="ghost"

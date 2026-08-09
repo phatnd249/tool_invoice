@@ -118,6 +118,19 @@ export class InvoicesController {
     res.sendFile(pdfPath);
   }
 
+  @Get('xml/:id')
+  @RequirePermissions('invoice:read')
+  async downloadXml(@Param('id') id: string, @Res() res: Response) {
+    const { xmlPath, fileName } =
+      await this.invoicesService.getXmlPath(id);
+    res.setHeader('Content-Type', 'application/xml');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}"`,
+    );
+    res.sendFile(xmlPath);
+  }
+
   @Get('zip/:id')
   @RequirePermissions('invoice:read')
   async downloadZip(@Param('id') id: string, @Res() res: Response) {

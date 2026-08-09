@@ -435,6 +435,33 @@ export class InvoicesService {
     return { pdfPath: absolutePdfPath, fileName: pdfFileName };
   }
 
+  async getXmlPath(
+    id: string,
+  ): Promise<{ xmlPath: string; fileName: string }> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    if (!invoice.xmlPath) {
+      throw new NotFoundException('XML path not found in DB');
+    }
+
+    const baseDir = this.config.get('INVOICES_DIR') || './invoices';
+    const absoluteXmlPath = resolveInvoicePath(baseDir, invoice.xmlPath);
+    if (!fs.existsSync(absoluteXmlPath)) {
+      throw new NotFoundException('XML file not found');
+    }
+
+    return {
+      xmlPath: absoluteXmlPath,
+      fileName: path.basename(invoice.xmlPath),
+    };
+  }
+
   async getZipPath(
     id: string,
   ): Promise<{ zipPath: string; fileName: string }> {
