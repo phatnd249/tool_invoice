@@ -89,6 +89,7 @@ export class PdfService {
   getPdfFileName(invoice: {
     sellerTaxCode: string;
     buyerTaxCode?: string | null;
+    companyTaxCode?: string;
     invoiceNumber: string;
     invoiceSymbol: string;
     processStatus?: number | null;
@@ -96,11 +97,12 @@ export class PdfService {
     type: string;
   }): string {
     const taxCode =
-      invoice.type === 'BUY'
+      invoice.companyTaxCode ||
+      (invoice.type === 'BUY'
         ? (invoice.buyerTaxCode || invoice.sellerTaxCode)
         : (invoice.sellerTaxCode ||
             invoice.buyerTaxCode ||
-            'UNKNOWN');
+            'UNKNOWN'));
 
     const statusFileCode = getInvoiceFileStatusCode({
       khhdon: invoice.invoiceSymbol,

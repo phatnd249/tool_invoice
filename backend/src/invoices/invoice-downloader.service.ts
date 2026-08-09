@@ -34,6 +34,8 @@ export interface DownloadSingleParams {
   token: string;
   type: 'BUY' | 'SELL';
   companyName: string;
+  /** MST của công ty đang tải (dùng đặt tên file ZIP/PDF, nhất là hoá đơn mua vào). */
+  companyTaxCode?: string;
   invoicesBaseDir?: string;
   overwriteMode?: 'SKIP' | 'OVERWRITE' | 'NEW_VERSION';
   currentVersion?: number;
@@ -109,6 +111,7 @@ export class InvoiceDownloaderService {
       token,
       type,
       companyName,
+      companyTaxCode,
       overwriteMode = 'SKIP',
       currentVersion = 0,
     } = params;
@@ -122,8 +125,10 @@ export class InvoiceDownloaderService {
 
     // ── Overwrite logic ────────────────────────────────────────────
     const statusCode = getInvoiceFileStatusCode(invoice);
-    const taxCode = String(invoice.nbmst);
-    const baseFileName = `${taxCode}-${invNum}-${statusCode}`;
+    // Tên file dùng MST của công ty đang tải; với hoá đơn mua vào,
+    // invoice.nbmst là MST đối tác, không phải MST công ty.
+    const fileTaxCode = String(companyTaxCode || invoice.nbmst || '');
+    const baseFileName = `${fileTaxCode}-${invNum}-${statusCode}`;
     const zipFileName = `${baseFileName}.zip`;
     const expectedZipPath = path.join(outputDir, zipFileName);
 
@@ -161,6 +166,7 @@ export class InvoiceDownloaderService {
         invoice,
         token,
         outputDir,
+        fileTaxCode,
       );
       downloadedZipPath = res.zipPath;
     } catch (err: any) {
@@ -191,6 +197,7 @@ export class InvoiceDownloaderService {
           actualVersion,
           expectedZipPath,
         },
+        fileTaxCode,
       );
       finalZipPath = parsedItems.finalZipPath;
       return {
@@ -213,6 +220,7 @@ export class InvoiceDownloaderService {
         previousOverwriteMode: overwriteMode,
         previousVersion: actualVersion,
       },
+      fileTaxCode,
     );
   }
 
@@ -229,6 +237,7 @@ export class InvoiceDownloaderService {
       actualVersion: number;
       expectedZipPath: string;
     },
+    companyTaxCode?: string,
   ): Promise<{
     invoiceId: string;
     xmlPath: string;
@@ -270,7 +279,13 @@ export class InvoiceDownloaderService {
     );
 
     // ── Tạo PDF tự động ─────────────────────────────────────────
-    const pdfPath = await this.generatePdf(invoice, type, outputDir, invoiceId);
+    const pdfPath = await this.generatePdf(
+      invoice,
+      type,
+      outputDir,
+      invoiceId,
+      companyTaxCode,
+    );
 
     return {
       invoiceId: invoiceId || '',
@@ -294,6 +309,7 @@ export class InvoiceDownloaderService {
       previousOverwriteMode: 'SKIP' | 'OVERWRITE' | 'NEW_VERSION';
       previousVersion: number;
     },
+    companyTaxCode?: string,
   ): Promise<DownloadSingleResult> {
     const invNum = String(invoice.shdon);
 
@@ -331,6 +347,7 @@ export class InvoiceDownloaderService {
           type,
           outputDir,
           invoiceId,
+          companyTaxCode,
         );
       } catch (pdfErr: any) {
         this.logger.warn(
@@ -386,6 +403,7 @@ export class InvoiceDownloaderService {
     type: 'BUY' | 'SELL',
     outputDir: string,
     invoiceId: string,
+    companyTaxCode?: string,
   ): Promise<string | undefined> {
     if (!invoiceId) return undefined;
     try {
@@ -395,6 +413,7 @@ export class InvoiceDownloaderService {
       const pdfFileName = this.pdfService.getPdfFileName({
         sellerTaxCode: invoice.nbmst || '',
         buyerTaxCode: invoice.nmmst || null,
+        companyTaxCode,
         invoiceNumber: String(invoice.shdon),
         invoiceSymbol: invoice.khhdon || '',
         processStatus: invoice.ttxly ?? null,

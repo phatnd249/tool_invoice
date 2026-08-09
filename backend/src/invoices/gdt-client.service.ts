@@ -79,8 +79,14 @@ export class GdtClientService {
     invoice: GdtRawInvoice,
     token: string,
     outputDir: string,
+    companyTaxCode?: string,
   ): Promise<{ zipPath: string }> {
-    return this.downloadClient.downloadInvoiceZip(invoice, token, outputDir);
+    return this.downloadClient.downloadInvoiceZip(
+      invoice,
+      token,
+      outputDir,
+      companyTaxCode,
+    );
   }
 
   /**

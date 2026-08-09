@@ -25,6 +25,7 @@ export class GdtDownloadClientService {
     invoice: GdtRawInvoice,
     token: string,
     outputDir: string,
+    companyTaxCode?: string,
   ): Promise<{ zipPath: string }> {
     const nbmst = invoice.nbmst;
     const khmshdon = invoice.khmshdon;
@@ -45,9 +46,11 @@ export class GdtDownloadClientService {
       : ['query', 'sco-query'];
 
     const statusCode = getInvoiceFileStatusCode(invoice);
-    const taxCode = String(nbmst);
+    // Tên file dùng MST của công ty đang tải (công ty bên mua/bán),
+    // không dùng MST của đối tác. Đặc biệt quan trọng với hoá đơn mua vào.
+    const fileTaxCode = String(companyTaxCode || nbmst);
     const invNum = String(shdon);
-    const zipFileName = `${taxCode}-${invNum}-${statusCode}.zip`;
+    const zipFileName = `${fileTaxCode}-${invNum}-${statusCode}.zip`;
     const zipPath = path.join(outputDir, zipFileName);
 
     fs.mkdirSync(outputDir, { recursive: true });

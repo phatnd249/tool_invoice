@@ -176,6 +176,7 @@ export class InvoicesService {
               token,
               type,
               companyName: company.name,
+              companyTaxCode: company.taxCode,
             });
 
             if (result.success) {
@@ -581,6 +582,7 @@ export class InvoicesService {
             token,
             type,
             companyName: company.name,
+            companyTaxCode: company.taxCode,
           });
 
           // Xoá cache preview cũ

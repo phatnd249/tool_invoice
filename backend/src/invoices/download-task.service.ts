@@ -688,6 +688,7 @@ export class DownloadTaskService {
                 token,
                 type,
                 companyName: company.name,
+                companyTaxCode: company.taxCode,
                 overwriteMode: overwriteMode as
                   | 'SKIP'
                   | 'OVERWRITE'
