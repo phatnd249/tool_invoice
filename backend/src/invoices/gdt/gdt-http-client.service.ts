@@ -44,29 +44,38 @@ export class GdtHttpClientService {
 
   /**
    * Gọi axios GET với retry tự động.
-   * - 429 hoặc 5xx → retry với exponential backoff
+   * - 429 / 5xx → retry với exponential backoff dài (10s → 20s → 40s) để thoát rate-limit
+   * - Timeout / lỗi mạng → retry với backoff ngắn (2s → 4s → 8s), vì lỗi thoáng qua
    * - 401 → throw ngay (token expired)
-   * - Timeout → retry
+   *
+   * @param options.retry5xx - mặc định true (retry 5xx). Truyền `false` cho các API
+   *   mà 5xx là kết thúc (vd: export-xml trả 500 khi GDT không có hồ sơ gốc), để tránh
+   *   chờ backoff vô ích, nhường cho caller xử lý fallback.
    */
   async fetchWithRetry(
     url: string,
     config: any,
     retries: number = 3,
+    options?: { retry5xx?: boolean },
   ): Promise<any> {
-    let delayMs = 10000; // Bắt đầu 10s, tăng dần để thoát khỏi 429 của GDT
+    let rateDelayMs = 10000; // 429/5xx: chờ lâu để thoát rate-limit
+    let netDelayMs = 2000; // timeout/lỗi mạng: chờ ngắn
 
     for (let i = 0; i <= retries; i++) {
       try {
         const resp = await axios.get(url, config);
         const status = resp.status;
 
-        // Retry on 429 or 5xx
-        if ((status === 429 || (status >= 500 && status <= 599)) && i < retries) {
+        const retryableStatus =
+          status === 429 ||
+          (options?.retry5xx !== false && status >= 500 && status <= 599);
+
+        if (retryableStatus && i < retries) {
           this.logger.warn(
-            `HTTP ${status} from GDT, retrying in ${delayMs}ms (attempt ${i + 1}/${retries})`,
+            `HTTP ${status} from GDT, retrying in ${rateDelayMs}ms (attempt ${i + 1}/${retries})`,
           );
-          await delay(delayMs);
-          delayMs *= 2;
+          await delay(rateDelayMs);
+          rateDelayMs *= 2;
           continue;
         }
 
@@ -77,11 +86,13 @@ export class GdtHttpClientService {
           err.code === 'ETIMEDOUT' ||
           (err.message && err.message.toLowerCase().includes('timeout'));
         const status = err?.response?.status;
+        const isRateLimited = status === 429;
+        const is5xx = status >= 500 && status <= 599;
         const isRetryable =
           isTimeout ||
           !status ||
-          status === 429 ||
-          (status >= 500 && status <= 599);
+          isRateLimited ||
+          (options?.retry5xx !== false && is5xx);
 
         // Log response body cho lỗi 4xx (client error) để debug
         if (status && status >= 400 && status < 500 && !isRetryable) {
@@ -97,11 +108,16 @@ export class GdtHttpClientService {
         }
 
         if (i < retries && isRetryable) {
+          const wait = isRateLimited || is5xx ? rateDelayMs : netDelayMs;
           this.logger.warn(
-            `Request failed (${status || err.code}), retrying in ${delayMs}ms...`,
+            `Request failed (${status || err.code}), retrying in ${wait}ms...`,
           );
-          await delay(delayMs);
-          delayMs *= 2;
+          await delay(wait);
+          if (isRateLimited || is5xx) {
+            rateDelayMs *= 2;
+          } else {
+            netDelayMs *= 2;
+          }
           continue;
         }
         throw err;

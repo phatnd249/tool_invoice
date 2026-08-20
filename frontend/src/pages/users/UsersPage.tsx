@@ -100,6 +100,11 @@ function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles }: UserFo
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!isEdit && !form.password) { toast.error('Vui lòng nhập mật khẩu'); return }
+    if (!isEdit && form.password.length < 8) { toast.error('Mật khẩu phải có ít nhất 8 ký tự'); return }
+    if (!isEdit && !/^(?=.*[a-zA-Z])(?=.*\d)/.test(form.password)) {
+      toast.error('Mật khẩu phải chứa cả chữ cái và chữ số')
+      return
+    }
     if (form.roleIds.length === 0) { toast.error('Phải gán ít nhất một vai trò'); return }
     setLoading(true)
     try {
@@ -140,7 +145,8 @@ function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles }: UserFo
           {!isEdit && (
             <div className="space-y-2">
               <Label htmlFor="password">Mật khẩu</Label>
-              <Input id="password" type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} placeholder="Tối thiểu 8 ký tự" required />
+              <Input id="password" type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} placeholder="Tối thiểu 8 ký tự (chứa chữ và số)" required />
+              <p className="text-[11px] text-muted-foreground">Mật khẩu phải chứa ít nhất 8 ký tự, bao gồm cả chữ cái và chữ số.</p>
             </div>
           )}
           {isEdit && (
@@ -170,9 +176,7 @@ function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles }: UserFo
             </div>
           </div>
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" type="button" />}>
-              Huỷ
-            </DialogClose>
+            <DialogClose render={<Button variant="outline" type="button">Huỷ</Button>} />
             <LoadingButton type="submit" loading={loading}>
               {isEdit ? 'Lưu thay đổi' : 'Tạo người dùng'}
             </LoadingButton>
@@ -220,9 +224,7 @@ function DeleteUserDialog({ open, onOpenChange, user, onDeleted }: DeleteDialogP
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Huỷ
-          </DialogClose>
+          <DialogClose render={<Button variant="outline">Huỷ</Button>} />
           <LoadingButton variant="destructive" onClick={handleDelete} loading={deleting}>
             Xoá
           </LoadingButton>

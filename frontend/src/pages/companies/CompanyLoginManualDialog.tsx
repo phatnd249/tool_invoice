@@ -89,9 +89,7 @@ export function CompanyLoginManualDialog({
             />
           </div>
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" type="button" />}>
-              Huỷ
-            </DialogClose>
+            <DialogClose render={<Button variant="outline" type="button">Huỷ</Button>} />
             <LoadingButton type="submit" loading={loading}>
               Đăng nhập
             </LoadingButton>

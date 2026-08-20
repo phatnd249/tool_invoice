@@ -135,9 +135,7 @@ function RoleFormDialog({ open, onOpenChange, onSaved, editRole, permissions }: 
           </div>
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" type="button" />}>
-              Huỷ
-            </DialogClose>
+            <DialogClose render={<Button variant="outline" type="button">Huỷ</Button>} />
             <LoadingButton type="submit" loading={loading}>
               {isEdit ? 'Lưu thay đổi' : 'Tạo vai trò'}
             </LoadingButton>
@@ -185,9 +183,7 @@ function DeleteRoleDialog({ open, onOpenChange, role, onDeleted }: DeleteDialogP
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Huỷ
-          </DialogClose>
+          <DialogClose render={<Button variant="outline">Huỷ</Button>} />
           <LoadingButton variant="destructive" onClick={handleDelete} loading={deleting}>
             Xoá
           </LoadingButton>

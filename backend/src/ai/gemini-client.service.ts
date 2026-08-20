@@ -30,7 +30,9 @@ export class GeminiClientService {
     apiKeyOverride?: string,
   ): Promise<string> {
     const client = this.getClient(apiKeyOverride);
-    const model = client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const modelName =
+      this.config.get<string>('GEMINI_MODEL') || 'gemini-3.6-flash';
+    const model = client.getGenerativeModel({ model: modelName });
 
     const prompt =
       'Extract the alphanumeric characters in this captcha image. Return only the captcha characters in uppercase, without any spaces, punctuation, or extra text.';

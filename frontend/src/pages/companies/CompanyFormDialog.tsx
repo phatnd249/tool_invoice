@@ -195,9 +195,7 @@ export function CompanyFormDialog({ open, onOpenChange, onSaved, editCompany }: 
           )}
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" type="button" />}>
-              Huỷ
-            </DialogClose>
+            <DialogClose render={<Button variant="outline" type="button">Huỷ</Button>} />
             <LoadingButton type="submit" loading={loading}>
               {isEdit ? 'Lưu thay đổi' : 'Thêm doanh nghiệp'}
             </LoadingButton>

@@ -10,3 +10,5 @@ backend/invoices/
 
 temp/
 .sw*
+
+docs/

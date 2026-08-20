@@ -51,9 +51,7 @@ export function CompanyDeleteDialog({ open, onOpenChange, company, onDeleted }: 
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Huỷ
-          </DialogClose>
+          <DialogClose render={<Button variant="outline">Huỷ</Button>} />
           <LoadingButton variant="destructive" onClick={handleDelete} loading={deleting}>
             Xoá
           </LoadingButton>
