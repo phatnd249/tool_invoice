@@ -66,15 +66,16 @@ export class GdtDownloadClientService {
         `Trying ZIP download (${apiPath}): ${exportUrl}`,
       );
 
-      // Không retry khi tải ZIP:
-      // - HTTP 429 → để tầng trên (download-task.service) xử lý cooldown
-      // - HTTP 500 → thử path còn lại, nếu cả 2 đều fail mới báo lỗi
+      // Retry tự động khi gặp timeout hoặc lỗi mạng (retries = 2):
+      // - HTTP 429 / Timeout → fetchWithRetry retry (429 backoff dài, timeout backoff ngắn)
+      // - HTTP 500 → KHÔNG retry nội bộ (retry5xx: false): 500 = GDT không có hồ sơ gốc,
+      //   trả ngay để thử path còn lại, tránh chờ backoff vô ích
       const response = await this.http.fetchWithRetry(exportUrl, {
         headers: this.http.buildHeaders(token),
         responseType: 'arraybuffer',
-        timeout: 60000,
+        timeout: 90000,
         validateStatus: () => true,
-      }, 0);
+      }, 2, { retry5xx: false });
 
       if (response.status === 200) {
         fs.writeFileSync(zipPath, Buffer.from(response.data));
@@ -229,9 +230,9 @@ export class GdtDownloadClientService {
         const response = await this.http.fetchWithRetry(url, {
           headers: this.http.buildHeaders(token),
           responseType: 'arraybuffer',
-          timeout: 60000,
+          timeout: 90000,
           validateStatus: () => true,
-        }, 0);
+        }, 2, { retry5xx: false });
 
         if (response.status === 200 && response.data) {
           fs.writeFileSync(filePath, Buffer.from(response.data));

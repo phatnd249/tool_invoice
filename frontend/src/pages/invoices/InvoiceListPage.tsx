@@ -729,27 +729,29 @@ export function InvoiceListPage() {
             />
           </div>
           <Popover>
-            <PopoverTrigger>
-              <Button
-                variant="outline"
-                size="sm"
-                className={`gap-2 ${dateRange?.from ? 'border-primary/50 text-primary' : ''}`}
-              >
-                <CalendarIcon className="size-4" />
-                {dateRange?.from ? (
-                  dateRange.to ? (
-                    <>
-                      {format(dateRange.from, 'dd/MM/yy')} →{' '}
-                      {format(dateRange.to, 'dd/MM/yy')}
-                    </>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`gap-2 ${dateRange?.from ? 'border-primary/50 text-primary' : ''}`}
+                >
+                  <CalendarIcon className="size-4" />
+                  {dateRange?.from ? (
+                    dateRange.to ? (
+                      <>
+                        {format(dateRange.from, 'dd/MM/yy')} →{' '}
+                        {format(dateRange.to, 'dd/MM/yy')}
+                      </>
+                    ) : (
+                      format(dateRange.from, 'dd/MM/yy')
+                    )
                   ) : (
-                    format(dateRange.from, 'dd/MM/yy')
-                  )
-                ) : (
-                  'Tất cả ngày'
-                )}
-              </Button>
-            </PopoverTrigger>
+                    'Tất cả ngày'
+                  )}
+                </Button>
+              }
+            />
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
                 mode="range"

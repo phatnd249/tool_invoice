@@ -696,19 +696,60 @@ export class DownloadTaskService {
                 level: 'info',
               });
 
-              // Tải ZIP + parse + save + PDF
-              const result = await this.downloader.downloadSingleInvoice({
-                invoice: inv,
-                token,
-                type,
-                companyName: company.name,
-                companyTaxCode: company.taxCode,
-                overwriteMode: overwriteMode as
-                  | 'SKIP'
-                  | 'OVERWRITE'
-                  | 'NEW_VERSION',
-                currentVersion,
-              });
+              // Tải ZIP + parse + save + PDF (có retry cục bộ 1 lần cho lỗi ngắt mạng/timeout)
+              // Budget ~4 phút/tổng cả 2 lần thử: nếu lần 1 mất quá lâu (GDT treo) thì KHÔNG retry,
+              // để 1 invoice hỏng không nghẽn cả batch tuần tự.
+              let result: any;
+              let invAttempts = 0;
+              const maxInvAttempts = 2;
+              const MAX_INVOICE_ATTEMPT_MS = 4 * 60 * 1000;
+              const invStart = Date.now();
+              while (invAttempts < maxInvAttempts) {
+                try {
+                  invAttempts++;
+                  result = await this.downloader.downloadSingleInvoice({
+                    invoice: inv,
+                    token,
+                    type,
+                    companyName: company.name,
+                    companyTaxCode: company.taxCode,
+                    overwriteMode: overwriteMode as
+                      | 'SKIP'
+                      | 'OVERWRITE'
+                      | 'NEW_VERSION',
+                    currentVersion,
+                  });
+                  break; // Thành công -> thoát vòng lặp retry
+                } catch (singleErr: any) {
+                  const isTimeoutOrNetworkErr =
+                    singleErr?.message?.toLowerCase().includes('timeout') ||
+                    singleErr?.message?.toLowerCase().includes('econnaborted') ||
+                    singleErr?.message?.toLowerCase().includes('etimedout');
+
+                  const elapsedMs = Date.now() - invStart;
+                  const tooSlowToRetry = elapsedMs > MAX_INVOICE_ATTEMPT_MS;
+
+                  if (
+                    invAttempts < maxInvAttempts &&
+                    isTimeoutOrNetworkErr &&
+                    !tooSlowToRetry
+                  ) {
+                    await this.appendLog(taskId, {
+                      time: new Date().toISOString(),
+                      message: `  ⚠️ Thử lại hoá đơn ${invNum} do gián đoạn mạng (lần ${invAttempts}/${maxInvAttempts})...`,
+                      level: 'warn',
+                    });
+                    await delay(3000);
+                  } else {
+                    if (tooSlowToRetry) {
+                      this.logger.warn(
+                        `Task ${taskId}: Invoice ${invNum} mất ${Math.round(elapsedMs / 1000)}s (> budget), bỏ qua retry để tránh nghẽn batch`,
+                      );
+                    }
+                    throw singleErr; // Vượt quá số lần thử hoặc quá chậm -> ném lỗi cho catch bên ngoài
+                  }
+                }
+              }
 
               dayDownloaded++;
 

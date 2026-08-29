@@ -257,14 +257,14 @@ export function InvoiceDownloadForm({
               <Button
                 variant="outline"
                 className="w-full justify-start text-left font-normal"
-              />
+              >
+                <CalendarIcon className="mr-2 size-4" />
+                {dateRange.from && dateRange.to
+                  ? `${format(dateRange.from, 'dd/MM/yyyy')} → ${format(dateRange.to, 'dd/MM/yyyy')}`
+                  : 'Chọn khoảng thời gian'}
+              </Button>
             }
-          >
-            <CalendarIcon className="mr-2 size-4" />
-            {dateRange.from && dateRange.to
-              ? `${format(dateRange.from, 'dd/MM/yyyy')} → ${format(dateRange.to, 'dd/MM/yyyy')}`
-              : 'Chọn khoảng thời gian'}
-          </PopoverTrigger>
+          />
           <PopoverContent className="w-auto p-0" align="start">
             <Calendar
               mode="range"

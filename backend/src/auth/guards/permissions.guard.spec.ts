@@ -8,6 +8,7 @@ import { ExecutionContext } from '@nestjs/common';
 const mockReflector = { getAllAndOverride: jest.fn() };
 
 const mockPrisma = {
+  role: { findFirst: jest.fn().mockResolvedValue(null) },
   permission: { findMany: jest.fn() },
 };
 
