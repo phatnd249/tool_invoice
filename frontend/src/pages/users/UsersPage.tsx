@@ -70,9 +70,10 @@ interface UserFormProps {
   onSaved: () => void
   editUser: User | null
   roles: Role[]
+  canAssignSuperAdmin: boolean
 }
 
-function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles }: UserFormProps) {
+function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles, canAssignSuperAdmin }: UserFormProps) {
   const isEdit = !!editUser
   const [form, setForm] = useState({ fullName: '', email: '', password: '', status: 'ACTIVE', roleIds: [] as string[] })
   const [loading, setLoading] = useState(false)
@@ -91,11 +92,14 @@ function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles }: UserFo
     }
   }, [editUser, open])
 
-  const toggleRole = (roleId: string) =>
+  const toggleRole = (roleId: string) => {
+    const role = roles.find((r) => r.id === roleId)
+    if (role?.name === 'SUPER_ADMIN' && !canAssignSuperAdmin) return
     setForm((prev) => ({
       ...prev,
       roleIds: prev.roleIds.includes(roleId) ? prev.roleIds.filter((id) => id !== roleId) : [...prev.roleIds, roleId],
     }))
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -167,12 +171,21 @@ function UserFormDialog({ open, onOpenChange, onSaved, editUser, roles }: UserFo
           <div className="space-y-2">
             <Label>Vai trò</Label>
             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-lg p-3">
-              {roles.map((role) => (
-                <label key={role.id} className="flex items-center gap-2 cursor-pointer text-sm">
-                  <Checkbox checked={form.roleIds.includes(role.id)} onCheckedChange={() => toggleRole(role.id)} />
-                  <span className="font-medium">{role.name}</span>
-                </label>
-              ))}
+              {roles.map((role) => {
+                const isSuperAdminRole = role.name === 'SUPER_ADMIN'
+                const roleLocked = isSuperAdminRole && !canAssignSuperAdmin
+                return (
+                  <label key={role.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <Checkbox
+                      checked={form.roleIds.includes(role.id)}
+                      disabled={roleLocked}
+                      onCheckedChange={() => toggleRole(role.id)}
+                    />
+                    <span className="font-medium">{role.name}</span>
+                    {roleLocked && <span className="text-[10px] text-muted-foreground">(hệ thống)</span>}
+                  </label>
+                )
+              })}
             </div>
           </div>
           <DialogFooter>
@@ -237,10 +250,15 @@ function DeleteUserDialog({ open, onOpenChange, user, onDeleted }: DeleteDialogP
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function UsersPage() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, hasRole } = useAuth()
   const canCreate = hasPermission('user:create')
   const canEdit = hasPermission('user:update')
   const canDelete = hasPermission('user:delete')
+  const isSuperAdmin = hasRole('SUPER_ADMIN')
+
+  // Chỉ SUPER_ADMIN mới được thao tác lên tài khoản SUPER_ADMIN
+  const isProtectedUser = (u: User) => u.roles.some((r) => r.name === 'SUPER_ADMIN')
+  const canManage = (u: User) => isSuperAdmin || !isProtectedUser(u)
 
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<Role[]>([])
@@ -382,7 +400,7 @@ export function UsersPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {canEdit && (
+                      {canEdit && canManage(u) && (
                         <>
                           <Button variant="ghost" size="icon-xs" onClick={() => { setEditUser(u); setModalOpen(true) }} title="Edit">
                             <Pencil className="size-4" />
@@ -397,7 +415,7 @@ export function UsersPage() {
                           <Building2 className="size-4" />
                         </Button>
                       )}
-                      {canDelete && (
+                      {canDelete && canManage(u) && (
                         <Button variant="ghost" size="icon-xs" onClick={() => { setDeleteTarget(u); setDeleteDialogOpen(true) }} title="Delete">
                           <Trash2 className="size-4" />
                         </Button>
@@ -439,7 +457,7 @@ export function UsersPage() {
         </div>
       </div>
 
-      <UserFormDialog open={modalOpen} onOpenChange={setModalOpen} onSaved={fetchUsers} editUser={editUser} roles={roles} />
+      <UserFormDialog open={modalOpen} onOpenChange={setModalOpen} onSaved={fetchUsers} editUser={editUser} roles={roles} canAssignSuperAdmin={isSuperAdmin} />
       <DeleteUserDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} user={deleteTarget} onDeleted={fetchUsers} />
       {companiesTarget && (
         <UserCompaniesDialog

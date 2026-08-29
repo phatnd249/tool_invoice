@@ -16,6 +16,8 @@ import * as bcrypt from 'bcrypt';
 
 const SALT_ROUNDS = 10;
 
+const SUPER_ADMIN_ROLE = 'SUPER_ADMIN';
+
 const USER_SELECT = {
   id: true,
   fullName: true,
@@ -72,6 +74,56 @@ export class UsersService {
     return user;
   }
 
+  // ─── SUPER_ADMIN protection helpers ───────────────────────────────────────
+
+  private async isSuperAdminActor(actorId: string): Promise<boolean> {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorId },
+      select: {
+        userRoles: { select: { role: { select: { name: true } } } },
+      },
+    });
+    return actor?.userRoles.some((ur) => ur.role.name === SUPER_ADMIN_ROLE) ?? false;
+  }
+
+  private isSuperAdminUser(user: any): boolean {
+    return user.userRoles?.some((ur: any) => ur.role.name === SUPER_ADMIN_ROLE) ?? false;
+  }
+
+  /**
+   * Chỉ SUPER_ADMIN mới được thao tác (sửa/xoá/đổi trạng thái/đổi role)
+   * trên tài khoản có vai trò SUPER_ADMIN.
+   */
+  private async assertCanManageUser(user: any, actorId: string, action: string) {
+    if (this.isSuperAdminUser(user) && !(await this.isSuperAdminActor(actorId))) {
+      throw new ForbiddenException(`Cannot ${action} a Super Admin account`);
+    }
+  }
+
+  /**
+   * Chỉ SUPER_ADMIN mới được đưa role SUPER_ADMIN vào danh sách roleIds
+   * (chặn ADMIN tự nâng cấp hoặc nâng cấp người khác).
+   */
+  private async assertCanAssignSuperAdmin(
+    roleIds: string[] | undefined,
+    actorId: string,
+  ) {
+    if (!roleIds?.length) return;
+    const superAdminRole = await this.prisma.role.findFirst({
+      where: { name: SUPER_ADMIN_ROLE },
+      select: { id: true },
+    });
+    if (
+      superAdminRole &&
+      roleIds.includes(superAdminRole.id) &&
+      !(await this.isSuperAdminActor(actorId))
+    ) {
+      throw new ForbiddenException(
+        'Only SUPER_ADMIN can assign the SUPER_ADMIN role',
+      );
+    }
+  }
+
   // ─── Admin: List Users ───────────────────────────────────────────────────
 
   async findAll(query: QueryUsersDto) {
@@ -123,7 +175,9 @@ export class UsersService {
 
   // ─── Admin: Create User ───────────────────────────────────────────────────
 
-  async create(dto: CreateUserDto) {
+  async create(dto: CreateUserDto, actorId: string) {
+    await this.assertCanAssignSuperAdmin(dto.roleIds, actorId);
+
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -160,13 +214,10 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto, actorId: string) {
     const user = await this.findUserOrFail(id);
 
-    // Prevent editing SUPER_ADMIN by non-self
-    const isSuperAdmin = user.userRoles.some(
-      (ur: any) => ur.role.name === 'SUPER_ADMIN',
-    );
-    if (isSuperAdmin && actorId !== id) {
-      throw new ForbiddenException('Cannot modify a Super Admin account');
-    }
+    // Chỉ SUPER_ADMIN được sửa tài khoản SUPER_ADMIN (kể cả chính mình)
+    await this.assertCanManageUser(user, actorId, 'edit');
+    // Chỉ SUPER_ADMIN được gán role SUPER_ADMIN (chặn tự nâng cấp)
+    await this.assertCanAssignSuperAdmin(dto.roleIds, actorId);
 
     if (dto.email && dto.email !== (user as any).email) {
       const existing = await this.prisma.user.findUnique({
@@ -202,6 +253,8 @@ export class UsersService {
     }
 
     const user = await this.findUserOrFail(id);
+    await this.assertCanManageUser(user, actorId, 'change the status of');
+
     const newStatus = (user as any).status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
 
     const updated = await this.prisma.user.update({
@@ -227,7 +280,8 @@ export class UsersService {
     if (id === actorId) {
       throw new BadRequestException('Cannot delete your own account');
     }
-    await this.findUserOrFail(id);
+    const user = await this.findUserOrFail(id);
+    await this.assertCanManageUser(user, actorId, 'delete');
 
     await this.prisma.user.update({
       where: { id },
@@ -245,8 +299,10 @@ export class UsersService {
 
   // ─── Admin: Assign Roles ──────────────────────────────────────────────────
 
-  async assignRoles(userId: string, roleIds: string[]) {
-    await this.findUserOrFail(userId);
+  async assignRoles(userId: string, roleIds: string[], actorId: string) {
+    const user = await this.findUserOrFail(userId);
+    await this.assertCanManageUser(user, actorId, 'modify');
+    await this.assertCanAssignSuperAdmin(roleIds, actorId);
 
     const roles = await this.prisma.role.findMany({
       where: { id: { in: roleIds } },
@@ -271,8 +327,9 @@ export class UsersService {
 
   // ─── Admin: Revoke Role ────────────────────────────────────────────────────
 
-  async revokeRole(userId: string, roleId: string) {
-    await this.findUserOrFail(userId);
+  async revokeRole(userId: string, roleId: string, actorId: string) {
+    const user = await this.findUserOrFail(userId);
+    await this.assertCanManageUser(user, actorId, 'modify');
 
     await this.prisma.userRole.deleteMany({ where: { userId, roleId } });
     return this.findOne(userId);

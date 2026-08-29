@@ -9,6 +9,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 
+const RESERVED_SYSTEM_ROLES = ['SUPER_ADMIN'];
+
+function isReservedRoleName(name: string): boolean {
+  return RESERVED_SYSTEM_ROLES.includes(name.toUpperCase());
+}
+
 const ROLE_SELECT = {
   id: true,
   name: true,
@@ -59,6 +65,12 @@ export class RolesService {
   }
 
   async create(dto: CreateRoleDto) {
+    if (isReservedRoleName(dto.name)) {
+      throw new ForbiddenException(
+        `${dto.name.toUpperCase()} is a reserved system role`,
+      );
+    }
+
     const existing = await this.prisma.role.findUnique({
       where: { name: dto.name },
     });
@@ -97,6 +109,11 @@ export class RolesService {
     }
 
     if (dto.name && dto.name !== role.name) {
+      if (isReservedRoleName(dto.name)) {
+        throw new ForbiddenException(
+          `${dto.name.toUpperCase()} is a reserved system role`,
+        );
+      }
       const existing = await this.prisma.role.findUnique({
         where: { name: dto.name },
       });

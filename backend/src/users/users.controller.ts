@@ -72,8 +72,8 @@ export class UsersController {
   @Post('users')
   @UseGuards(PermissionsGuard)
   @RequirePermissions('user:create')
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+  create(@Body() dto: CreateUserDto, @CurrentUser() user: AuthUser) {
+    return this.usersService.create(dto, user.id);
   }
 
   // PATCH /api/users/:id
@@ -110,8 +110,12 @@ export class UsersController {
   @Post('users/:id/roles')
   @UseGuards(PermissionsGuard)
   @RequirePermissions('role:assign')
-  assignRoles(@Param('id') id: string, @Body() dto: AssignRolesDto) {
-    return this.usersService.assignRoles(id, dto.roleIds);
+  assignRoles(
+    @Param('id') id: string,
+    @Body() dto: AssignRolesDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.usersService.assignRoles(id, dto.roleIds, user.id);
   }
 
   // DELETE /api/users/:id/roles/:roleId
@@ -119,8 +123,12 @@ export class UsersController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(PermissionsGuard)
   @RequirePermissions('role:assign')
-  revokeRole(@Param('id') id: string, @Param('roleId') roleId: string) {
-    return this.usersService.revokeRole(id, roleId);
+  revokeRole(
+    @Param('id') id: string,
+    @Param('roleId') roleId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.usersService.revokeRole(id, roleId, user.id);
   }
 
   // ─── Admin: Company Assignments ──────────────────────────────────────────
