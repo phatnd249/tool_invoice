@@ -67,10 +67,7 @@ export class InvoicesService {
 
     const count = await this.prisma.invoice.count({
       where: {
-        invoiceDate: {
-          gte: new Date(startDate),
-          lte: new Date(endDate),
-        },
+        invoiceDate: this.toVietnamDayRange(startDate, endDate),
         type: { in: types },
         OR: [
           { sellerTaxCode: company.taxCode },
@@ -268,6 +265,22 @@ export class InvoicesService {
     return dates;
   }
 
+  /**
+   * Chuyển ngày dương lịch (yyyy-MM-dd) thành khoảng [00:00:00, 23:59:59.999]
+   * theo múi giờ Việt Nam (UTC+7, không có DST).
+   *
+   * invoiceDate được lưu theo ngày Việt Nam (ví dụ 20/07 lưu dạng 19T17:00:00Z),
+   * trong khi `new Date('yyyy-MM-dd')` là nửa đêm UTC — so sánh trực tiếp sẽ làm
+   * mất ngày bắt đầu. Khoảng này đảm bảo lọc bao gồm trọn cả ngày bắt đầu và
+   * ngày kết thúc (inclusive).
+   */
+  private toVietnamDayRange(startDate?: string, endDate?: string) {
+    return {
+      ...(startDate && { gte: new Date(`${startDate}T00:00:00+07:00`) }),
+      ...(endDate && { lte: new Date(`${endDate}T23:59:59.999+07:00`) }),
+    };
+  }
+
   // ─── Query (datatable) ──────────────────────────────────────────────────
 
   async findAll(query: QueryInvoicesDto): Promise<PaginatedResult<any>> {
@@ -288,12 +301,7 @@ export class InvoicesService {
       ...(type && { type }),
       ...(companyId && { companyId }),
       ...(startDate || endDate
-        ? {
-            invoiceDate: {
-              ...(startDate && { gte: new Date(startDate) }),
-              ...(endDate && { lte: new Date(endDate) }),
-            },
-          }
+        ? { invoiceDate: this.toVietnamDayRange(startDate, endDate) }
         : {}),
       ...(search && {
         OR: [
