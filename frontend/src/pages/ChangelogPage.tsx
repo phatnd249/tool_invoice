@@ -8,6 +8,19 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: 'v1.6.0',
+    date: '2026-08-30',
+    changes: [
+      'Bảo vệ vai trò SUPER_ADMIN: chỉ SUPER_ADMIN mới được sửa, xoá, đổi trạng thái hoặc gán quyền SUPER_ADMIN; chặn ADMIN tự nâng cấp quyền',
+      'Đăng nhập thủ công GDT: hiển thị ảnh captcha ngay trong hộp thoại, hỗ trợ tạo captcha mới khi khó đọc',
+      'Không còn hiển thị token thô của doanh nghiệp, thay bằng trạng thái đăng nhập (có token / hết hạn) để tăng bảo mật',
+      'Nút “Tải lại HĐ lỗi” luôn hiển thị trên trang danh sách hoá đơn (vô hiệu hoá khi chưa chọn hoá đơn)',
+      'Sửa lỗi lọc hoá đơn theo ngày: tính trọn cả ngày bắt đầu và kết thúc theo múi giờ Việt Nam',
+      'Sửa lỗi hoá đơn không có file ZIP không còn là mục tải lại được khi GDT không trả chi tiết items',
+      'Cập nhật hướng dẫn sử dụng cho luồng đăng nhập thủ công captcha của doanh nghiệp',
+    ],
+  },
+  {
     version: 'v1.5.0',
     date: '2025-08-01',
     changes: [
