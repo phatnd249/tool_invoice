@@ -328,6 +328,17 @@ export class InvoiceDownloaderService {
       detail?.hdhhdvu || detail?.cttkhac || [];
     const items = this.mapDetailItems(detailItems);
 
+    // 2b. Không lấy được items → ném lỗi để hoá đơn giữ trạng thái ERROR.
+    //     Tránh im lặng lưu PARSED với 0 items — hoá đơn sẽ biến mất khỏi
+    //     danh sách lỗi và không còn được xử lý lại qua nút retry.
+    if (!detail || items.length === 0) {
+      const reason = !detail
+        ? `Không có file ZIP cho hoá đơn ${invNum} và không tải được chi tiết items từ GDT detail API`
+        : `Không có file ZIP cho hoá đơn ${invNum} và GDT detail API không có dữ liệu items`;
+      this.logger.warn(reason);
+      throw new Error(reason);
+    }
+
     // 3. Lưu metadata + items vào DB (không có zip/xml path)
     const invoiceId = await this.persistence.saveItemsFromDetail(
       invoice,
@@ -382,6 +393,8 @@ export class InvoiceDownloaderService {
     taxRate?: string;
   }> {
     return (detailItems || []).map((item: any, idx: number) => ({
+      lineNumber:
+        item.stt != null ? String(item.stt) : undefined,
       name: String(item.ten || item.thdon || item.tchat || '').trim(),
       unit:
         String(item.dvtinh || '').trim() || undefined,
