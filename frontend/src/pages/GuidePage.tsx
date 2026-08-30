@@ -20,17 +20,31 @@ const sections = [
         <ol className="list-decimal ml-5 space-y-2">
           <li>
             <strong>Thêm doanh nghiệp:</strong> Nhấn nút <em>"Thêm doanh nghiệp"</em>, nhập mã số
-            thuế và các thông tin đăng nhập GDT (tên đăng nhập, mật khẩu). Hệ thống sẽ tự động
-            tra cứu tên doanh nghiệp từ mã số thuế.
+            thuế, mật khẩu tra cứu và chọn chế độ đăng nhập:
+            <ul className="list-disc ml-5 mt-1">
+              <li>
+                <strong>Tự động:</strong> Hệ thống tự đăng nhập GDT (AI giải captcha) và lấy token
+                ngay khi tạo doanh nghiệp.
+              </li>
+              <li>
+                <strong>Thủ công:</strong> Doanh nghiệp được tạo trước (chưa có token), sau đó bạn
+                bấm <em>"Đăng nhập thủ công"</em> để nhập captcha và lấy token.
+              </li>
+            </ul>
+            Sau khi đăng nhập thành công, hệ thống tự động lấy tên doanh nghiệp từ GDT.
           </li>
           <li>
-            <strong>Đăng nhập thủ công:</strong> Nếu quá trình tự động gặp lỗi captcha, bạn có thể
-            chọn <em>"Đăng nhập thủ công"</em> để nhập trực tiếp mã captcha hiển thị trên trang GDT.
+            <strong>Đăng nhập thủ công / cập nhật token:</strong> Bấm nút{' '}
+            <em>"Đăng nhập thủ công"</em> trên dòng doanh nghiệp. Hệ thống sẽ hiển thị ảnh captcha
+            ngay trong hộp thoại — bạn nhập chính xác mã captcha rồi bấm <em>"Đăng nhập"</em>. Nếu
+            captcha khó đọc, bấm nút <em>"Tạo captcha mới"</em> để đổi captcha khác.
           </li>
           <li>
-            <strong>Kiểm tra trạng thái:</strong> Mỗi doanh nghiệp có trạng thái xác thực —
-            <span className="text-green-600 font-medium"> đã xác thực</span> (có thể tải hoá đơn)
-            hoặc <span className="text-red-600 font-medium">chưa xác thực</span> (cần đăng nhập lại).
+            <strong>Kiểm tra trạng thái:</strong> Cột <em>Token</em> hiển thị trạng thái đăng nhập của
+            doanh nghiệp: <span className="font-medium text-muted-foreground">chưa đăng nhập</span>{' '}
+            (chưa có token), <span className="text-red-600 font-medium">hết hạn</span> (token đã hết
+            hạn, cần đăng nhập lại) hoặc <span className="text-green-600 font-medium">ngày hết hạn</span>{' '}
+            của token còn hiệu lực (có thể tải hoá đơn).
           </li>
         </ol>
       </div>
@@ -168,7 +182,7 @@ const sections = [
           </li>
           <li>
             <strong>Lỗi captcha:</strong> Hệ thống GDT yêu cầu xác thực captcha. Sử dụng chức năng
-            <em> "Đăng nhập thủ công"</em> để tự nhập captcha.
+            <em> "Đăng nhập thủ công"</em> để xem ảnh captcha và nhập lại mã captcha.
           </li>
           <li>
             <strong>Lỗi 429 (Too Many Requests):</strong> Hệ thống GDT giới hạn tần suất yêu cầu.
