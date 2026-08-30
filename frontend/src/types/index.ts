@@ -9,7 +9,7 @@ export interface Company {
   taxCode: string
   name: string
   lookupPassword: string
-  token: string | null
+  hasToken: boolean
   tokenExpiredAt: string | null
   loginMode: 'AUTO' | 'MANUAL'
   downloadCount: number

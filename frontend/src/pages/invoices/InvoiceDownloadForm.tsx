@@ -88,7 +88,7 @@ export function InvoiceDownloadForm({
 
   const getDisabledReason = (): string | null => {
     if (!dateRange.from || !dateRange.to) return 'Vui lòng chọn khoảng thời gian'
-    if (!company.token && company.loginMode === 'MANUAL')
+    if (!company.hasToken && company.loginMode === 'MANUAL')
       return 'Doanh nghiệp chưa được đăng nhập.'
     if (tokenExpired && company.loginMode === 'MANUAL')
       return 'Token đã hết hạn. Vui lòng đăng nhập thủ công trước.'
@@ -98,7 +98,7 @@ export function InvoiceDownloadForm({
   const disabledReason = getDisabledReason()
 
   const TokenBadge = () => {
-    if (!company.token)
+    if (!company.hasToken)
       return <Badge variant="secondary">Chưa đăng nhập</Badge>
     if (tokenExpired && company.loginMode === 'MANUAL')
       return <Badge variant="destructive">Token hết hạn</Badge>

@@ -63,7 +63,7 @@ function LoginModeBadge({ mode }: { mode: string }) {
 }
 
 function TokenStatus({ company }: { company: Company }) {
-  if (!company.token) {
+  if (!company.hasToken) {
     return (
       <span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
         <XCircle className="size-3.5 text-muted-foreground" />

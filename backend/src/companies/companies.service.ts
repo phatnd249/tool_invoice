@@ -31,12 +31,22 @@ export class CompaniesService {
   /**
    * Loại bỏ các trường nhạy cảm (password, token) khỏi đối tượng company
    * trước khi trả về cho client.
+   *
+   * Vẫn trả về `hasToken` (boolean) và `tokenExpiredAt` (ngày hết hạn — không
+   * nhạy cảm) để frontend hiển thị đúng trạng thái đăng nhập mà không lộ token.
    */
   private sanitizeCompany<T extends { lookupPassword?: any; token?: any; tokenExpiredAt?: any }>(
     company: T,
-  ): Omit<T, 'lookupPassword' | 'token' | 'tokenExpiredAt'> {
+  ): Omit<T, 'lookupPassword' | 'token' | 'tokenExpiredAt'> & {
+    tokenExpiredAt: any;
+    hasToken: boolean;
+  } {
     const { lookupPassword, token, tokenExpiredAt, ...safe } = company;
-    return safe;
+    return {
+      ...safe,
+      tokenExpiredAt: tokenExpiredAt ?? null,
+      hasToken: !!token,
+    };
   }
 
   async findAll(query: QueryCompaniesDto, userId?: string): Promise<PaginatedResult<any>> {
