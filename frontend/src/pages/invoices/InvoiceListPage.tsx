@@ -716,6 +716,18 @@ export function InvoiceListPage() {
           <Button variant="outline" size="icon" onClick={fetchInvoices} title="Làm mới">
             <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
+
+          <Button
+            onClick={handleRetryFailed}
+            disabled={selectedIds.length === 0 || retrying}
+            size="sm"
+            variant="outline"
+            className="gap-1.5 border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+            title="Tải lại hoá đơn chờ tải hoặc bị lỗi"
+          >
+            <RotateCcw className="size-4" />
+            {retrying ? 'Đang tải lại...' : 'Tải lại HĐ lỗi'}
+          </Button>
         </div>
 
         {/* ── Filters row 2: company + date range ── */}
@@ -800,21 +812,6 @@ export function InvoiceListPage() {
               <FileSpreadsheet className="size-4" />
               {exportingModule7 ? 'Đang xuất M7...' : 'Báo Cáo M7'}
             </Button>
-            {selectedIds.some((id) => {
-              const inv = invoices.find((i) => i.id === id)
-              return inv?.downloadStatus === 'ERROR' || inv?.downloadStatus === null
-            }) && (
-              <Button
-                onClick={handleRetryFailed}
-                disabled={retrying}
-                size="sm"
-                variant="outline"
-                className="gap-1.5 border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
-              >
-                <RotateCcw className="size-4" />
-                {retrying ? 'Đang tải lại...' : 'Tải lại HĐ lỗi'}
-              </Button>
-            )}
           </div>
         )}
 
