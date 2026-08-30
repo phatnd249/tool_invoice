@@ -15,8 +15,6 @@ export interface CreateCompanyData {
   lookupPassword: string
   name?: string
   loginMode?: string
-  ckey?: string
-  cvalue?: string
 }
 
 export interface UpdateCompanyData {
@@ -46,6 +44,11 @@ export const companiesApi = {
 
   loginManual: (id: string, data: { ckey: string; cvalue: string }) =>
     apiClient.post<Company>(`/companies/${id}/login-manual`, data),
+
+  getLoginManualCaptcha: (id: string) =>
+    apiClient.get<{ ckey: string; captchaImage: string }>(
+      `/companies/${id}/login-manual/captcha`,
+    ),
 
   syncInfo: (id: string) =>
     apiClient.put<Company>(`/companies/${id}/sync-info`),

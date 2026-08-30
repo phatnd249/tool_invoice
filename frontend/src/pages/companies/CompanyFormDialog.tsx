@@ -26,7 +26,7 @@ import type { Company } from '@/types'
 
 const LOGIN_MODE_ITEMS = [
   { label: 'Tự động (Gemini AI giải captcha)', value: 'AUTO' },
-  { label: 'Thủ công (tự nhập captcha)', value: 'MANUAL' },
+  { label: 'Thủ công (nhập captcha sau khi tạo)', value: 'MANUAL' },
 ]
 
 interface CompanyFormDialogProps {
@@ -43,8 +43,6 @@ export function CompanyFormDialog({ open, onOpenChange, onSaved, editCompany }: 
     name: '',
     lookupPassword: '',
     loginMode: 'AUTO' as string,
-    ckey: '',
-    cvalue: '',
   })
   const [loading, setLoading] = useState(false)
 
@@ -55,11 +53,9 @@ export function CompanyFormDialog({ open, onOpenChange, onSaved, editCompany }: 
         name: editCompany.name,
         lookupPassword: editCompany.lookupPassword,
         loginMode: editCompany.loginMode,
-        ckey: '',
-        cvalue: '',
       })
     } else {
-      setForm({ taxCode: '', name: '', lookupPassword: '', loginMode: 'AUTO', ckey: '', cvalue: '' })
+      setForm({ taxCode: '', name: '', lookupPassword: '', loginMode: 'AUTO' })
     }
   }, [editCompany, open])
 
@@ -72,10 +68,6 @@ export function CompanyFormDialog({ open, onOpenChange, onSaved, editCompany }: 
     }
     if (!isEdit && !form.lookupPassword.trim()) {
       toast.error('Mật khẩu tra cứu là bắt buộc')
-      return
-    }
-    if (!isEdit && form.loginMode === 'MANUAL' && (!form.ckey.trim() || !form.cvalue.trim())) {
-      toast.error('Vui lòng nhập đầy đủ thông tin Captcha cho chế độ thủ công')
       return
     }
 
@@ -94,10 +86,11 @@ export function CompanyFormDialog({ open, onOpenChange, onSaved, editCompany }: 
           lookupPassword: form.lookupPassword,
           name: form.name || undefined,
           loginMode: form.loginMode,
-          ckey: form.loginMode === 'MANUAL' ? form.ckey : undefined,
-          cvalue: form.loginMode === 'MANUAL' ? form.cvalue : undefined,
         })
         toast.success('Thêm doanh nghiệp thành công')
+        if (form.loginMode === 'MANUAL') {
+          toast.info('Hãy bấm "Đăng nhập thủ công" để nhập captcha và lấy token')
+        }
       }
       onSaved()
       onOpenChange(false)
@@ -172,26 +165,10 @@ export function CompanyFormDialog({ open, onOpenChange, onSaved, editCompany }: 
           </div>
 
           {!isEdit && form.loginMode === 'MANUAL' && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="ckey">Captcha Key (ckey)</Label>
-                <Input
-                  id="ckey"
-                  value={form.ckey}
-                  onChange={(e) => setForm((p) => ({ ...p, ckey: e.target.value }))}
-                  placeholder="Nhập captcha key từ GDT"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cvalue">Captcha Value (cvalue)</Label>
-                <Input
-                  id="cvalue"
-                  value={form.cvalue}
-                  onChange={(e) => setForm((p) => ({ ...p, cvalue: e.target.value }))}
-                  placeholder="Nhập mã captcha"
-                />
-              </div>
-            </>
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Với chế độ thủ công, doanh nghiệp sẽ được tạo mà chưa có token. Sau khi tạo, bấm nút{' '}
+              <strong>Đăng nhập thủ công</strong> trên danh sách doanh nghiệp để nhập mã captcha và lấy token.
+            </p>
           )}
 
           <DialogFooter>

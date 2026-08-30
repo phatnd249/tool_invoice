@@ -70,6 +70,12 @@ export class CompaniesController {
     return this.companiesService.loginManual(id, dto);
   }
 
+  @Get(':id/login-manual/captcha')
+  @RequirePermissions('company:login')
+  getLoginManualCaptcha(@Param('id') id: string) {
+    return this.companiesService.getLoginManualCaptcha(id);
+  }
+
   @Put(':id/sync-info')
   @RequirePermissions('company:update')
   syncInfo(@Param('id') id: string) {

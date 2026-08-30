@@ -3,7 +3,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsIn,
-  ValidateIf,
 } from 'class-validator';
 
 export class CreateCompanyDto {
@@ -23,15 +22,4 @@ export class CreateCompanyDto {
   @IsString()
   @IsIn(['AUTO', 'MANUAL'])
   loginMode?: string = 'AUTO';
-
-  // Required if loginMode === 'MANUAL'
-  @ValidateIf((o: CreateCompanyDto) => o.loginMode === 'MANUAL')
-  @IsString()
-  @IsNotEmpty()
-  ckey?: string;
-
-  @ValidateIf((o: CreateCompanyDto) => o.loginMode === 'MANUAL')
-  @IsString()
-  @IsNotEmpty()
-  cvalue?: string;
 }

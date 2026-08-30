@@ -59,6 +59,19 @@ export class CaptchaResolverService {
   }
 
   /**
+   * Lấy captcha từ GDT và chuyển thành PNG base64 để hiển thị cho người dùng trên frontend.
+   * Người dùng tự đọc mã và gửi lại { ckey, cvalue } cho luồng đăng nhập thủ công.
+   */
+  async fetchCaptchaAsPng(): Promise<{ ckey: string; captchaImage: string }> {
+    const captcha = await this.fetchCaptcha();
+    const pngBuffer = await this.svgToPng(captcha.content);
+    return {
+      ckey: captcha.key,
+      captchaImage: `data:image/png;base64,${pngBuffer.toString('base64')}`,
+    };
+  }
+
+  /**
    * Giải captcha: fetch → convert → solve
    * Trả về { ckey, cvalue } sẵn sàng cho GDT login
    */

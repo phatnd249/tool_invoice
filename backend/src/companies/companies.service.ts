@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GdtAuthService } from '../ai/gdt-auth.service';
+import { CaptchaResolverService } from '../ai/captcha-resolver.service';
 import { MaSoThueService } from './masothue.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
@@ -21,6 +22,7 @@ export class CompaniesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gdtAuth: GdtAuthService,
+    private readonly captchaResolver: CaptchaResolverService,
     private readonly maSoThueService: MaSoThueService,
   ) {}
 
@@ -139,26 +141,19 @@ export class CompaniesService {
 
     const loginMode = dto.loginMode || 'AUTO';
 
-    let token: string;
+    // AUTO: giải captcha bằng Gemini để lấy token ngay khi tạo.
+    // MANUAL: tạo công ty trước với token = null, user sẽ bấm "Đăng nhập thủ công"
+    // để nhập captcha từ giao diện (captcha hết hạn nhanh, không nhập ở form tạo).
+    let token: string | null = null;
     if (loginMode === 'AUTO') {
       token = await this.gdtAuth.loginAuto(dto.taxCode, dto.lookupPassword);
-    } else {
-      if (!dto.ckey || !dto.cvalue) {
-        throw new BadRequestException(
-          'Captcha key and value are required for manual login mode',
-        );
-      }
-      token = await this.gdtAuth.authenticate(
-        dto.taxCode,
-        dto.lookupPassword,
-        dto.ckey,
-        dto.cvalue,
-      );
     }
 
-    const tokenExpiredAt = this.gdtAuth.getTokenExpiration(token);
+    const tokenExpiredAt = token ? this.gdtAuth.getTokenExpiration(token) : null;
     const resolvedName =
-      dto.name || (await this.gdtAuth.getTaxpayerName(token)) || dto.taxCode;
+      dto.name ||
+      (token ? await this.gdtAuth.getTaxpayerName(token) : '') ||
+      dto.taxCode;
 
     return this.sanitizeCompany(
       await this.prisma.company.create({
@@ -238,6 +233,16 @@ export class CompaniesService {
         data: { token, tokenExpiredAt, name: resolvedName },
       }),
     );
+  }
+
+  /**
+   * Tạo captcha mới từ GDT để hiển thị cho người dùng giải ở frontend.
+   * Không sinh phiên/lưu trạng thái: ckey được trả về client và gửi lại
+   * kèm cvalue ở endpoint login-manual.
+   */
+  async getLoginManualCaptcha(id: string) {
+    await this.findOne(id);
+    return this.captchaResolver.fetchCaptchaAsPng();
   }
 
   // ─── Sync Info ────────────────────────────────────────────────────────────
