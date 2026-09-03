@@ -25,7 +25,7 @@ export class TokenResolverService {
       where: { id: companyId },
     });
     if (!company) {
-      throw new NotFoundException('Company not found');
+      throw new NotFoundException('Không tìm thấy doanh nghiệp');
     }
 
     let token = company.token;

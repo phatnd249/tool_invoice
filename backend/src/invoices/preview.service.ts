@@ -57,18 +57,18 @@ export class PreviewService {
       if (fs.existsSync(fallbackCache)) {
         return fs.readFileSync(fallbackCache, 'utf-8');
       }
-      throw new NotFoundException('Invoice ZIP file not found');
+      throw new NotFoundException('Không tìm thấy file ZIP của hoá đơn');
     }
 
     const absoluteZipPath = this.resolvePath(invoice.zipPath);
     if (!fs.existsSync(absoluteZipPath)) {
-      throw new NotFoundException('ZIP file not found on disk');
+      throw new NotFoundException('Không tìm thấy file ZIP trên ổ đĩa');
     }
 
     // 3. Giải nén ZIP, tìm HTML
     const htmlContent = this.extractHtmlFromZip(absoluteZipPath);
     if (!htmlContent) {
-      throw new NotFoundException('No HTML file found in ZIP');
+      throw new NotFoundException('Không tìm thấy file HTML trong ZIP');
     }
 
     // 4. Lưu cache
@@ -227,7 +227,7 @@ export class PreviewService {
     });
 
     if (!invoice) {
-      throw new NotFoundException('Invoice not found');
+      throw new NotFoundException('Không tìm thấy hoá đơn');
     }
 
     // Map dữ liệu chuẩn hoá trong DB sang cấu trúc detail của GDT để

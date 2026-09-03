@@ -99,7 +99,7 @@ apiClient.interceptors.response.use(
 
     // ── 403 Forbidden ──────────────────────────────────────────────────────
     if (error.response?.status === 403) {
-      toast.error('You do not have permission to perform this action.')
+      toast.error('Bạn không có quyền thực hiện thao tác này.')
       return Promise.reject(error)
     }
 
@@ -156,15 +156,15 @@ apiClient.interceptors.response.use(
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const rawData = error.response?.data as unknown
-    if (rawData == null) return 'Network error. Please try again.'
+    if (rawData == null) return 'Lỗi kết nối mạng. Vui lòng thử lại.'
     // Trường hợp data vẫn là chuỗi text plain (không phải JSON)
-    if (typeof rawData === 'string') return rawData.trim() || 'Something went wrong.'
+    if (typeof rawData === 'string') return rawData.trim() || 'Đã có lỗi xảy ra.'
     const data = rawData as { message?: string | string[]; error?: string }
     if (Array.isArray(data.message)) return data.message.join(', ')
     if (typeof data.message === 'string' && data.message) return data.message
     // Dự phòng: nếu backend trả lỗi ở field `error`
     if (typeof data.error === 'string' && data.error) return data.error
-    return 'Something went wrong.'
+    return 'Đã có lỗi xảy ra.'
   }
-  return 'Something went wrong.'
+  return 'Đã có lỗi xảy ra.'
 }

@@ -22,7 +22,7 @@ export class PermissionsService {
     const permission = await this.prisma.permission.findUnique({
       where: { id },
     });
-    if (!permission) throw new NotFoundException('Permission not found');
+    if (!permission) throw new NotFoundException('Không tìm thấy quyền');
     return permission;
   }
 
@@ -30,7 +30,7 @@ export class PermissionsService {
     const existing = await this.prisma.permission.findUnique({
       where: { name: dto.name },
     });
-    if (existing) throw new ConflictException('Permission name already exists');
+    if (existing) throw new ConflictException('Tên quyền này đã tồn tại');
 
     return this.prisma.permission.create({ data: dto });
   }
@@ -39,7 +39,7 @@ export class PermissionsService {
     const permission = await this.prisma.permission.findUnique({
       where: { id },
     });
-    if (!permission) throw new NotFoundException('Permission not found');
+    if (!permission) throw new NotFoundException('Không tìm thấy quyền');
 
     return this.prisma.permission.update({ where: { id }, data: dto });
   }
@@ -49,14 +49,14 @@ export class PermissionsService {
       where: { id },
       include: { _count: { select: { rolePermissions: true } } },
     });
-    if (!permission) throw new NotFoundException('Permission not found');
+    if (!permission) throw new NotFoundException('Không tìm thấy quyền');
     if (permission._count.rolePermissions > 0) {
       throw new BadRequestException(
-        'Cannot delete a permission that is assigned to roles',
+        'Không thể xoá quyền đang được gán cho vai trò',
       );
     }
 
     await this.prisma.permission.delete({ where: { id } });
-    return { message: 'Permission deleted successfully' };
+    return { message: 'Đã xoá quyền thành công' };
   }
 }

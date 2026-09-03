@@ -56,7 +56,7 @@ export class InvoicesService {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
     });
-    if (!company) throw new NotFoundException('Company not found');
+    if (!company) throw new NotFoundException('Không tìm thấy doanh nghiệp');
 
     const normalizedMst = company.taxCode.startsWith('0')
       ? company.taxCode.slice(1)
@@ -337,7 +337,7 @@ export class InvoicesService {
       },
     });
     if (!invoice) {
-      throw new NotFoundException('Invoice not found');
+      throw new NotFoundException('Không tìm thấy hoá đơn');
     }
     return invoice;
   }
@@ -357,7 +357,7 @@ export class InvoicesService {
     });
 
     if (invoices.length === 0) {
-      throw new NotFoundException('No invoices found');
+      throw new NotFoundException('Không tìm thấy hoá đơn nào');
     }
 
     const data = invoices.map((inv) => this.mapToParsedInvoice(inv));
@@ -371,7 +371,7 @@ export class InvoicesService {
     });
 
     if (invoices.length === 0) {
-      throw new NotFoundException('No invoices found');
+      throw new NotFoundException('Không tìm thấy hoá đơn nào');
     }
 
     const data = invoices.map((inv) => ({
@@ -392,7 +392,7 @@ export class InvoicesService {
     });
 
     if (!invoice) {
-      throw new NotFoundException('Invoice not found');
+      throw new NotFoundException('Không tìm thấy hoá đơn');
     }
 
     // Nếu đã có pdfPath và file tồn tại, trả luôn
@@ -452,17 +452,17 @@ export class InvoicesService {
     });
 
     if (!invoice) {
-      throw new NotFoundException('Invoice not found');
+      throw new NotFoundException('Không tìm thấy hoá đơn');
     }
 
     if (!invoice.xmlPath) {
-      throw new NotFoundException('XML path not found in DB');
+      throw new NotFoundException('Không tìm thấy đường dẫn XML trong cơ sở dữ liệu');
     }
 
     const baseDir = this.config.get('INVOICES_DIR') || './invoices';
     const absoluteXmlPath = resolveInvoicePath(baseDir, invoice.xmlPath);
     if (!fs.existsSync(absoluteXmlPath)) {
-      throw new NotFoundException('XML file not found');
+      throw new NotFoundException('Không tìm thấy file XML trên ổ đĩa');
     }
 
     return {
@@ -479,17 +479,17 @@ export class InvoicesService {
     });
 
     if (!invoice) {
-      throw new NotFoundException('Invoice not found');
+      throw new NotFoundException('Không tìm thấy hoá đơn');
     }
 
     if (!invoice.zipPath) {
-      throw new NotFoundException('ZIP path not found in DB');
+      throw new NotFoundException('Không tìm thấy đường dẫn ZIP trong cơ sở dữ liệu');
     }
 
     const baseDir = this.config.get('INVOICES_DIR') || './invoices';
     const absoluteZipPath = resolveInvoicePath(baseDir, invoice.zipPath);
     if (!fs.existsSync(absoluteZipPath)) {
-      throw new NotFoundException('ZIP file not found');
+      throw new NotFoundException('Không tìm thấy file ZIP trên ổ đĩa');
     }
 
     return {

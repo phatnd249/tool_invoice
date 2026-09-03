@@ -61,10 +61,10 @@ function PermFormDialog({ open, onOpenChange, onSaved, editPerm }: PermFormProps
     try {
       if (isEdit) {
         await permissionsApi.update(editPerm.id, { description: form.description, group: form.group })
-        toast.success('Permission updated successfully')
+        toast.success('Cập nhật quyền thành công')
       } else {
         await permissionsApi.create({ name: form.name, description: form.description, group: form.group })
-        toast.success('Permission created successfully')
+        toast.success('Tạo quyền thành công')
       }
       onSaved()
       onOpenChange(false)
@@ -79,30 +79,30 @@ function PermFormDialog({ open, onOpenChange, onSaved, editPerm }: PermFormProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit Permission' : 'Create Permission'}</DialogTitle>
+          <DialogTitle>{isEdit ? 'Chỉnh sửa quyền' : 'Tạo quyền mới'}</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Update the permission description and group.' : 'Add a new permission to the system.'}
+            {isEdit ? 'Cập nhật mô tả và nhóm của quyền.' : 'Thêm quyền mới vào hệ thống.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="permName">Name</Label>
-            <Input id="permName" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="resource:action (e.g. post:create)" disabled={isEdit} required={!isEdit} />
+            <Label htmlFor="permName">Tên</Label>
+            <Input id="permName" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="resource:action (ví dụ: post:create)" disabled={isEdit} required={!isEdit} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="permGroup">Group / Resource</Label>
-            <Input id="permGroup" value={form.group} onChange={(e) => setForm((p) => ({ ...p, group: e.target.value }))} placeholder="e.g. post, comment" required />
+            <Label htmlFor="permGroup">Nhóm / Tài nguyên</Label>
+            <Input id="permGroup" value={form.group} onChange={(e) => setForm((p) => ({ ...p, group: e.target.value }))} placeholder="ví dụ: post, comment" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="permDesc">Description</Label>
-            <Input id="permDesc" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} placeholder="Optional description" />
+            <Label htmlFor="permDesc">Mô tả</Label>
+            <Input id="permDesc" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} placeholder="Mô tả tùy chọn" />
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>
-              Cancel
+              Huỷ
             </DialogClose>
             <LoadingButton type="submit" loading={loading}>
-              {isEdit ? 'Save changes' : 'Create'}
+              {isEdit ? 'Lưu thay đổi' : 'Tạo'}
             </LoadingButton>
           </DialogFooter>
         </form>
@@ -128,7 +128,7 @@ function DeletePermDialog({ open, onOpenChange, perm, onDeleted }: DeleteDialogP
     setDeleting(true)
     try {
       await permissionsApi.delete(perm.id)
-      toast.success('Permission deleted successfully')
+      toast.success('Xóa quyền thành công')
       onOpenChange(false)
       onDeleted()
     } catch (err) {
@@ -142,17 +142,17 @@ function DeletePermDialog({ open, onOpenChange, perm, onDeleted }: DeleteDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Delete Permission</DialogTitle>
+          <DialogTitle>Xóa quyền</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete <strong className="font-mono">{perm?.name}</strong>?
+            Bạn có chắc chắn muốn xóa <strong className="font-mono">{perm?.name}</strong>?
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
-            Cancel
+            Huỷ
           </DialogClose>
           <LoadingButton variant="destructive" onClick={handleDelete} loading={deleting}>
-            Delete
+            Xóa
           </LoadingButton>
         </DialogFooter>
       </DialogContent>
@@ -195,12 +195,12 @@ export function PermissionsPage() {
     <Layout title="Quyền hạn">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">{permissions.length} permission(s) total</p>
+          <p className="text-sm text-muted-foreground">{permissions.length} quyền</p>
           <div className="flex gap-2">
             <Button variant="ghost" size="icon" onClick={fetchPermissions}><RefreshCw className="size-4" /></Button>
             {canCreate && (
               <Button size="sm" onClick={() => { setEditPerm(null); setModalOpen(true) }}>
-                <Plus className="size-4" /> Add permission
+                <Plus className="size-4" /> Thêm quyền
               </Button>
             )}
           </div>
@@ -218,7 +218,7 @@ export function PermissionsPage() {
                   <div className="flex items-center gap-2">
                     <Badge variant="default">{group}</Badge>
                     <span className="text-xs text-muted-foreground">
-                      {permissions.filter((p) => p.group === group).length} permission(s)
+                      {permissions.filter((p) => p.group === group).length} quyền
                     </span>
                   </div>
                 </CardHeader>
@@ -234,12 +234,12 @@ export function PermissionsPage() {
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
                               {canEdit && (
-                                <Button variant="ghost" size="icon-xs" onClick={() => { setEditPerm(perm); setModalOpen(true) }} title="Edit">
+                                <Button variant="ghost" size="icon-xs" onClick={() => { setEditPerm(perm); setModalOpen(true) }} title="Chỉnh sửa">
                                   <Pencil className="size-4" />
                                 </Button>
                               )}
                               {canDelete && (
-                                <Button variant="ghost" size="icon-xs" onClick={() => { setDeleteTarget(perm); setDeleteDialogOpen(true) }} title="Delete">
+                                <Button variant="ghost" size="icon-xs" onClick={() => { setDeleteTarget(perm); setDeleteDialogOpen(true) }} title="Xóa">
                                   <Trash2 className="size-4" />
                                 </Button>
                               )}

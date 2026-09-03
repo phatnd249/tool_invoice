@@ -79,13 +79,13 @@ export class AuthService {
 
   async register(dto: RegisterDto) {
     if (dto.password !== dto.confirmPassword) {
-      throw new BadRequestException('Passwords do not match');
+      throw new BadRequestException('Mật khẩu xác nhận không khớp');
     }
 
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    if (existing) throw new ConflictException('Email already in use');
+    if (existing) throw new ConflictException('Email này đã được sử dụng');
 
     const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
     const emailVerifyToken = randomUUID();
@@ -102,7 +102,7 @@ export class AuthService {
     });
 
     await this.mail.sendEmailVerification(dto.email, emailVerifyToken);
-    return { message: 'Registration successful. Please verify your email.' };
+    return { message: 'Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.' };
   }
 
   // ─── Verify Email ─────────────────────────────────────────────────────────
@@ -111,9 +111,9 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { emailVerifyToken: token },
     });
-    if (!user) throw new BadRequestException('Invalid verification token');
+    if (!user) throw new BadRequestException('Mã xác thực không hợp lệ');
     if (user.emailVerifyExpiry && user.emailVerifyExpiry < new Date()) {
-      throw new BadRequestException('Verification token has expired');
+      throw new BadRequestException('Mã xác thực đã hết hạn');
     }
 
     await this.prisma.user.update({
@@ -126,7 +126,7 @@ export class AuthService {
       },
     });
 
-    return { message: 'Email verified successfully. You can now log in.' };
+    return { message: 'Xác thực email thành công. Bạn có thể đăng nhập ngay.' };
   }
 
   // ─── Resend Verification ──────────────────────────────────────────────────
@@ -135,10 +135,10 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || user.deletedAt) {
       // Return generic message to avoid user enumeration
-      return { message: 'If the email exists, a verification link has been sent.' };
+      return { message: 'Nếu email tồn tại trong hệ thống, liên kết xác thực đã được gửi.' };
     }
     if (user.emailVerified) {
-      throw new BadRequestException('Email is already verified');
+      throw new BadRequestException('Email này đã được xác thực trước đó');
     }
 
     const emailVerifyToken = randomUUID();
@@ -150,7 +150,7 @@ export class AuthService {
     });
 
     await this.mail.sendEmailVerification(email, emailVerifyToken);
-    return { message: 'If the email exists, a verification link has been sent.' };
+    return { message: 'Nếu email tồn tại trong hệ thống, liên kết xác thực đã được gửi.' };
   }
 
   // ─── Login ────────────────────────────────────────────────────────────────
@@ -160,13 +160,13 @@ export class AuthService {
       where: { email: dto.email, deletedAt: null },
     });
 
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
 
     // Check account lock
     if (user.lockUntil && user.lockUntil > new Date()) {
       const remaining = Math.ceil((user.lockUntil.getTime() - Date.now()) / 60000);
       throw new UnauthorizedException(
-        `Account is temporarily locked. Try again in ${remaining} minute(s).`,
+        `Tài khoản tạm thời bị khóa. Vui lòng thử lại sau ${remaining} phút.`,
       );
     }
 
@@ -183,17 +183,17 @@ export class AuthService {
       });
       if (isLocked) {
         throw new UnauthorizedException(
-          'Too many failed attempts. Account locked for 15 minutes.',
+          'Đăng nhập sai quá nhiều lần. Tài khoản đã bị khóa trong 15 phút.',
         );
       }
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
     }
 
     if (user.status === 'INACTIVE') {
-      throw new UnauthorizedException('Please verify your email before logging in');
+      throw new UnauthorizedException('Tài khoản chưa được kích hoạt. Vui lòng xác thực email trước khi đăng nhập.');
     }
     if (user.status === 'BANNED') {
-      throw new UnauthorizedException('Your account has been banned');
+      throw new UnauthorizedException('Tài khoản của bạn đã bị khóa hoặc vô hiệu hóa');
     }
 
     // Reset login attempts
@@ -230,21 +230,21 @@ export class AuthService {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
       });
     } catch {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new UnauthorizedException('Phiên đăng nhập không hợp lệ hoặc đã hết hạn');
     }
 
     const stored = await this.prisma.refreshToken.findUnique({
       where: { jti: payload.jti },
     });
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
-      throw new UnauthorizedException('Refresh token is invalid or revoked');
+      throw new UnauthorizedException('Phiên đăng nhập không hợp lệ hoặc đã bị thu hồi');
     }
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub, deletedAt: null },
     });
     if (!user || user.status !== 'ACTIVE') {
-      throw new UnauthorizedException('User is not active');
+      throw new UnauthorizedException('Tài khoản chưa được kích hoạt hoặc không khả dụng');
     }
 
     // Rotate: revoke old, issue new
@@ -295,7 +295,7 @@ export class AuthService {
       // Ignore invalid refresh token on logout
     }
 
-    return { message: 'Logged out successfully' };
+    return { message: 'Đăng xuất thành công' };
   }
 
   // ─── Logout All ───────────────────────────────────────────────────────────
@@ -313,7 +313,7 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    return { message: 'Logged out from all devices successfully' };
+    return { message: 'Đã đăng xuất khỏi tất cả các thiết bị' };
   }
 
   // ─── Forgot Password ──────────────────────────────────────────────────────
@@ -325,7 +325,7 @@ export class AuthService {
 
     // Generic response to avoid user enumeration
     if (!user) {
-      return { message: 'If the email exists, a reset link has been sent.' };
+      return { message: 'Nếu email tồn tại trong hệ thống, liên kết đặt lại mật khẩu đã được gửi.' };
     }
 
     const resetPasswordToken = randomUUID();
@@ -337,28 +337,28 @@ export class AuthService {
     });
 
     await this.mail.sendPasswordReset(email, resetPasswordToken);
-    return { message: 'If the email exists, a reset link has been sent.' };
+    return { message: 'Nếu email tồn tại trong hệ thống, liên kết đặt lại mật khẩu đã được gửi.' };
   }
 
   // ─── Reset Password ───────────────────────────────────────────────────────
 
   async resetPassword(token: string, password: string, confirmPassword: string) {
     if (password !== confirmPassword) {
-      throw new BadRequestException('Passwords do not match');
+      throw new BadRequestException('Mật khẩu xác nhận không khớp');
     }
 
     const user = await this.prisma.user.findUnique({
       where: { resetPasswordToken: token },
     });
-    if (!user) throw new BadRequestException('Invalid or expired reset token');
+    if (!user) throw new BadRequestException('Mã đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
     if (user.resetPasswordExpiry && user.resetPasswordExpiry < new Date()) {
-      throw new BadRequestException('Reset token has expired');
+      throw new BadRequestException('Mã đặt lại mật khẩu đã hết hạn');
     }
 
     const isSame = await bcrypt.compare(password, user.password);
     if (isSame) {
       throw new BadRequestException(
-        'New password must be different from the current password',
+        'Mật khẩu mới phải khác với mật khẩu hiện tại',
       );
     }
 
@@ -379,6 +379,6 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    return { message: 'Password reset successfully. Please log in again.' };
+    return { message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.' };
   }
 }

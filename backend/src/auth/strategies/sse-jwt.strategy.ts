@@ -38,14 +38,14 @@ export class SseJwtStrategy extends PassportStrategy(Strategy, 'sse-jwt') {
     const blacklisted = await this.prisma.tokenBlacklist.findUnique({
       where: { jti: payload.jti },
     });
-    if (blacklisted) throw new UnauthorizedException('Token has been revoked');
+    if (blacklisted) throw new UnauthorizedException('Phiên đăng nhập đã bị thu hồi');
 
     // Check user exists, is active and not deleted
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub, deletedAt: null },
     });
     if (!user || user.status !== 'ACTIVE') {
-      throw new UnauthorizedException('User is inactive or not found');
+      throw new UnauthorizedException('Tài khoản chưa được kích hoạt hoặc không khả dụng');
     }
 
     return { id: user.id, email: user.email, jti: payload.jti };

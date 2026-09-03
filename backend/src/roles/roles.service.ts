@@ -60,28 +60,28 @@ export class RolesService {
       where: { id },
       select: ROLE_SELECT,
     });
-    if (!role) throw new NotFoundException('Role not found');
+    if (!role) throw new NotFoundException('Không tìm thấy vai trò');
     return this.formatRole(role);
   }
 
   async create(dto: CreateRoleDto) {
     if (isReservedRoleName(dto.name)) {
       throw new ForbiddenException(
-        `${dto.name.toUpperCase()} is a reserved system role`,
+        `${dto.name.toUpperCase()} là vai trò hệ thống được bảo lưu`,
       );
     }
 
     const existing = await this.prisma.role.findUnique({
       where: { name: dto.name },
     });
-    if (existing) throw new ConflictException('Role name already exists');
+    if (existing) throw new ConflictException('Tên vai trò này đã tồn tại');
 
     if (dto.permissionIds?.length) {
       const permissions = await this.prisma.permission.findMany({
         where: { id: { in: dto.permissionIds } },
       });
       if (permissions.length !== dto.permissionIds.length) {
-        throw new BadRequestException('One or more permissions not found');
+        throw new BadRequestException('Một hoặc nhiều quyền không tồn tại');
       }
     }
 
@@ -103,21 +103,21 @@ export class RolesService {
 
   async update(id: string, dto: UpdateRoleDto) {
     const role = await this.prisma.role.findUnique({ where: { id } });
-    if (!role) throw new NotFoundException('Role not found');
+    if (!role) throw new NotFoundException('Không tìm thấy vai trò');
     if (role.isSystem) {
-      throw new ForbiddenException('System roles cannot be modified');
+      throw new ForbiddenException('Không thể chỉnh sửa vai trò hệ thống');
     }
 
     if (dto.name && dto.name !== role.name) {
       if (isReservedRoleName(dto.name)) {
         throw new ForbiddenException(
-          `${dto.name.toUpperCase()} is a reserved system role`,
+          `${dto.name.toUpperCase()} là vai trò hệ thống được bảo lưu`,
         );
       }
       const existing = await this.prisma.role.findUnique({
         where: { name: dto.name },
       });
-      if (existing) throw new ConflictException('Role name already exists');
+      if (existing) throw new ConflictException('Tên vai trò này đã tồn tại');
     }
 
     const { permissionIds, ...updateData } = dto;
@@ -145,17 +145,17 @@ export class RolesService {
       where: { id },
       include: { _count: { select: { userRoles: true } } },
     });
-    if (!role) throw new NotFoundException('Role not found');
+    if (!role) throw new NotFoundException('Không tìm thấy vai trò');
     if (role.isSystem) {
-      throw new ForbiddenException('System roles cannot be deleted');
+      throw new ForbiddenException('Không thể xoá vai trò hệ thống');
     }
     if (role._count.userRoles > 0) {
       throw new BadRequestException(
-        'Cannot delete a role that is assigned to users',
+        'Không thể xoá vai trò đang được gán cho người dùng',
       );
     }
 
     await this.prisma.role.delete({ where: { id } });
-    return { message: 'Role deleted successfully' };
+    return { message: 'Đã xoá vai trò thành công' };
   }
 }

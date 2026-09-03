@@ -70,7 +70,7 @@ export class UsersService {
       where: { id, deletedAt: null },
       select: USER_SELECT,
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
     return user;
   }
 
@@ -96,7 +96,7 @@ export class UsersService {
    */
   private async assertCanManageUser(user: any, actorId: string, action: string) {
     if (this.isSuperAdminUser(user) && !(await this.isSuperAdminActor(actorId))) {
-      throw new ForbiddenException(`Cannot ${action} a Super Admin account`);
+      throw new ForbiddenException(`Không thể ${action} tài khoản Super Admin`);
     }
   }
 
@@ -119,7 +119,7 @@ export class UsersService {
       !(await this.isSuperAdminActor(actorId))
     ) {
       throw new ForbiddenException(
-        'Only SUPER_ADMIN can assign the SUPER_ADMIN role',
+        'Chỉ SUPER_ADMIN mới có quyền gán vai trò SUPER_ADMIN',
       );
     }
   }
@@ -181,13 +181,13 @@ export class UsersService {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    if (existing) throw new ConflictException('Email already in use');
+    if (existing) throw new ConflictException('Email này đã tồn tại trong hệ thống');
 
     const roles = await this.prisma.role.findMany({
       where: { id: { in: dto.roleIds } },
     });
     if (roles.length !== dto.roleIds.length) {
-      throw new BadRequestException('One or more roles not found');
+      throw new BadRequestException('Một hoặc nhiều vai trò không tồn tại');
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
@@ -215,7 +215,7 @@ export class UsersService {
     const user = await this.findUserOrFail(id);
 
     // Chỉ SUPER_ADMIN được sửa tài khoản SUPER_ADMIN (kể cả chính mình)
-    await this.assertCanManageUser(user, actorId, 'edit');
+    await this.assertCanManageUser(user, actorId, 'chỉnh sửa');
     // Chỉ SUPER_ADMIN được gán role SUPER_ADMIN (chặn tự nâng cấp)
     await this.assertCanAssignSuperAdmin(dto.roleIds, actorId);
 
@@ -223,7 +223,7 @@ export class UsersService {
       const existing = await this.prisma.user.findUnique({
         where: { email: dto.email },
       });
-      if (existing) throw new ConflictException('Email already in use');
+      if (existing) throw new ConflictException('Email này đã tồn tại trong hệ thống');
     }
 
     const { roleIds, ...updateData } = dto;
@@ -249,11 +249,11 @@ export class UsersService {
 
   async toggleStatus(id: string, actorId: string) {
     if (id === actorId) {
-      throw new BadRequestException('Cannot change your own account status');
+      throw new BadRequestException('Không thể thay đổi trạng thái tài khoản của chính mình');
     }
 
     const user = await this.findUserOrFail(id);
-    await this.assertCanManageUser(user, actorId, 'change the status of');
+    await this.assertCanManageUser(user, actorId, 'thay đổi trạng thái');
 
     const newStatus = (user as any).status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
 
@@ -278,10 +278,10 @@ export class UsersService {
 
   async softDelete(id: string, actorId: string) {
     if (id === actorId) {
-      throw new BadRequestException('Cannot delete your own account');
+      throw new BadRequestException('Không thể tự xoá tài khoản của chính mình');
     }
     const user = await this.findUserOrFail(id);
-    await this.assertCanManageUser(user, actorId, 'delete');
+    await this.assertCanManageUser(user, actorId, 'xoá');
 
     await this.prisma.user.update({
       where: { id },
@@ -294,21 +294,21 @@ export class UsersService {
       data: { revokedAt: new Date() },
     });
 
-    return { message: 'User deleted successfully' };
+    return { message: 'Đã xoá người dùng thành công' };
   }
 
   // ─── Admin: Assign Roles ──────────────────────────────────────────────────
 
   async assignRoles(userId: string, roleIds: string[], actorId: string) {
     const user = await this.findUserOrFail(userId);
-    await this.assertCanManageUser(user, actorId, 'modify');
+    await this.assertCanManageUser(user, actorId, 'thay đổi vai trò của');
     await this.assertCanAssignSuperAdmin(roleIds, actorId);
 
     const roles = await this.prisma.role.findMany({
       where: { id: { in: roleIds } },
     });
     if (roles.length !== roleIds.length) {
-      throw new BadRequestException('One or more roles not found');
+      throw new BadRequestException('Một hoặc nhiều vai trò không tồn tại');
     }
 
     // Upsert each role assignment
@@ -329,7 +329,7 @@ export class UsersService {
 
   async revokeRole(userId: string, roleId: string, actorId: string) {
     const user = await this.findUserOrFail(userId);
-    await this.assertCanManageUser(user, actorId, 'modify');
+    await this.assertCanManageUser(user, actorId, 'thay đổi vai trò của');
 
     await this.prisma.userRole.deleteMany({ where: { userId, roleId } });
     return this.findOne(userId);
@@ -342,7 +342,7 @@ export class UsersService {
       where: { id: userId, deletedAt: null },
       select: USER_SELECT,
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
     return this.formatUser(user);
   }
 
@@ -399,7 +399,7 @@ export class UsersService {
       where: { id: { in: companyIds } },
     });
     if (companies.length !== companyIds.length) {
-      throw new BadRequestException('One or more companies not found');
+      throw new BadRequestException('Một hoặc nhiều doanh nghiệp không tồn tại');
     }
 
     // Replace all assignments atomically
@@ -417,19 +417,19 @@ export class UsersService {
 
   async changePassword(userId: string, dto: ChangePasswordDto) {
     if (dto.newPassword !== dto.confirmPassword) {
-      throw new BadRequestException('Passwords do not match');
+      throw new BadRequestException('Mật khẩu xác nhận không khớp');
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
 
     const isMatch = await bcrypt.compare(dto.currentPassword, user.password);
-    if (!isMatch) throw new BadRequestException('Current password is incorrect');
+    if (!isMatch) throw new BadRequestException('Mật khẩu hiện tại không chính xác');
 
     const isSame = await bcrypt.compare(dto.newPassword, user.password);
     if (isSame) {
       throw new BadRequestException(
-        'New password must be different from the current password',
+        'Mật khẩu mới phải khác với mật khẩu hiện tại',
       );
     }
 
@@ -445,6 +445,6 @@ export class UsersService {
       data: { revokedAt: new Date() },
     });
 
-    return { message: 'Password changed successfully. Please log in again.' };
+    return { message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.' };
   }
 }

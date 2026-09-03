@@ -26,7 +26,7 @@ export class PermissionsGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user: AuthUser = request.user;
-    if (!user) throw new ForbiddenException('Access denied');
+    if (!user) throw new ForbiddenException('Truy cập bị từ chối');
 
     // SUPER_ADMIN bypasses all permission checks
     const isSuperAdmin = await this.prisma.role.findFirst({
@@ -55,7 +55,7 @@ export class PermissionsGuard implements CanActivate {
     const permissionSet = new Set(userPermissions.map((p) => p.name));
     const hasAll = requiredPermissions.every((p) => permissionSet.has(p));
 
-    if (!hasAll) throw new ForbiddenException('Insufficient permissions');
+    if (!hasAll) throw new ForbiddenException('Bạn không có quyền thực hiện thao tác này');
     return true;
   }
 }

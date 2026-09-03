@@ -27,7 +27,7 @@ export function ResetPasswordPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!token) { toast.error('Invalid reset token'); return }
+    if (!token) { toast.error('Token đặt lại mật khẩu không hợp lệ'); return }
     if (form.password !== form.confirmPassword) { toast.error('Mật khẩu không khớp'); return }
     setLoading(true)
     try {

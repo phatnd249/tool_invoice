@@ -42,7 +42,7 @@ export function ProfilePage() {
     try {
       await usersApi.updateProfile({ fullName: profileForm.fullName, avatar: profileForm.avatar || undefined })
       await refreshUser()
-      toast.success('Profile updated successfully')
+      toast.success('Cập nhật hồ sơ thành công')
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -52,7 +52,7 @@ export function ProfilePage() {
 
   const handleChangePassword = async (e: FormEvent) => {
     e.preventDefault()
-    if (pwForm.newPassword !== pwForm.confirmPassword) { toast.error('Passwords do not match'); return }
+    if (pwForm.newPassword !== pwForm.confirmPassword) { toast.error('Mật khẩu xác nhận không khớp'); return }
     setSavingPw(true)
     try {
       const { data } = await usersApi.changePassword(pwForm)
@@ -99,25 +99,25 @@ export function ProfilePage() {
         {/* Edit profile */}
         <Card>
           <CardHeader>
-            <CardTitle>Personal information</CardTitle>
-            <CardDescription>Update your profile details</CardDescription>
+            <CardTitle>Thông tin cá nhân</CardTitle>
+            <CardDescription>Cập nhật thông tin hồ sơ của bạn</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="fullName">Full name</Label>
+                <Label htmlFor="fullName">Họ và tên</Label>
                 <Input id="fullName" value={profileForm.fullName} onChange={setProfile('fullName')} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="avatar">Avatar URL</Label>
+                <Label htmlFor="avatar">URL ảnh đại diện</Label>
                 <Input id="avatar" value={profileForm.avatar} onChange={setProfile('avatar')} placeholder="https://..." />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input id="email" value={user?.email ?? ''} disabled />
               </div>
               <div className="flex justify-end">
-                <LoadingButton type="submit" loading={savingProfile}>Save changes</LoadingButton>
+                <LoadingButton type="submit" loading={savingProfile}>Lưu thay đổi</LoadingButton>
               </div>
             </form>
           </CardContent>
@@ -129,28 +129,28 @@ export function ProfilePage() {
             <div className="flex items-center gap-2">
               <Lock className="size-4 text-muted-foreground" />
               <div>
-                <CardTitle>Change password</CardTitle>
-                <CardDescription>Update your account password</CardDescription>
+                <CardTitle>Đổi mật khẩu</CardTitle>
+                <CardDescription>Cập nhật mật khẩu tài khoản của bạn</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleChangePassword} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="currentPassword">Current password</Label>
+                <Label htmlFor="currentPassword">Mật khẩu hiện tại</Label>
                 <Input id="currentPassword" type="password" value={pwForm.currentPassword} onChange={setPw('currentPassword')} required />
               </div>
               <Separator />
               <div className="space-y-2">
-                <Label htmlFor="newPassword">New password</Label>
-                <Input id="newPassword" type="password" value={pwForm.newPassword} onChange={setPw('newPassword')} placeholder="Min 8 chars, letters & numbers" required />
+                <Label htmlFor="newPassword">Mật khẩu mới</Label>
+                <Input id="newPassword" type="password" value={pwForm.newPassword} onChange={setPw('newPassword')} placeholder="Tối thiểu 8 ký tự, bao gồm chữ và số" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm new password</Label>
+                <Label htmlFor="confirmPassword">Xác nhận mật khẩu mới</Label>
                 <Input id="confirmPassword" type="password" value={pwForm.confirmPassword} onChange={setPw('confirmPassword')} required />
               </div>
               <div className="flex justify-end">
-                <LoadingButton type="submit" loading={savingPw}>Update password</LoadingButton>
+                <LoadingButton type="submit" loading={savingPw}>Cập nhật mật khẩu</LoadingButton>
               </div>
             </form>
           </CardContent>

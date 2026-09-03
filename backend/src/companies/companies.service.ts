@@ -122,7 +122,7 @@ export class CompaniesService {
   async findOne(id: string) {
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) {
-      throw new NotFoundException('Company not found');
+      throw new NotFoundException('Không tìm thấy doanh nghiệp');
     }
     return this.sanitizeCompany(company);
   }
@@ -134,7 +134,7 @@ export class CompaniesService {
   private async findCompanyRaw(id: string) {
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) {
-      throw new NotFoundException('Company not found');
+      throw new NotFoundException('Không tìm thấy doanh nghiệp');
     }
     return company;
   }
@@ -145,7 +145,7 @@ export class CompaniesService {
     });
     if (existing) {
       throw new ConflictException(
-        `Company with tax code ${dto.taxCode} already exists`,
+        `Doanh nghiệp với mã số thuế ${dto.taxCode} đã tồn tại`,
       );
     }
 
@@ -194,7 +194,7 @@ export class CompaniesService {
   async delete(id: string) {
     await this.findOne(id);
     await this.prisma.company.delete({ where: { id } });
-    return { message: 'Company deleted successfully' };
+    return { message: 'Đã xoá doanh nghiệp thành công' };
   }
 
   // ─── Token & Login ────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ export class CompaniesService {
 
     if (company.loginMode !== 'AUTO') {
       throw new BadRequestException(
-        'Only AUTO mode companies can refresh token automatically',
+        'Chỉ doanh nghiệp ở chế độ TỰ ĐỘNG mới có thể làm mới token tự động',
       );
     }
 
