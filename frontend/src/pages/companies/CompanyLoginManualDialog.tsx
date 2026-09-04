@@ -101,7 +101,7 @@ export function CompanyLoginManualDialog({
           <div className="space-y-2">
             <Label>Mã captcha</Label>
             <div className="flex items-center gap-3">
-              <div className="flex h-12 min-w-[150px] flex-1 items-center justify-center rounded-lg border bg-muted/40">
+              <div className="flex h-12 min-w-[150px] flex-1 items-center justify-center rounded-lg border bg-white">
                 {loadingCaptcha ? (
                   <RefreshCw className="size-5 animate-spin text-muted-foreground" />
                 ) : captcha ? (
