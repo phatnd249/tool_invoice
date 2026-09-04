@@ -187,7 +187,7 @@ export class DownloadTaskService {
       where: { id: companyId },
     });
     if (!company) {
-      throw new NotFoundException('Company not found');
+      throw new NotFoundException('Không tìm thấy doanh nghiệp');
     }
 
     // 2. Chặn tạo task trùng lặp nếu đã có task đang chạy
@@ -325,7 +325,7 @@ export class DownloadTaskService {
     });
 
     if (!task) {
-      throw new NotFoundException(`Task ${taskId} not found`);
+      throw new NotFoundException(`Không tìm thấy task ${taskId}`);
     }
 
     return {
@@ -346,7 +346,7 @@ export class DownloadTaskService {
     });
 
     if (!task) {
-      throw new NotFoundException(`Task ${taskId} not found`);
+      throw new NotFoundException(`Không tìm thấy task ${taskId}`);
     }
 
     if (task.status !== 'PENDING' && task.status !== 'RUNNING') {
@@ -922,7 +922,7 @@ export class DownloadTaskService {
       const errorMessage =
         error.response?.data?.message ||
         error.message ||
-        'Unknown error';
+        'Lỗi không xác định';
 
       this.emit(taskId, {
         type: 'error',
@@ -1157,7 +1157,7 @@ export class DownloadTaskService {
         subscriber.next({
           data: JSON.stringify({
             type: 'error',
-            message: `Task ${taskId} not found`,
+            message: `Không tìm thấy task ${taskId}`,
           }),
         } as MessageEvent);
         return;
@@ -1190,7 +1190,7 @@ export class DownloadTaskService {
         subscriber.next({
           data: JSON.stringify({
             type: 'error',
-            message: task.errorMessage || 'Unknown error',
+            message: task.errorMessage || 'Lỗi không xác định',
           }),
         } as MessageEvent);
       }

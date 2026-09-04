@@ -448,7 +448,7 @@ export class InvoiceDownloaderService {
       return pdfPath;
     } catch (pdfErr: any) {
       this.logger.warn(
-        `Failed to auto-generate PDF for ${invoice.shdon}: ${pdfErr.message}`,
+        `Không tự tạo được PDF cho hoá đơn ${invoice.shdon}: ${pdfErr.message}`,
       );
       return undefined;
     }

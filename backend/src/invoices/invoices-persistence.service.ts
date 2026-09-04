@@ -82,7 +82,7 @@ export class InvoicesPersistenceService {
         }
       } catch (error: any) {
         this.logger.error(
-          `Failed to upsert invoice ${inv.shdon}: ${error.message}`,
+          `Không thể lưu hoá đơn ${inv.shdon}: ${error.message}`,
         );
       }
     }

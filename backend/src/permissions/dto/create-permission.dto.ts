@@ -4,7 +4,7 @@ export class CreatePermissionDto {
   @IsString()
   @IsNotEmpty()
   @Matches(/^[a-z]+:[a-z]+$/, {
-    message: 'Permission name must follow the format "resource:action" (e.g., user:read)',
+    message: 'Tên quyền phải theo định dạng "resource:action" (ví dụ: user:read)',
   })
   name!: string;
 

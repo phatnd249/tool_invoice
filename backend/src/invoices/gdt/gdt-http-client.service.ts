@@ -125,6 +125,6 @@ export class GdtHttpClientService {
     }
 
     // Should never reach here, but just in case
-    throw new Error(`Failed after ${retries} retries`);
+    throw new Error(`Thất bại sau ${retries} lần thử`);
   }
 }

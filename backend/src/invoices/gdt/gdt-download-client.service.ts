@@ -171,7 +171,7 @@ export class GdtDownloadClientService {
       return null;
     } catch (error: any) {
       this.logger.warn(
-        `Failed to fetch detail for invoice ${shdon}: ${error.message}`,
+        `Không tải được chi tiết hoá đơn ${shdon}: ${error.message}`,
       );
       return null;
     }
@@ -247,7 +247,7 @@ export class GdtDownloadClientService {
         );
       } catch (error: any) {
         this.logger.warn(
-          `Failed to download Excel report (${apiPath}) for ${startStr}→${endStr}: ${error.message}`,
+          `Không tải được bảng kê Excel (${apiPath}) cho ${startStr}→${endStr}: ${error.message}`,
         );
       }
     }

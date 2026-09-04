@@ -39,7 +39,7 @@ export class CaptchaResolverService {
           content: response.data.content,
         };
       }
-      throw new Error('Invalid GDT captcha response structure');
+      throw new Error('Cấu trúc dữ liệu captcha GDT không hợp lệ');
     } catch (error: any) {
       this.logger.error(`Error fetching GDT captcha: ${error.message}`);
       throw error;

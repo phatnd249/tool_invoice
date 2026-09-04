@@ -66,7 +66,7 @@ export class PdfService {
     }
 
     if (!fs.existsSync(cacheHtmlPath)) {
-      throw new Error('HTML cache not found');
+      throw new Error('Không tìm thấy cache HTML');
     }
 
     const htmlContent = fs.readFileSync(cacheHtmlPath, 'utf-8');

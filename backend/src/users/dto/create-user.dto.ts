@@ -19,7 +19,7 @@ export class CreateUserDto {
   @IsString()
   @MinLength(8)
   @Matches(/^(?=.*[a-zA-Z])(?=.*\d)/, {
-    message: 'Password must contain at least one letter and one number',
+    message: 'Mật khẩu phải chứa ít nhất một chữ cái và một chữ số',
   })
   password!: string;
 

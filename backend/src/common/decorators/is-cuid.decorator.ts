@@ -14,7 +14,7 @@ export function IsCuid(validationOptions?: ValidationOptions) {
       propertyName,
       options: {
         message: ({ property }: ValidationArguments) =>
-          `${property} must be a valid CUID`,
+          `${property} phải là mã ID hợp lệ`,
         ...validationOptions,
       },
       validator: {

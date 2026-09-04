@@ -36,7 +36,7 @@ export class XmlParserService {
    */
   extractXmlFromZip(zipPath: string, outputDir: string): string {
     if (!fs.existsSync(zipPath)) {
-      throw new Error(`ZIP file not found: ${zipPath}`);
+      throw new Error(`Không tìm thấy file ZIP: ${zipPath}`);
     }
 
     const zip = new AdmZip(zipPath);
@@ -46,7 +46,7 @@ export class XmlParserService {
     );
 
     if (!xmlEntry) {
-      throw new Error(`No XML file found in ZIP: ${zipPath}`);
+      throw new Error(`Không tìm thấy file XML trong ZIP: ${zipPath}`);
     }
 
     const baseName = path.basename(zipPath, path.extname(zipPath));

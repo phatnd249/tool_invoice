@@ -68,13 +68,13 @@ export class GdtAuthService {
 
         if (attempt >= maxRetries) {
           throw new BadRequestException(
-            `Failed to authenticate with GDT after ${maxRetries} attempts: ${error.message}`,
+            `Xác thực GDT thất bại sau ${maxRetries} lần thử: ${error.message}`,
           );
         }
       }
     }
 
-    throw new BadRequestException('GDT authentication failed');
+    throw new BadRequestException('Xác thực GDT thất bại');
   }
 
   /**
@@ -97,13 +97,13 @@ export class GdtAuthService {
       if (response.data?.token) {
         return response.data.token;
       }
-      throw new Error('GDT authentication did not return a session token');
+      throw new Error('GDT không trả về token phiên đăng nhập');
     } catch (error: any) {
       const errorMsg =
         error.response?.data?.message ||
         error.response?.data?.error ||
         error.message;
-      throw new BadRequestException(`GDT login failed: ${errorMsg}`);
+      throw new BadRequestException(`Đăng nhập GDT thất bại: ${errorMsg}`);
     }
   }
 

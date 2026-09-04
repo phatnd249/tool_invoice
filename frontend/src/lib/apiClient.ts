@@ -153,18 +153,46 @@ apiClient.interceptors.response.use(
 
 // ─── Error Message Helper ─────────────────────────────────────────────────────
 
+// Dự phòng: dịch các chuỗi lỗi tiếng Anh phổ biến phát sinh từ thư viện /
+// dịch vụ bên thứ ba (Prisma, GDT, trình duyệt...) mà backend không kiểm soát.
+const FALLBACK_MESSAGE_MAP: [RegExp, string][] = [
+  [/request failed with status code 401/i, 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'],
+  [/request failed with status code 403/i, 'Bạn không có quyền thực hiện thao tác này.'],
+  [/request failed with status code 404/i, 'Không tìm thấy tài nguyên yêu cầu.'],
+  [/request failed with status code 429/i, 'Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau.'],
+  [/request failed with status code 5\d\d/i, 'Máy chủ đang gặp sự cố. Vui lòng thử lại sau.'],
+  [/timeout/i, 'Yêu cầu đã hết thời gian chờ. Vui lòng thử lại.'],
+  [/network error/i, 'Lỗi kết nối mạng. Vui lòng thử lại.'],
+  [/invalid captcha/i, 'Mã captcha không hợp lệ.'],
+  [/login failed/i, 'Đăng nhập thất bại.'],
+  [/not found/i, 'Không tìm thấy dữ liệu yêu cầu.'],
+  [/unknown error/i, 'Lỗi không xác định.'],
+]
+
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const rawData = error.response?.data as unknown
     if (rawData == null) return 'Lỗi kết nối mạng. Vui lòng thử lại.'
     // Trường hợp data vẫn là chuỗi text plain (không phải JSON)
-    if (typeof rawData === 'string') return rawData.trim() || 'Đã có lỗi xảy ra.'
+    if (typeof rawData === 'string') {
+      const trimmed = rawData.trim()
+      if (trimmed) return applyFallbackMap(trimmed)
+      return 'Đã có lỗi xảy ra.'
+    }
     const data = rawData as { message?: string | string[]; error?: string }
     if (Array.isArray(data.message)) return data.message.join(', ')
-    if (typeof data.message === 'string' && data.message) return data.message
+    if (typeof data.message === 'string' && data.message) return applyFallbackMap(data.message)
     // Dự phòng: nếu backend trả lỗi ở field `error`
-    if (typeof data.error === 'string' && data.error) return data.error
+    if (typeof data.error === 'string' && data.error) return applyFallbackMap(data.error)
     return 'Đã có lỗi xảy ra.'
   }
   return 'Đã có lỗi xảy ra.'
+}
+
+function applyFallbackMap(message: string): string {
+  const lower = message.toLowerCase()
+  for (const [pattern, fallback] of FALLBACK_MESSAGE_MAP) {
+    if (pattern.test(lower)) return fallback
+  }
+  return message
 }
