@@ -8,6 +8,16 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: 'v1.7.0',
+    date: '2026-09-04',
+    changes: [
+      'Thêm trang “Quên mật khẩu”: nhập email để nhận liên kết đặt lại mật khẩu, kèm đường dẫn ngay trên trang đăng nhập',
+      'Việt hoá toàn bộ thông báo lỗi hiển thị cho người dùng: dịch message validation của backend (ValidationPipe), các DTO và thông báo từ dịch vụ GDT sang tiếng Việt',
+      'Thêm bản đồ dịch lỗi dự phòng phía frontend cho các lỗi phổ biến đến từ thư viện/dịch vụ bên thứ ba (mã trạng thái HTTP, timeout, lỗi mạng, captcha...)',
+      'Sửa lỗi ảnh captcha bị trùng màu với nền tối: hiển thị captcha trên nền trắng để dễ đọc',
+    ],
+  },
+  {
     version: 'v1.6.0',
     date: '2026-08-30',
     changes: [
