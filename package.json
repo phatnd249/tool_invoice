@@ -17,7 +17,8 @@
     "build": "npm run build:backend && npm run build:frontend && npm run copy:frontend",
     "build:backend": "npm run build --prefix backend",
     "build:frontend": "npm run build --prefix frontend",
-    "copy:frontend": "rm -rf backend/public && mkdir -p backend/public && cp -r frontend/dist/* backend/public/",
+    "copy:frontend": "node -e \"const fs=require('fs'); fs.rmSync('backend/public', {recursive:true, force:true}); fs.mkdirSync('backend/public', {recursive:true}); fs.cpSync('frontend/dist', 'backend/public', {recursive:true});\"",
+
     "start": "concurrently \"npm run start:prod --prefix backend\" \"npm run preview --prefix frontend\"",
     "lint": "concurrently \"npm run lint --prefix backend\" \"npm run lint --prefix frontend\"",
     "test": "npm run test --prefix backend",
