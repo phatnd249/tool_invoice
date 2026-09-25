@@ -13,10 +13,14 @@ import { CompaniesModule } from './companies/companies.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { FeedbackModule } from './feedback/feedback.module';
+import { BackupModule } from './backup/backup.module';
+import { TenantModule } from './tenant/tenant.module';
+import { validateEnv } from './config/env-validation';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
+    TenantModule,
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'public'),
       exclude: ['/api/{*path}'],
@@ -32,6 +36,7 @@ import { FeedbackModule } from './feedback/feedback.module';
     InvoicesModule,
     SchedulesModule,
     FeedbackModule,
+    BackupModule,
   ],
 })
 export class AppModule {}
