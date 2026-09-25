@@ -26,6 +26,8 @@ import { InvoicesPage } from '@/pages/invoices/InvoicesPage'
 import { InvoiceListPage } from '@/pages/invoices/InvoiceListPage'
 import { DownloadTasksPage } from '@/pages/invoices/DownloadTasksPage'
 import { SchedulesPage } from '@/pages/schedules/SchedulesPage'
+import { BackupPage } from '@/pages/backup/BackupPage'
+
 
 // Error pages
 import { ForbiddenPage } from '@/pages/errors/ForbiddenPage'
@@ -87,7 +89,16 @@ function ProtectedRoutes() {
           }
         />
         <Route
+          path="/backup"
+          element={
+            <ProtectedRoute permission="backup:manage">
+              <BackupPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/companies"
+
           element={
             <ProtectedRoute permission="company:read">
               <CompaniesPage />

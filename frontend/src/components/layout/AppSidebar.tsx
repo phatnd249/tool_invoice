@@ -15,7 +15,9 @@ import {
   BookOpen,
   MessageSquareText,
   GitCommit,
+  CloudUpload,
 } from 'lucide-react'
+
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
 import { getErrorMessage } from '@/lib/apiClient'
@@ -71,8 +73,10 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { to: '/users', icon: Users, label: 'Người dùng', permission: 'user:read' },
       { to: '/roles', icon: Shield, label: 'Vai trò', permission: 'role:read' },
       { to: '/permissions', icon: Key, label: 'Quyền hạn', permission: 'permission:read' },
+      { to: '/backup', icon: CloudUpload, label: 'Sao lưu Google Drive', permission: 'backup:manage' },
     ],
   },
+
   {
     label: 'Khác',
     items: [
