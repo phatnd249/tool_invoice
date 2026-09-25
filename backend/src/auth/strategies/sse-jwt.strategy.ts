@@ -25,9 +25,15 @@ export class SseJwtStrategy extends PassportStrategy(Strategy, 'sse-jwt') {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
   ) {
+    const secret = config.get<string>('JWT_ACCESS_SECRET');
+    if (!secret) {
+      throw new Error(
+        'JWT_ACCESS_SECRET must be configured (set JWT_ACCESS_SECRET in .env)',
+      );
+    }
     super({
       jwtFromRequest: extractJwtFromQueryOrHeader,
-      secretOrKey: config.get<string>('JWT_ACCESS_SECRET') || 'access-secret',
+      secretOrKey: secret,
       ignoreExpiration: false,
       passReqToCallback: false,
     });
@@ -38,16 +44,24 @@ export class SseJwtStrategy extends PassportStrategy(Strategy, 'sse-jwt') {
     const blacklisted = await this.prisma.tokenBlacklist.findUnique({
       where: { jti: payload.jti },
     });
-    if (blacklisted) throw new UnauthorizedException('Phiên đăng nhập đã bị thu hồi');
+    if (blacklisted)
+      throw new UnauthorizedException('Phiên đăng nhập đã bị thu hồi');
 
     // Check user exists, is active and not deleted
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub, deletedAt: null },
     });
     if (!user || user.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Tài khoản chưa được kích hoạt hoặc không khả dụng');
+      throw new UnauthorizedException(
+        'Tài khoản chưa được kích hoạt hoặc không khả dụng',
+      );
     }
 
-    return { id: user.id, email: user.email, jti: payload.jti };
+    return {
+      id: user.id,
+      email: user.email,
+      jti: payload.jti,
+      exp: payload.exp,
+    };
   }
 }

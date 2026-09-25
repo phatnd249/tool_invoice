@@ -46,7 +46,10 @@ export class UsersController {
   // PATCH /api/profile/change-password
   @Patch('profile/change-password')
   @HttpCode(HttpStatus.OK)
-  changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto) {
+  changePassword(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ChangePasswordDto,
+  ) {
     return this.usersService.changePassword(user.id, dto);
   }
 
@@ -146,7 +149,10 @@ export class UsersController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(PermissionsGuard)
   @RequirePermissions('company:scope')
-  assignCompanies(@Param('id') id: string, @Body() dto: { companyIds: string[] }) {
+  assignCompanies(
+    @Param('id') id: string,
+    @Body() dto: { companyIds: string[] },
+  ) {
     return this.usersService.assignCompanies(id, dto.companyIds);
   }
 }

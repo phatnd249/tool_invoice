@@ -12,8 +12,7 @@ export interface GdtCaptcha {
 export class CaptchaResolverService {
   private readonly logger = new Logger(CaptchaResolverService.name);
 
-  private readonly captchaUrl =
-    'https://hoadondientu.gdt.gov.vn/api/captcha';
+  private readonly captchaUrl = 'https://hoadondientu.gdt.gov.vn/api/captcha';
   private readonly headers = {
     'User-Agent':
       'Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0',

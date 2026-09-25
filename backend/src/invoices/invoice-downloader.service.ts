@@ -9,7 +9,10 @@ import { XmlParserService } from './xml-parser.service';
 import { PreviewService } from './preview.service';
 import { PdfService } from './pdf.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { sanitizeDirName, getInvoiceFileStatusCode } from '../common/invoice-utils';
+import {
+  sanitizeDirName,
+  getInvoiceFileStatusCode,
+} from '../common/invoice-utils';
 import {
   findNextVersion,
   getVersionedFilePath,
@@ -173,10 +176,7 @@ export class InvoiceDownloaderService {
       // Nếu lỗi không phải do GDT thiếu hồ sơ gốc (404/500) → cứ lan truyền
       // (để tầng trên xử lý rate-limit 429 hoặc báo lỗi thật).
       const statusCode = err?.statusCode;
-      if (
-        statusCode !== 404 &&
-        statusCode !== 500
-      ) {
+      if (statusCode !== 404 && statusCode !== 500) {
         throw err;
       }
       isNoZip = true;
@@ -188,7 +188,7 @@ export class InvoiceDownloaderService {
     // ── Trường hợp có ZIP: extract + parse XML ───────────────────
     if (!isNoZip && downloadedZipPath) {
       const parsedItems = await this.processZipFlow(
-        downloadedZipPath!,
+        downloadedZipPath,
         outputDir,
         invoice,
         type,
@@ -258,10 +258,7 @@ export class InvoiceDownloaderService {
     }
 
     // ── Extract XML ──────────────────────────────────────────────
-    const xmlPath = this.xmlParser.extractXmlFromZip(
-      finalZipPath,
-      outputDir,
-    );
+    const xmlPath = this.xmlParser.extractXmlFromZip(finalZipPath, outputDir);
 
     // ── Parse XML → items ────────────────────────────────────────
     const parsed = this.xmlParser.parseInvoiceXml(xmlPath);
@@ -324,8 +321,7 @@ export class InvoiceDownloaderService {
     }
 
     // 2. Parse items từ detail (hdhhdvu / cttkhac)
-    const detailItems =
-      detail?.hdhhdvu || detail?.cttkhac || [];
+    const detailItems = detail?.hdhhdvu || detail?.cttkhac || [];
     const items = this.mapDetailItems(detailItems);
 
     // 2b. Không lấy được items → ném lỗi để hoá đơn giữ trạng thái ERROR.
@@ -392,20 +388,17 @@ export class InvoiceDownloaderService {
     amount: number;
     taxRate?: string;
   }> {
-    return (detailItems || []).map((item: any, idx: number) => ({
-      lineNumber:
-        item.stt != null ? String(item.stt) : undefined,
-      name: String(item.ten || item.thdon || item.tchat || '').trim(),
-      unit:
-        String(item.dvtinh || '').trim() || undefined,
-      quantity:
-        item.sluong != null ? Number(item.sluong) : undefined,
-      price:
-        item.dgia != null ? Number(item.dgia) : undefined,
-      amount: Number(item.thtien) || 0,
-      taxRate:
-        String(item.ltsuat || item.tsuat || '').trim() || undefined,
-    })).filter((it: any) => it.name);
+    return (detailItems || [])
+      .map((item: any, idx: number) => ({
+        lineNumber: item.stt != null ? String(item.stt) : undefined,
+        name: String(item.ten || item.thdon || item.tchat || '').trim(),
+        unit: String(item.dvtinh || '').trim() || undefined,
+        quantity: item.sluong != null ? Number(item.sluong) : undefined,
+        price: item.dgia != null ? Number(item.dgia) : undefined,
+        amount: Number(item.thtien) || 0,
+        taxRate: String(item.ltsuat || item.tsuat || '').trim() || undefined,
+      }))
+      .filter((it: any) => it.name);
   }
 
   /**
@@ -421,8 +414,7 @@ export class InvoiceDownloaderService {
     if (!invoiceId) return undefined;
     try {
       await this.previewService.getPreviewHtml(invoiceId);
-      const cacheHtmlPath =
-        this.previewService.getCachePath(invoiceId);
+      const cacheHtmlPath = this.previewService.getCachePath(invoiceId);
       const pdfFileName = this.pdfService.getPdfFileName({
         sellerTaxCode: invoice.nbmst || '',
         buyerTaxCode: invoice.nmmst || null,

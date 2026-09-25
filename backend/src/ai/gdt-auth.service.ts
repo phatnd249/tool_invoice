@@ -36,9 +36,7 @@ export class GdtAuthService {
     let attempt = 0;
     while (attempt < maxRetries) {
       attempt++;
-      this.logger.log(
-        `Login attempt ${attempt}/${maxRetries} for ${taxCode}`,
-      );
+      this.logger.log(`Login attempt ${attempt}/${maxRetries} for ${taxCode}`);
 
       try {
         const { ckey, cvalue } =

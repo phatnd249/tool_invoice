@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,6 +10,7 @@ import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { AssignCompaniesDto } from './dto/assign-companies.dto';
 import { SchedulerRunner } from './scheduler.runner';
+import { TenantAccessService } from '../tenant/tenant-access.service';
 
 const includeCompanies = {
   companies: {
@@ -41,10 +43,11 @@ const includeCompanies = {
 function formatSchedule(s: any) {
   return {
     ...s,
-    companies: s.companies?.map((sc: any) => ({
-      companyId: sc.companyId,
-      company: sc.company,
-    })) || [],
+    companies:
+      s.companies?.map((sc: any) => ({
+        companyId: sc.companyId,
+        company: sc.company,
+      })) || [],
   };
 }
 
@@ -55,7 +58,27 @@ export class SchedulesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly runner: SchedulerRunner,
+    private readonly tenant: TenantAccessService,
   ) {}
+
+  /**
+   * Kiểm tra user có thể xem/quản lý schedule không.
+   * Quy tắc: global scope (SUPER_ADMIN/company:scope) hoặc truy cập được
+   * TẤT CẢ các công ty trong schedule.
+   */
+  private async assertScheduleScope(userId: string, schedule: any) {
+    if (await this.tenant.hasGlobalScope(userId)) return;
+    const scheduleCompanies: string[] = (schedule.companies ?? []).map(
+      (sc: any) => sc.companyId,
+    );
+    const accessible = new Set(await this.tenant.companyIds(userId));
+    const allAccessible = scheduleCompanies.every((cid) => accessible.has(cid));
+    if (!allAccessible) {
+      throw new ForbiddenException(
+        'Bạn không có quyền truy cập tất cả doanh nghiệp trong lịch này',
+      );
+    }
+  }
 
   /**
    * Load all active schedules & start cron jobs on server boot.
@@ -74,23 +97,34 @@ export class SchedulesService {
   /**
    * GET /api/schedules
    */
-  async findAll() {
+  async findAll(userId: string) {
     const rows = await this.prisma.schedule.findMany({
       include: includeCompanies,
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(formatSchedule);
+
+    if (await this.tenant.hasGlobalScope(userId)) {
+      return rows.map(formatSchedule);
+    }
+
+    const accessible = new Set(await this.tenant.companyIds(userId));
+    return rows
+      .filter((s) =>
+        (s.companies ?? []).every((sc: any) => accessible.has(sc.companyId)),
+      )
+      .map(formatSchedule);
   }
 
   /**
    * GET /api/schedules/:id
    */
-  async findOne(id: string) {
+  async findOne(id: string, userId: string) {
     const schedule = await this.prisma.schedule.findUnique({
       where: { id },
       include: includeCompanies,
     });
     if (!schedule) throw new NotFoundException('Không tìm thấy lịch.');
+    await this.assertScheduleScope(userId, schedule);
     return formatSchedule(schedule);
   }
 
@@ -109,8 +143,10 @@ export class SchedulesService {
       data: {
         name: dto.name || null,
         repeatMode: dto.repeatMode,
-        cronExpression: dto.repeatMode === 'once' ? '' : (dto.cronExpression ?? ''),
-        scheduledAt: dto.repeatMode === 'once' ? new Date(dto.scheduledAt!) : null,
+        cronExpression:
+          dto.repeatMode === 'once' ? '' : (dto.cronExpression ?? ''),
+        scheduledAt:
+          dto.repeatMode === 'once' ? new Date(dto.scheduledAt!) : null,
         dateRangeDays: dto.dateRangeDays ?? null,
         invoiceType: dto.invoiceType,
         overwriteMode: dto.overwriteMode || 'SKIP',
@@ -131,12 +167,13 @@ export class SchedulesService {
   /**
    * PUT /api/schedules/:id
    */
-  async update(id: string, dto: UpdateScheduleDto) {
+  async update(id: string, dto: UpdateScheduleDto, userId: string) {
     const existing = await this.prisma.schedule.findUnique({
       where: { id },
       include: includeCompanies,
     });
     if (!existing) throw new NotFoundException('Không tìm thấy lịch.');
+    await this.assertScheduleScope(userId, existing);
 
     const data: any = {};
     if (dto.name !== undefined) data.name = dto.name;
@@ -149,13 +186,16 @@ export class SchedulesService {
     if (dto.repeatMode !== undefined) {
       if (dto.repeatMode === 'once') {
         data.cronExpression = '';
-        data.scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : existing.scheduledAt;
+        data.scheduledAt = dto.scheduledAt
+          ? new Date(dto.scheduledAt)
+          : existing.scheduledAt;
       } else {
         data.scheduledAt = null;
         data.cronExpression = dto.cronExpression ?? existing.cronExpression;
       }
     } else {
-      if (dto.cronExpression !== undefined) data.cronExpression = dto.cronExpression;
+      if (dto.cronExpression !== undefined)
+        data.cronExpression = dto.cronExpression;
       if (dto.scheduledAt !== undefined)
         data.scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
     }
@@ -181,12 +221,13 @@ export class SchedulesService {
   /**
    * PATCH /api/schedules/:id/toggle
    */
-  async toggle(id: string) {
+  async toggle(id: string, userId: string) {
     const schedule = await this.prisma.schedule.findUnique({
       where: { id },
       include: includeCompanies,
     });
     if (!schedule) throw new NotFoundException('Không tìm thấy lịch.');
+    await this.assertScheduleScope(userId, schedule);
 
     const updated = await this.prisma.schedule.update({
       where: { id },
@@ -208,11 +249,24 @@ export class SchedulesService {
   /**
    * PUT /api/schedules/:id/companies
    */
-  async updateCompanies(id: string, dto: AssignCompaniesDto) {
+  async updateCompanies(id: string, dto: AssignCompaniesDto, userId: string) {
     const schedule = await this.prisma.schedule.findUnique({
       where: { id },
+      include: includeCompanies,
     });
     if (!schedule) throw new NotFoundException('Không tìm thấy lịch.');
+    await this.assertScheduleScope(userId, schedule);
+
+    // Người dùng chỉ được gán các doanh nghiệp mà họ có quyền truy cập
+    if (!(await this.tenant.hasGlobalScope(userId))) {
+      const accessible = new Set(await this.tenant.companyIds(userId));
+      const unauthorized = dto.companyIds.filter((cid) => !accessible.has(cid));
+      if (unauthorized.length > 0) {
+        throw new ForbiddenException(
+          'Bạn không có quyền gán các doanh nghiệp không thuộc phạm vi của mình',
+        );
+      }
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.scheduleCompany.deleteMany({ where: { scheduleId: id } });
@@ -245,14 +299,23 @@ export class SchedulesService {
       this.runner.stopJob(id);
     }
 
-    this.logger.log(`Schedule companies updated: ${id} -> [${dto.companyIds.join(',')}]`);
+    this.logger.log(
+      `Schedule companies updated: ${id} -> [${dto.companyIds.join(',')}]`,
+    );
     return formatted;
   }
 
   /**
    * DELETE /api/schedules/:id
    */
-  async remove(id: string) {
+  async remove(id: string, userId: string) {
+    const schedule = await this.prisma.schedule.findUnique({
+      where: { id },
+      include: includeCompanies,
+    });
+    if (!schedule) throw new NotFoundException('Không tìm thấy lịch.');
+    await this.assertScheduleScope(userId, schedule);
+
     this.runner.stopJob(id);
     await this.prisma.schedule.delete({ where: { id } });
     this.logger.log(`Schedule deleted: ${id}`);

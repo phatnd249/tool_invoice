@@ -17,9 +17,16 @@ import { PdfService } from './pdf.service';
 import { DownloadInvoicesDto } from './dto/download-invoices.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
-import { sanitizeDirName, delay, resolveInvoicePath } from '../common/invoice-utils';
+import {
+  sanitizeDirName,
+  delay,
+  resolveInvoicePath,
+} from '../common/invoice-utils';
 import { TokenResolverService } from '../common/token-resolver.service';
 import { InvoiceDownloaderService } from './invoice-downloader.service';
+import { TenantAccessService } from '../tenant/tenant-access.service';
+
+const MAX_DATE_RANGE_DAYS = 366;
 
 @Injectable()
 export class InvoicesService {
@@ -36,22 +43,53 @@ export class InvoicesService {
     private readonly previewService: PreviewService,
     private readonly excelService: ExcelService,
     private readonly pdfService: PdfService,
+    private readonly tenant: TenantAccessService,
   ) {}
+
+  // ─── Helpers ───────────────────────────────────────────────────────────
+
+  private validateDateRange(startDate: string, endDate: string): void {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new BadRequestException('Ngày không hợp lệ');
+    }
+    if (start > end) {
+      throw new BadRequestException(
+        'Ngày bắt đầu phải trước hoặc bằng ngày kết thúc',
+      );
+    }
+    const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+    if (days > MAX_DATE_RANGE_DAYS) {
+      throw new BadRequestException(
+        `Khoảng ngày tối đa ${MAX_DATE_RANGE_DAYS} ngày`,
+      );
+    }
+  }
+
+  private async assertInvoiceScope(userId: string, invoiceId: string) {
+    await this.tenant.assertInvoiceAccess(userId, invoiceId);
+  }
+
+  private async invoiceScopeFilter(userId: string) {
+    return this.tenant.companyScopeWhere(userId);
+  }
 
   // ─── Check Existing ───────────────────────────────────────────────────
 
-  async checkExisting(params: {
-    companyId: string;
-    startDate: string;
-    endDate: string;
-    invoiceType?: string;
-  }): Promise<{ hasExisting: boolean; count: number }> {
-    const {
-      companyId,
-      startDate,
-      endDate,
-      invoiceType = 'BOTH',
-    } = params;
+  async checkExisting(
+    params: {
+      companyId: string;
+      startDate: string;
+      endDate: string;
+      invoiceType?: string;
+    },
+    userId: string,
+  ): Promise<{ hasExisting: boolean; count: number }> {
+    const { companyId, startDate, endDate, invoiceType = 'BOTH' } = params;
+
+    await this.tenant.assertCompanyAccess(userId, companyId);
+    this.validateDateRange(startDate, endDate);
 
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
@@ -83,11 +121,22 @@ export class InvoicesService {
 
   // ─── Download ────────────────────────────────────────────────────────────
 
-  async downloadInvoices(dto: DownloadInvoicesDto) {
+  async downloadInvoices(dto: DownloadInvoicesDto, userId?: string) {
     const { companyId, startDate, endDate, invoiceType = 'BOTH' } = dto;
 
+    if (userId) {
+      // Truy cập trực tiếp từ HTTP: phải có quyền trên company.
+      // Path cron (scheduler) có userId undefined nhưng đã được kiểm soát
+      // ngay khi tạo/assign schedule.
+      await this.tenant.assertCompanyAccess(userId, companyId);
+    }
+    this.validateDateRange(startDate, endDate);
+
     // 1. Resolve company + token
-    const { company, token } = await this.tokenResolver.resolve(companyId);
+    const { company, token } = await this.tokenResolver.resolve(
+      companyId,
+      userId,
+    );
 
     // 2. Xác định loại cần tải
     const types: Array<'BUY' | 'SELL'> =
@@ -130,11 +179,7 @@ export class InvoicesService {
         // Query một ngày
         let dayInvoices: GdtRawInvoice[];
         try {
-          dayInvoices = await this.gdtClient.queryOneDay(
-            date,
-            token,
-            type,
-          );
+          dayInvoices = await this.gdtClient.queryOneDay(date, token, type);
         } catch (err: any) {
           this.logger.warn(
             `Query failed for ${dateStr} (${type}): ${err.message}`,
@@ -143,9 +188,7 @@ export class InvoicesService {
         }
 
         typeTotalQueried += dayInvoices.length;
-        this.logger.log(
-          `  ${dateStr}: ${dayInvoices.length} invoices`,
-        );
+        this.logger.log(`  ${dateStr}: ${dayInvoices.length} invoices`);
 
         if (dayInvoices.length === 0) continue;
 
@@ -178,9 +221,7 @@ export class InvoicesService {
 
             if (result.success) {
               typeItemsDownloaded++;
-              this.logger.debug(
-                `  ✓ Downloaded: ${result.itemsCount} items`,
-              );
+              this.logger.debug(`  ✓ Downloaded: ${result.itemsCount} items`);
             }
           } catch (error: any) {
             typeItemsFailed++;
@@ -250,11 +291,7 @@ export class InvoicesService {
       ),
     );
     const end = new Date(
-      Date.UTC(
-        endDate.getFullYear(),
-        endDate.getMonth(),
-        endDate.getDate(),
-      ),
+      Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate()),
     );
 
     while (current <= end) {
@@ -283,7 +320,10 @@ export class InvoicesService {
 
   // ─── Query (datatable) ──────────────────────────────────────────────────
 
-  async findAll(query: QueryInvoicesDto): Promise<PaginatedResult<any>> {
+  async findAll(
+    query: QueryInvoicesDto,
+    userId: string,
+  ): Promise<PaginatedResult<any>> {
     const {
       page = 1,
       limit = 10,
@@ -297,9 +337,15 @@ export class InvoicesService {
     } = query;
     const skip = (page - 1) * limit;
 
+    if (companyId) {
+      await this.tenant.assertCompanyAccess(userId, companyId);
+    }
+
     const where: any = {
       ...(type && { type }),
-      ...(companyId && { companyId }),
+      ...(companyId
+        ? { companyId }
+        : await this.tenant.companyScopeWhere(userId)),
       ...(startDate || endDate
         ? { invoiceDate: this.toVietnamDayRange(startDate, endDate) }
         : {}),
@@ -328,7 +374,8 @@ export class InvoicesService {
     return paginate(invoices, total, page, limit);
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, userId: string) {
+    await this.assertInvoiceScope(userId, id);
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
       include: {
@@ -344,34 +391,45 @@ export class InvoicesService {
 
   // ─── Preview ────────────────────────────────────────────────────────────
 
-  async previewHtml(id: string): Promise<string> {
+  async previewHtml(id: string, userId: string): Promise<string> {
+    await this.assertInvoiceScope(userId, id);
     return this.previewService.getPreviewHtml(id);
   }
 
   // ─── Export Excel ───────────────────────────────────────────────────────
 
-  async exportExcel(invoiceIds: string[]): Promise<Buffer> {
+  async exportExcel(invoiceIds: string[], userId: string): Promise<Buffer> {
     const invoices = await this.prisma.invoice.findMany({
-      where: { id: { in: invoiceIds } },
+      where: {
+        id: { in: invoiceIds },
+        ...(await this.invoiceScopeFilter(userId)),
+      },
       include: { items: true },
     });
 
     if (invoices.length === 0) {
-      throw new NotFoundException('Không tìm thấy hoá đơn nào');
+      throw new NotFoundException(
+        'Không tìm thấy hoá đơn nào trong phạm vi của bạn',
+      );
     }
 
     const data = invoices.map((inv) => this.mapToParsedInvoice(inv));
     return this.excelService.generateInvoiceReport(data);
   }
 
-  async exportModule7(invoiceIds: string[]): Promise<Buffer> {
+  async exportModule7(invoiceIds: string[], userId: string): Promise<Buffer> {
     const invoices = await this.prisma.invoice.findMany({
-      where: { id: { in: invoiceIds } },
+      where: {
+        id: { in: invoiceIds },
+        ...(await this.invoiceScopeFilter(userId)),
+      },
       include: { items: true },
     });
 
     if (invoices.length === 0) {
-      throw new NotFoundException('Không tìm thấy hoá đơn nào');
+      throw new NotFoundException(
+        'Không tìm thấy hoá đơn nào trong phạm vi của bạn',
+      );
     }
 
     const data = invoices.map((inv) => ({
@@ -385,7 +443,9 @@ export class InvoicesService {
 
   async downloadPdf(
     id: string,
+    userId: string,
   ): Promise<{ pdfPath: string; fileName: string }> {
+    await this.assertInvoiceScope(userId, id);
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
       include: { company: { select: { name: true, id: true } } },
@@ -412,11 +472,8 @@ export class InvoicesService {
     const cacheHtmlPath = this.previewService.getCachePath(id);
 
     // Xác định thư mục lưu PDF (cùng thư mục ZIP)
-    const invoicesBaseDir =
-      this.config.get('INVOICES_DIR') || './invoices';
-    const companyDir = sanitizeDirName(
-      invoice.company?.name || 'unknown',
-    );
+    const invoicesBaseDir = this.config.get('INVOICES_DIR') || './invoices';
+    const companyDir = sanitizeDirName(invoice.company?.name || 'unknown');
     const invDate = new Date(invoice.invoiceDate);
     const monthDir = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`;
     const pdfDir = path.join(
@@ -446,7 +503,9 @@ export class InvoicesService {
 
   async getXmlPath(
     id: string,
+    userId: string,
   ): Promise<{ xmlPath: string; fileName: string }> {
+    await this.assertInvoiceScope(userId, id);
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
     });
@@ -456,7 +515,9 @@ export class InvoicesService {
     }
 
     if (!invoice.xmlPath) {
-      throw new NotFoundException('Không tìm thấy đường dẫn XML trong cơ sở dữ liệu');
+      throw new NotFoundException(
+        'Không tìm thấy đường dẫn XML trong cơ sở dữ liệu',
+      );
     }
 
     const baseDir = this.config.get('INVOICES_DIR') || './invoices';
@@ -473,7 +534,9 @@ export class InvoicesService {
 
   async getZipPath(
     id: string,
+    userId: string,
   ): Promise<{ zipPath: string; fileName: string }> {
+    await this.assertInvoiceScope(userId, id);
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
     });
@@ -483,7 +546,9 @@ export class InvoicesService {
     }
 
     if (!invoice.zipPath) {
-      throw new NotFoundException('Không tìm thấy đường dẫn ZIP trong cơ sở dữ liệu');
+      throw new NotFoundException(
+        'Không tìm thấy đường dẫn ZIP trong cơ sở dữ liệu',
+      );
     }
 
     const baseDir = this.config.get('INVOICES_DIR') || './invoices';
@@ -500,19 +565,21 @@ export class InvoicesService {
 
   // ─── Retry Failed ──────────────────────────────────────────────────────
 
-  async retryFailed(invoiceIds: string[]): Promise<{
+  async retryFailed(
+    invoiceIds: string[],
+    userId: string,
+  ): Promise<{
     successCount: number;
     failedCount: number;
     errors: Array<{ invoiceNumber: string; error: string }>;
   }> {
     // 1. Query invoices có downloadStatus = 'ERROR' hoặc null (chờ tải)
+    //    — giới hạn trong phạm vi công ty user được truy cập.
     const invoices = await this.prisma.invoice.findMany({
       where: {
         id: { in: invoiceIds },
-        OR: [
-          { downloadStatus: 'ERROR' },
-          { downloadStatus: null },
-        ],
+        ...(await this.invoiceScopeFilter(userId)),
+        OR: [{ downloadStatus: 'ERROR' }, { downloadStatus: null }],
       },
       include: { company: true },
     });
@@ -533,8 +600,7 @@ export class InvoicesService {
     }
 
     // Khởi tạo counters
-    const invoicesBaseDir =
-      this.config.get('INVOICES_DIR') || './invoices';
+    const invoicesBaseDir = this.config.get('INVOICES_DIR') || './invoices';
     let successCount = 0;
     let failedCount = 0;
     const errors: Array<{ invoiceNumber: string; error: string }> = [];
@@ -543,7 +609,7 @@ export class InvoicesService {
     const tokenMap = new Map<string, string>();
     for (const companyId of byCompany.keys()) {
       try {
-        const { token } = await this.tokenResolver.resolve(companyId);
+        const { token } = await this.tokenResolver.resolve(companyId, userId);
         tokenMap.set(companyId, token);
       } catch (err: any) {
         for (const inv of byCompany.get(companyId) || []) {

@@ -89,8 +89,7 @@ export class MaSoThueService {
           .next()
           .find('span[itemprop="telephone"]')
           .text()
-          .trim() ||
-        $('td i.fa-phone').parent().next().text().trim();
+          .trim() || $('td i.fa-phone').parent().next().text().trim();
     }
 
     const activeDate = $('td i.fa-calendar')
@@ -134,7 +133,7 @@ export class MaSoThueService {
   ): Promise<MaSoThueResult> {
     this.logger.log(`Fetching search page for MST: ${codeToSearch}`);
 
-    const searchUrl = `https://masothue.com/Search/?q=${codeToSearch}&type=enterpriseTax`;
+    const searchUrl = `https://masothue.com/Search/?q=${encodeURIComponent(codeToSearch)}&type=enterpriseTax`;
     const response = await axios.get(searchUrl, this.axiosConfig);
     const $ = cheerio.load(response.data);
 
@@ -248,9 +247,7 @@ export class MaSoThueService {
       try {
         return await this.lookupFromVietQR(codeToSearch);
       } catch (fallbackErr: any) {
-        this.logger.error(
-          `All lookup sources failed for MST ${codeToSearch}`,
-        );
+        this.logger.error(`All lookup sources failed for MST ${codeToSearch}`);
         throw new Error(
           'Không tìm thấy doanh nghiệp với mã số thuế này trên cả MaSoThue và VietQR.',
         );

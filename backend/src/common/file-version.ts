@@ -12,9 +12,7 @@ export function findNextVersion(filePath: string): number {
   const baseName = path.basename(filePath, ext);
 
   let version = 1;
-  while (
-    fs.existsSync(path.join(dir, `${baseName}-v${version}${ext}`))
-  ) {
+  while (fs.existsSync(path.join(dir, `${baseName}-v${version}${ext}`))) {
     version++;
   }
   return version;
@@ -80,10 +78,7 @@ export function removeAllVersionedFiles(
         version++;
         continue;
       }
-      const versionedPath = path.join(
-        dir,
-        `${baseName}-v${version}${fileExt}`,
-      );
+      const versionedPath = path.join(dir, `${baseName}-v${version}${fileExt}`);
       if (!fs.existsSync(versionedPath)) break;
       try {
         fs.unlinkSync(versionedPath);

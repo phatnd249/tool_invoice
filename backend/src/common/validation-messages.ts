@@ -128,7 +128,10 @@ function translateConstraint(
   }
 }
 
-function collectMessages(errors: ValidationError[], out: string[] = []): string[] {
+function collectMessages(
+  errors: ValidationError[],
+  out: string[] = [],
+): string[] {
   for (const error of errors) {
     if (error.constraints) {
       for (const [key, message] of Object.entries(error.constraints)) {
@@ -145,5 +148,7 @@ function collectMessages(errors: ValidationError[], out: string[] = []): string[
 /** exceptionFactory cho ValidationPipe: trả BadRequest với message tiếng Việt */
 export const vietnameseValidationFactory = (errors: ValidationError[]) => {
   const messages = collectMessages(errors);
-  return new BadRequestException(messages.length > 0 ? messages : 'Dữ liệu gửi lên không hợp lệ');
+  return new BadRequestException(
+    messages.length > 0 ? messages : 'Dữ liệu gửi lên không hợp lệ',
+  );
 };

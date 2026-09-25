@@ -1,6 +1,12 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GdtAuthService } from '../ai/gdt-auth.service';
+import { TenantAccessService } from '../tenant/tenant-access.service';
 
 /**
  * Service dùng chung để resolve company + token cho GDT API.
@@ -10,6 +16,9 @@ import { GdtAuthService } from '../ai/gdt-auth.service';
  * 1. Query company từ DB
  * 2. Nếu token null hoặc hết hạn → auto-refresh (chỉ khi loginMode=AUTO)
  * 3. Trả về { company, token }
+ *
+ * Security: caller PHẢI truyền actorId để xác thực quyền truy cập company
+ * trước khi trả token GDT (chống lộ token giữa các tenant).
  */
 @Injectable()
 export class TokenResolverService {
@@ -18,9 +27,17 @@ export class TokenResolverService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gdtAuth: GdtAuthService,
+    private readonly tenant: TenantAccessService,
   ) {}
 
-  async resolve(companyId: string): Promise<{ company: any; token: string }> {
+  async resolve(
+    companyId: string,
+    actorId?: string,
+  ): Promise<{ company: any; token: string }> {
+    if (actorId) {
+      await this.tenant.assertCompanyAccess(actorId, companyId);
+    }
+
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
     });

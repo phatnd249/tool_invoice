@@ -43,7 +43,8 @@ export class InvoiceReportService extends ExcelBaseService {
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     summarySheet.getRow(1).height = 40;
 
-    summarySheet.getCell('A2').value = `Ngày xuất báo cáo: ${new Date().toLocaleString('vi-VN')}`;
+    summarySheet.getCell('A2').value =
+      `Ngày xuất báo cáo: ${new Date().toLocaleString('vi-VN')}`;
     summarySheet.getCell('A2').font = this.italicFont;
     summarySheet.getRow(2).height = 20;
 
@@ -191,13 +192,11 @@ export class InvoiceReportService extends ExcelBaseService {
       subSheet.getCell('A2').font = this.linkFont;
       subSheet.getRow(2).height = 20;
 
-      subSheet.getCell(
-        'A3',
-      ).value = `Người bán: ${inv.sellerName} (MST: ${inv.sellerTaxCode})`;
+      subSheet.getCell('A3').value =
+        `Người bán: ${inv.sellerName} (MST: ${inv.sellerTaxCode})`;
       subSheet.getCell('A3').font = this.dataFont;
-      subSheet.getCell(
-        'A4',
-      ).value = `Người mua: ${inv.buyerName} (MST: ${inv.buyerTaxCode})`;
+      subSheet.getCell('A4').value =
+        `Người mua: ${inv.buyerName} (MST: ${inv.buyerTaxCode})`;
       subSheet.getCell('A4').font = this.dataFont;
 
       subSheet.getRow(3).height = 18;

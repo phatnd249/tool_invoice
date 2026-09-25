@@ -71,9 +71,7 @@ export class PdfService {
 
     const htmlContent = fs.readFileSync(cacheHtmlPath, 'utf-8');
 
-    this.logger.log(
-      `Converting HTML to PDF for invoice ${invoiceId}...`,
-    );
+    this.logger.log(`Converting HTML to PDF for invoice ${invoiceId}...`);
     const pdfBuffer = await this.convertHtmlToPdf(htmlContent);
 
     fs.mkdirSync(pdfDir, { recursive: true });
@@ -99,10 +97,8 @@ export class PdfService {
     const taxCode =
       invoice.companyTaxCode ||
       (invoice.type === 'BUY'
-        ? (invoice.buyerTaxCode || invoice.sellerTaxCode)
-        : (invoice.sellerTaxCode ||
-            invoice.buyerTaxCode ||
-            'UNKNOWN'));
+        ? invoice.buyerTaxCode || invoice.sellerTaxCode
+        : invoice.sellerTaxCode || invoice.buyerTaxCode || 'UNKNOWN');
 
     const statusFileCode = getInvoiceFileStatusCode({
       khhdon: invoice.invoiceSymbol,

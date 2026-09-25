@@ -16,7 +16,14 @@ const mockRoleResult = {
   createdAt: new Date(),
   updatedAt: new Date(),
   rolePermissions: [
-    { permission: { id: 'perm-1', name: 'user:read', description: null, group: 'user' } },
+    {
+      permission: {
+        id: 'perm-1',
+        name: 'user:read',
+        description: null,
+        group: 'user',
+      },
+    },
   ],
   _count: { userRoles: 2 },
 };
@@ -77,7 +84,9 @@ describe('RolesService', () => {
     it('should throw NotFoundException when role not found', async () => {
       mockPrisma.role.findUnique.mockResolvedValue(null);
 
-      await expect(service.findOne('bad-id')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('bad-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -88,7 +97,10 @@ describe('RolesService', () => {
       mockPrisma.role.findUnique.mockResolvedValue(null);
       mockPrisma.role.create.mockResolvedValue(mockRoleResult);
 
-      const result = await service.create({ name: 'editor', description: 'Editor role' });
+      const result = await service.create({
+        name: 'editor',
+        description: 'Editor role',
+      });
 
       expect(mockPrisma.role.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -137,7 +149,11 @@ describe('RolesService', () => {
   describe('update', () => {
     it('should update role name and permissions', async () => {
       mockPrisma.role.findUnique
-        .mockResolvedValueOnce({ id: 'role-1', isSystem: false, name: 'EDITOR' })
+        .mockResolvedValueOnce({
+          id: 'role-1',
+          isSystem: false,
+          name: 'EDITOR',
+        })
         .mockResolvedValueOnce(null); // no name conflict
       mockPrisma.role.update.mockResolvedValue({
         ...mockRoleResult,
@@ -178,7 +194,11 @@ describe('RolesService', () => {
 
     it('should throw ConflictException if new name is already taken', async () => {
       mockPrisma.role.findUnique
-        .mockResolvedValueOnce({ id: 'role-1', isSystem: false, name: 'EDITOR' })
+        .mockResolvedValueOnce({
+          id: 'role-1',
+          isSystem: false,
+          name: 'EDITOR',
+        })
         .mockResolvedValueOnce({ id: 'role-2', name: 'AUTHOR' }); // conflict
 
       await expect(
@@ -200,8 +220,10 @@ describe('RolesService', () => {
 
       const result = await service.delete('role-1');
 
-      expect(mockPrisma.role.delete).toHaveBeenCalledWith({ where: { id: 'role-1' } });
-      expect(result.message).toContain('deleted');
+      expect(mockPrisma.role.delete).toHaveBeenCalledWith({
+        where: { id: 'role-1' },
+      });
+      expect(result.message).toContain('thành công');
     });
 
     it('should throw ForbiddenException when deleting a system role', async () => {
@@ -211,7 +233,9 @@ describe('RolesService', () => {
         _count: { userRoles: 0 },
       });
 
-      await expect(service.delete('role-1')).rejects.toThrow(ForbiddenException);
+      await expect(service.delete('role-1')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw BadRequestException when role is assigned to users', async () => {
@@ -221,7 +245,9 @@ describe('RolesService', () => {
         _count: { userRoles: 3 },
       });
 
-      await expect(service.delete('role-1')).rejects.toThrow(BadRequestException);
+      await expect(service.delete('role-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw NotFoundException when role not found', async () => {

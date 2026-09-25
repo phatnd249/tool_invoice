@@ -100,13 +100,9 @@ export class GdtQueryClientService {
         'query',
       );
       results.push(...standard);
-      this.logger.log(
-        `Standard API: ${standard.length} invoices (${type})`,
-      );
+      this.logger.log(`Standard API: ${standard.length} invoices (${type})`);
     } catch (error: any) {
-      this.logger.warn(
-        `Standard API failed for ${type}: ${error.message}`,
-      );
+      this.logger.warn(`Standard API failed for ${type}: ${error.message}`);
     }
 
     // Query sco (cash register) invoices
@@ -118,13 +114,9 @@ export class GdtQueryClientService {
         'sco-query',
       );
       results.push(...sco);
-      this.logger.log(
-        `SCO API: ${sco.length} invoices (${type})`,
-      );
+      this.logger.log(`SCO API: ${sco.length} invoices (${type})`);
     } catch (error: any) {
-      this.logger.warn(
-        `SCO API failed for ${type}: ${error.message}`,
-      );
+      this.logger.warn(`SCO API failed for ${type}: ${error.message}`);
     }
 
     return results;
@@ -143,7 +135,10 @@ export class GdtQueryClientService {
 
     // Lấy tổng số trước
     const countUrl = `${baseUrl}?sort=tdlap:desc&size=1&search=${encodeURIComponent(searchStr)}`;
-    const countResp = await this.http.fetchWithRetry(countUrl, { headers, timeout: 40000 });
+    const countResp = await this.http.fetchWithRetry(countUrl, {
+      headers,
+      timeout: 40000,
+    });
 
     if (countResp.status === 401) {
       throw Object.assign(new Error('GDT token expired'), { status: 401 });
@@ -163,7 +158,10 @@ export class GdtQueryClientService {
         url = `${baseUrl}?sort=tdlap:desc&size=${this.PAGE_SIZE}&search=${encodeURIComponent(searchStr)}`;
       }
 
-      const resp = await this.http.fetchWithRetry(url, { headers, timeout: 40000 });
+      const resp = await this.http.fetchWithRetry(url, {
+        headers,
+        timeout: 40000,
+      });
 
       if (resp.status === 401) {
         throw Object.assign(new Error('GDT token expired'), { status: 401 });

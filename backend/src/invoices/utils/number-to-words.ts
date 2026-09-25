@@ -6,10 +6,10 @@ const hundreds = ('không một' + defaultNumbers).split(' ');
 
 export function numberToWords(number: number): string {
   if (number === 0) return 'Không đồng';
-  
+
   let strNumber = Math.round(number).toString();
   let result = '';
-  let arr: string[] = [];
+  const arr: string[] = [];
 
   while (strNumber.length > 0) {
     arr.push(strNumber.substring(strNumber.length - 3));
@@ -18,19 +18,19 @@ export function numberToWords(number: number): string {
 
   for (let i = arr.length - 1; i >= 0; i--) {
     let rs = '';
-    let n3 = parseInt(arr[i]);
+    const n3 = parseInt(arr[i]);
     if (n3 === 0 && arr.length > 1) continue;
 
-    let d3 = Math.floor(n3 / 100);
-    let d2 = Math.floor((n3 % 100) / 10);
-    let d1 = n3 % 10;
+    const d3 = Math.floor(n3 / 100);
+    const d2 = Math.floor((n3 % 100) / 10);
+    const d1 = n3 % 10;
 
     if (d3 > 0 || i < arr.length - 1) {
       rs += hundreds[d3] + ' trăm ';
     }
-    
+
     if (d2 > 0) {
-      rs += (d2 === 1 ? 'mười ' : tens[d2] + ' mươi ');
+      rs += d2 === 1 ? 'mười ' : tens[d2] + ' mươi ';
     } else if (d1 > 0 && d3 > 0) {
       rs += 'lẻ ';
     }
@@ -46,7 +46,7 @@ export function numberToWords(number: number): string {
       else if (i === 2) rs += 'triệu ';
       else if (i === 1) rs += 'nghìn ';
     }
-    
+
     result += rs;
   }
 

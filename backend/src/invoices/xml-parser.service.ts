@@ -92,9 +92,7 @@ export class XmlParserService {
                 ? this.toNumber(item.SLuong)
                 : undefined,
             price:
-              item.DGia !== undefined
-                ? this.toNumber(item.DGia)
-                : undefined,
+              item.DGia !== undefined ? this.toNumber(item.DGia) : undefined,
             amount: this.toNumber(item.ThTien),
             taxRate: this.getSafeText(item.TSuat) || undefined,
           });
@@ -102,19 +100,14 @@ export class XmlParserService {
       }
     }
 
-    this.logger.debug(
-      `Parsed ${items.length} items from ${xmlPath}`,
-    );
+    this.logger.debug(`Parsed ${items.length} items from ${xmlPath}`);
 
     return { items };
   }
 
   // ─── Private helpers ────────────────────────────────────────────────────
 
-  private findKeyRecursive(
-    obj: any,
-    targetKey: string,
-  ): any {
+  private findKeyRecursive(obj: any, targetKey: string): any {
     if (!obj || typeof obj !== 'object') return undefined;
 
     const keys = Object.keys(obj);
@@ -136,9 +129,7 @@ export class XmlParserService {
   private getSafeText(val: any): string {
     if (val === undefined || val === null) return '';
     if (typeof val === 'object') {
-      return val['#text'] !== undefined
-        ? String(val['#text']).trim()
-        : '';
+      return val['#text'] !== undefined ? String(val['#text']).trim() : '';
     }
     return String(val).trim();
   }

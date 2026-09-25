@@ -36,7 +36,7 @@ const mockPrisma = {
     update: jest.fn(),
     count: jest.fn(),
   },
-  role: { findMany: jest.fn() },
+  role: { findMany: jest.fn(), findFirst: jest.fn() },
   userRole: { upsert: jest.fn(), deleteMany: jest.fn() },
   refreshToken: { updateMany: jest.fn() },
 };
@@ -88,7 +88,7 @@ describe('UsersService', () => {
       mockPrisma.user.findMany.mockResolvedValue([]);
       mockPrisma.user.count.mockResolvedValue(0);
 
-      await service.findAll({ status: 'ACTIVE' as any, page: 1, limit: 10 });
+      await service.findAll({ status: 'ACTIVE', page: 1, limit: 10 });
 
       expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -113,7 +113,9 @@ describe('UsersService', () => {
     it('should throw NotFoundException when user not found', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.findOne('uid-999')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('uid-999')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -129,7 +131,9 @@ describe('UsersService', () => {
 
     it('should create a new user with assigned roles', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
-      mockPrisma.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'USER' }]);
+      mockPrisma.role.findMany.mockResolvedValue([
+        { id: 'role-1', name: 'USER' },
+      ]);
       mockPrisma.user.create.mockResolvedValue({
         ...mockUserResult,
         email: 'jane@example.com',
@@ -175,9 +179,18 @@ describe('UsersService', () => {
     it('should throw ForbiddenException when editing a SUPER_ADMIN by another user', async () => {
       const superAdminUser = {
         ...mockUserResult,
-        userRoles: [{ role: { id: 'r-1', name: 'SUPER_ADMIN', description: null } }],
+        userRoles: [
+          { role: { id: 'r-1', name: 'SUPER_ADMIN', description: null } },
+        ],
       };
-      mockPrisma.user.findUnique.mockResolvedValue(superAdminUser);
+      const plainActor = {
+        ...mockUserResult,
+        userRoles: [{ role: { id: 'r-2', name: 'USER', description: null } }],
+      };
+      // call 1: findUserOrFail(id), call 2: isSuperAdminActor('other-admin')
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(superAdminUser)
+        .mockResolvedValueOnce(plainActor);
 
       await expect(
         service.update('uid-1', { fullName: 'New Name' }, 'other-admin'),
@@ -235,7 +248,7 @@ describe('UsersService', () => {
           data: { deletedAt: expect.any(Date) },
         }),
       );
-      expect(result.message).toContain('deleted');
+      expect(result.message).toContain('thành công');
     });
 
     it('should throw BadRequestException when deleting own account', async () => {
@@ -309,7 +322,9 @@ describe('UsersService', () => {
     it('should throw NotFoundException when user not found', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.getProfile('uid-999')).rejects.toThrow(NotFoundException);
+      await expect(service.getProfile('uid-999')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -322,7 +337,9 @@ describe('UsersService', () => {
         fullName: 'New Name',
       });
 
-      const result = await service.updateProfile('uid-1', { fullName: 'New Name' });
+      const result = await service.updateProfile('uid-1', {
+        fullName: 'New Name',
+      });
 
       expect(result.fullName).toBe('New Name');
     });
@@ -337,7 +354,7 @@ describe('UsersService', () => {
         password: '$oldhashed$',
       });
       (mockedBcrypt.compare as jest.Mock)
-        .mockResolvedValueOnce(true)  // current password match
+        .mockResolvedValueOnce(true) // current password match
         .mockResolvedValueOnce(false); // not same as new
       mockPrisma.user.update.mockResolvedValue({});
       mockPrisma.refreshToken.updateMany.mockResolvedValue({});
@@ -350,7 +367,7 @@ describe('UsersService', () => {
 
       expect(mockPrisma.user.update).toHaveBeenCalled();
       expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalled();
-      expect(result.message).toContain('changed successfully');
+      expect(result.message).toContain('thành công');
     });
 
     it('should throw BadRequestException when confirmPassword does not match', async () => {
@@ -385,7 +402,7 @@ describe('UsersService', () => {
         password: '$oldhashed$',
       });
       (mockedBcrypt.compare as jest.Mock)
-        .mockResolvedValueOnce(true)  // current password match
+        .mockResolvedValueOnce(true) // current password match
         .mockResolvedValueOnce(true); // same as new password
 
       await expect(

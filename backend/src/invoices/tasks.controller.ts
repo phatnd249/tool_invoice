@@ -18,9 +18,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @Controller('invoices/tasks')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class TasksController {
-  constructor(
-    private readonly downloadTaskService: DownloadTaskService,
-  ) {}
+  constructor(private readonly downloadTaskService: DownloadTaskService) {}
 
   /**
    * Tạo task tải hoá đơn và bắt đầu chạy async.
@@ -41,8 +39,11 @@ export class TasksController {
    */
   @Get('company/:companyId')
   @RequirePermissions('invoice:read')
-  getActiveTask(@Param('companyId') companyId: string) {
-    return this.downloadTaskService.getActiveTaskForCompany(companyId);
+  getActiveTask(
+    @Param('companyId') companyId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.downloadTaskService.getActiveTaskForCompany(companyId, user.id);
   }
 
   /**
@@ -51,8 +52,8 @@ export class TasksController {
    */
   @Get('detail/:taskId')
   @RequirePermissions('invoice:read')
-  findOne(@Param('taskId') taskId: string) {
-    return this.downloadTaskService.findOne(taskId);
+  findOne(@Param('taskId') taskId: string, @CurrentUser() user: any) {
+    return this.downloadTaskService.findOne(taskId, user.id);
   }
 
   /**
@@ -60,8 +61,8 @@ export class TasksController {
    */
   @Post(':taskId/cancel')
   @RequirePermissions('invoice:download')
-  cancelTask(@Param('taskId') taskId: string) {
-    return this.downloadTaskService.cancelTask(taskId);
+  cancelTask(@Param('taskId') taskId: string, @CurrentUser() user: any) {
+    return this.downloadTaskService.cancelTask(taskId, user.id);
   }
 
   /**
@@ -70,7 +71,7 @@ export class TasksController {
    */
   @Get()
   @RequirePermissions('invoice:read')
-  findAll(@Query() query: QueryTasksDto) {
-    return this.downloadTaskService.findAll(query);
+  findAll(@Query() query: QueryTasksDto, @CurrentUser() user: any) {
+    return this.downloadTaskService.findAll(query, user.id);
   }
 }

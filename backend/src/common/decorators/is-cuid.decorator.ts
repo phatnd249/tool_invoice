@@ -20,7 +20,9 @@ export function IsCuid(validationOptions?: ValidationOptions) {
       validator: {
         validate(value: unknown) {
           if (Array.isArray(value)) {
-            return value.every((v) => typeof v === 'string' && CUID_REGEX.test(v));
+            return value.every(
+              (v) => typeof v === 'string' && CUID_REGEX.test(v),
+            );
           }
           return typeof value === 'string' && CUID_REGEX.test(value);
         },

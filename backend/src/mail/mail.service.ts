@@ -35,13 +35,20 @@ export class MailService {
     this.logger.log(`MailService initialized: ${host}:${port} as ${user}`);
   }
 
-  private async sendMail(to: string, subject: string, html: string): Promise<void> {
+  private async sendMail(
+    to: string,
+    subject: string,
+    html: string,
+  ): Promise<void> {
     if (!this.transporter) {
       this.logger.warn(`[MAIL STUB] To: ${to} | Subject: ${subject}`);
       return;
     }
 
-    const from = this.config.get<string>('SMTP_FROM', this.config.get<string>('SMTP_USER')!);
+    const from = this.config.get<string>(
+      'SMTP_FROM',
+      this.config.get<string>('SMTP_USER')!,
+    );
     await this.transporter.sendMail({ from, to, subject, html });
     this.logger.log(`Email sent to ${to}: ${subject}`);
   }
@@ -72,15 +79,24 @@ export class MailService {
   }
 
   async sendFeedback(data: {
-    fromName: string
-    fromEmail: string
-    title: string
-    content: string
-    category: string
+    fromName: string;
+    fromEmail: string;
+    title: string;
+    content: string;
+    category: string;
   }): Promise<void> {
     const to = this.config.get<string>('FEEDBACK_TO_EMAIL');
+    const safe = {
+      fromName: this.escapeHtml(data.fromName),
+      fromEmail: this.escapeHtml(data.fromEmail),
+      title: this.escapeHtml(data.title),
+      content: this.escapeHtml(data.content),
+      category: this.escapeHtml(data.category),
+    };
     if (!to) {
-      this.logger.warn('FEEDBACK_TO_EMAIL not configured. Feedback will be logged only.');
+      this.logger.warn(
+        'FEEDBACK_TO_EMAIL not configured. Feedback will be logged only.',
+      );
       this.logger.log(
         `[FEEDBACK] From: ${data.fromName} <${data.fromEmail}> | Category: ${data.category} | ${data.title}`,
       );
@@ -91,13 +107,22 @@ export class MailService {
     const html = `
       <h2>Phản hồi mới từ Invoice Pro</h2>
       <table style="border-collapse:collapse;width:100%">
-        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold;width:120px">Người gửi</td><td style="padding:8px;border:1px solid #ddd">${data.fromName} (${data.fromEmail})</td></tr>
-        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Danh mục</td><td style="padding:8px;border:1px solid #ddd">${data.category}</td></tr>
-        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Tiêu đề</td><td style="padding:8px;border:1px solid #ddd">${data.title}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold;width:120px">Người gửi</td><td style="padding:8px;border:1px solid #ddd">${safe.fromName} (${safe.fromEmail})</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Danh mục</td><td style="padding:8px;border:1px solid #ddd">${safe.category}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Tiêu đề</td><td style="padding:8px;border:1px solid #ddd">${safe.title}</td></tr>
       </table>
       <h3>Nội dung:</h3>
-      <p style="white-space:pre-wrap">${data.content}</p>
+      <p style="white-space:pre-wrap">${safe.content}</p>
     `;
     await this.sendMail(to, `[Feedback] ${data.category}: ${data.title}`, html);
+  }
+
+  private escapeHtml(str: string): string {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }

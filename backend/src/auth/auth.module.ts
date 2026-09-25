@@ -11,13 +11,16 @@ import { PermissionsGuard } from './guards/permissions.guard';
 import { MailModule } from '../mail/mail.module';
 
 @Module({
-  imports: [
-    PassportModule,
-    JwtModule.register({}),
-    MailModule,
-  ],
+  imports: [PassportModule, JwtModule.register({}), MailModule],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, SseJwtStrategy, JwtAuthGuard, SseAuthGuard, PermissionsGuard],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    SseJwtStrategy,
+    JwtAuthGuard,
+    SseAuthGuard,
+    PermissionsGuard,
+  ],
   exports: [JwtAuthGuard, SseAuthGuard, PermissionsGuard, JwtModule],
 })
 export class AuthModule {}

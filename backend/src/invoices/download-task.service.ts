@@ -14,15 +14,24 @@ import { XmlParserService } from './xml-parser.service';
 import { PreviewService } from './preview.service';
 import { PdfService } from './pdf.service';
 import { ConfigService } from '@nestjs/config';
-import { PaginationDto, PaginatedResult, paginate } from '../common/dto/pagination.dto';
+import {
+  PaginationDto,
+  PaginatedResult,
+  paginate,
+} from '../common/dto/pagination.dto';
 import {
   findNextVersion,
   getVersionedFilePath,
   removeAllRelatedFiles,
 } from '../common/file-version';
-import { sanitizeDirName, delay, getInvoiceFileStatusCode } from '../common/invoice-utils';
+import {
+  sanitizeDirName,
+  delay,
+  getInvoiceFileStatusCode,
+} from '../common/invoice-utils';
 import { TokenResolverService } from '../common/token-resolver.service';
 import { InvoiceDownloaderService } from './invoice-downloader.service';
+import { TenantAccessService } from '../tenant/tenant-access.service';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -39,8 +48,8 @@ class RateLimitHandler {
   private cooldownUntil = 0;
 
   private readonly THRESHOLD = 3;
-  private readonly BASE_COOLDOWN_MS = 10_000;   // 10 giây
-  private readonly MAX_COOLDOWN_MS = 120_000;    // 2 phút
+  private readonly BASE_COOLDOWN_MS = 10_000; // 10 giây
+  private readonly MAX_COOLDOWN_MS = 120_000; // 2 phút
 
   /**
    * Xử lý khi gặp 429.
@@ -63,7 +72,10 @@ class RateLimitHandler {
 
     // Exponential backoff: 10s → 20s → 40s... max 120s
     const multiplier = this.consecutive429s - this.THRESHOLD + 1;
-    const delay = Math.min(this.BASE_COOLDOWN_MS * multiplier, this.MAX_COOLDOWN_MS);
+    const delay = Math.min(
+      this.BASE_COOLDOWN_MS * multiplier,
+      this.MAX_COOLDOWN_MS,
+    );
     this.cooldownUntil = now + delay;
     return delay;
   }
@@ -166,6 +178,7 @@ export class DownloadTaskService {
     private readonly xmlParser: XmlParserService,
     private readonly previewService: PreviewService,
     private readonly pdfService: PdfService,
+    private readonly tenant: TenantAccessService,
   ) {
     // Tăng limit listener để hỗ trợ nhiều task cùng lúc
     this.eventEmitter.setMaxListeners(200);
@@ -181,6 +194,11 @@ export class DownloadTaskService {
     userId?: string,
   ): Promise<{ taskId: string }> {
     const { companyId, startDate, endDate, invoiceType = 'BOTH' } = params;
+
+    if (!userId) {
+      throw new BadRequestException('Thiếu thông tin người dùng');
+    }
+    await this.tenant.assertCompanyAccess(userId, companyId);
 
     // 1. Kiểm tra company tồn tại
     const company = await this.prisma.company.findUnique({
@@ -233,22 +251,33 @@ export class DownloadTaskService {
    * SSE stream cho frontend.
    * Trả về Observable để NestJS @Sse() decorator sử dụng.
    */
-  getTaskStream(taskId: string): Observable<MessageEvent> {
+  getTaskStream(taskId: string, userId: string): Observable<MessageEvent> {
     return new Observable((subscriber) => {
-      // 1. Gửi trạng thái hiện tại ngay khi kết nối
-      this.sendCurrentState(taskId, subscriber);
+      let detach: (() => void) | undefined;
 
-      // 2. Subscribe các events mới
-      const handler = (data: SseEventData) => {
-        subscriber.next({ data: JSON.stringify(data) } as MessageEvent);
-      };
+      // 1. Kiểm tra quyền truy cập task TRƯỚC khi lắng nghe sự kiện
+      this.tenant
+        .assertTaskAccess(userId, taskId)
+        .then(() => {
+          // 2. Gửi trạng thái hiện tại ngay khi kết nối
+          this.sendCurrentState(taskId, subscriber);
 
-      this.eventEmitter.on(taskId, handler);
-      this.logger.debug(`SSE client subscribed to task ${taskId}`);
+          // 3. Subscribe các events mới
+          const handler = (data: SseEventData) => {
+            subscriber.next({ data: JSON.stringify(data) } as MessageEvent);
+          };
+          this.eventEmitter.on(taskId, handler);
+          detach = () => this.eventEmitter.off(taskId, handler);
+          this.logger.debug(`SSE client subscribed to task ${taskId}`);
+        })
+        .catch((err) => {
+          subscriber.error(err);
+          subscriber.complete();
+        });
 
-      // 3. Cleanup khi client disconnect
+      // 4. Cleanup khi client disconnect
       return () => {
-        this.eventEmitter.off(taskId, handler);
+        if (detach) detach();
         this.logger.debug(`SSE client unsubscribed from task ${taskId}`);
       };
     });
@@ -257,7 +286,8 @@ export class DownloadTaskService {
   /**
    * Kiểm tra task đang chạy của doanh nghiệp (dùng khi reload page).
    */
-  async getActiveTaskForCompany(companyId: string) {
+  async getActiveTaskForCompany(companyId: string, userId: string) {
+    await this.tenant.assertCompanyAccess(userId, companyId);
     const task = await this.prisma.downloadTask.findFirst({
       where: { companyId, status: { in: ['PENDING', 'RUNNING'] } },
       orderBy: { createdAt: 'desc' },
@@ -275,7 +305,10 @@ export class DownloadTaskService {
   /**
    * Danh sách task (có phân trang + filter).
    */
-  async findAll(query: QueryTasksParams): Promise<PaginatedResult<any>> {
+  async findAll(
+    query: QueryTasksParams,
+    userId: string,
+  ): Promise<PaginatedResult<any>> {
     const {
       page = 1,
       limit = 10,
@@ -286,9 +319,15 @@ export class DownloadTaskService {
     } = query;
     const skip = (page - 1) * limit;
 
+    if (companyId) {
+      await this.tenant.assertCompanyAccess(userId, companyId);
+    }
+
     const where: any = {
       ...(status && { status }),
-      ...(companyId && { companyId }),
+      ...(companyId
+        ? { companyId }
+        : await this.tenant.companyScopeWhere(userId)),
     };
 
     const [tasks, total] = await Promise.all([
@@ -316,7 +355,8 @@ export class DownloadTaskService {
   /**
    * Chi tiết một task.
    */
-  async findOne(taskId: string) {
+  async findOne(taskId: string, userId: string) {
+    await this.tenant.assertTaskAccess(userId, taskId);
     const task = await this.prisma.downloadTask.findUnique({
       where: { id: taskId },
       include: {
@@ -340,7 +380,8 @@ export class DownloadTaskService {
    * Set status = 'CANCELLED' trong DB. Vòng lặp executeTask sẽ
    * kiểm tra cờ này và tự dừng.
    */
-  async cancelTask(taskId: string): Promise<void> {
+  async cancelTask(taskId: string, userId: string): Promise<void> {
+    await this.tenant.assertTaskAccess(userId, taskId);
     const task = await this.prisma.downloadTask.findUnique({
       where: { id: taskId },
     });
@@ -451,8 +492,7 @@ export class DownloadTaskService {
       }> = [];
 
       let grandTotal = 0;
-      const invoicesBaseDir =
-        this.config.get('INVOICES_DIR') || './invoices';
+      const invoicesBaseDir = this.config.get('INVOICES_DIR') || './invoices';
 
       // ── Duyệt từng loại BUY/SELL ─────────────────────────────────────
       for (const type of types) {
@@ -605,13 +645,11 @@ export class DownloadTaskService {
             const invNum = String(inv.shdon);
 
             // ── Overwrite pre-check ──────────────────────────────────
-            const overwriteMode =
-              (params.overwriteMode as string) || 'SKIP';
+            const overwriteMode = (params.overwriteMode as string) || 'SKIP';
             let currentVersion = 0;
 
             const invDate = new Date(inv.tdlap);
-            const typeDir =
-              type === 'SELL' ? 'BanRa' : 'MuaVao';
+            const typeDir = type === 'SELL' ? 'BanRa' : 'MuaVao';
             const outputDir = path.join(
               invoicesBaseDir,
               companyDir,
@@ -714,16 +752,16 @@ export class DownloadTaskService {
                     companyName: company.name,
                     companyTaxCode: company.taxCode,
                     overwriteMode: overwriteMode as
-                      | 'SKIP'
-                      | 'OVERWRITE'
-                      | 'NEW_VERSION',
+                      'SKIP' | 'OVERWRITE' | 'NEW_VERSION',
                     currentVersion,
                   });
                   break; // Thành công -> thoát vòng lặp retry
                 } catch (singleErr: any) {
                   const isTimeoutOrNetworkErr =
                     singleErr?.message?.toLowerCase().includes('timeout') ||
-                    singleErr?.message?.toLowerCase().includes('econnaborted') ||
+                    singleErr?.message
+                      ?.toLowerCase()
+                      .includes('econnaborted') ||
                     singleErr?.message?.toLowerCase().includes('etimedout');
 
                   const elapsedMs = Date.now() - invStart;
@@ -779,10 +817,8 @@ export class DownloadTaskService {
               // Cập nhật processedInvoices (tích luỹ toàn bộ task)
               await this.updateTask(taskId, {
                 progress: dayProgress,
-                processedInvoices:
-                  typeItemsDownloaded + dayDownloaded,
-                totalInvoices:
-                  typeTotalQueried,
+                processedInvoices: typeItemsDownloaded + dayDownloaded,
+                totalInvoices: typeTotalQueried,
               });
             } catch (error: any) {
               dayFailed++;
@@ -920,9 +956,7 @@ export class DownloadTaskService {
       this.logger.error(`Task ${taskId} failed: ${error.message}`, error.stack);
 
       const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        'Lỗi không xác định';
+        error.response?.data?.message || error.message || 'Lỗi không xác định';
 
       this.emit(taskId, {
         type: 'error',
@@ -972,10 +1006,7 @@ export class DownloadTaskService {
     }
   }
 
-  private async appendLog(
-    taskId: string,
-    log: LogEntry,
-  ): Promise<void> {
+  private async appendLog(taskId: string, log: LogEntry): Promise<void> {
     // Emit SSE event ngay lập tức để frontend nhận log real-time
     this.emit(taskId, {
       type: 'log',
@@ -1027,11 +1058,7 @@ export class DownloadTaskService {
       ),
     );
     const end = new Date(
-      Date.UTC(
-        endDate.getFullYear(),
-        endDate.getMonth(),
-        endDate.getDate(),
-      ),
+      Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate()),
     );
 
     while (current <= end) {
@@ -1071,7 +1098,12 @@ export class DownloadTaskService {
     try {
       const companyDir = sanitizeDirName(company.name || company.taxCode);
       const typeDir = type === 'SELL' ? 'BanRa' : 'MuaVao';
-      const bangKeDir = path.join(invoicesBaseDir, companyDir, 'BangKe', typeDir);
+      const bangKeDir = path.join(
+        invoicesBaseDir,
+        companyDir,
+        'BangKe',
+        typeDir,
+      );
 
       const chunks = this.splitDateRange(startDate, endDate, 31);
 
@@ -1130,9 +1162,7 @@ export class DownloadTaskService {
       const currentEnd = new Date(currentStart.getTime());
       currentEnd.setDate(currentEnd.getDate() + (maxDays - 1));
       const actualEnd =
-        currentEnd > endDate
-          ? new Date(endDate.getTime())
-          : currentEnd;
+        currentEnd > endDate ? new Date(endDate.getTime()) : currentEnd;
       chunks.push({ start: new Date(currentStart), end: new Date(actualEnd) });
       currentStart = new Date(actualEnd.getTime());
       currentStart.setDate(currentStart.getDate() + 1);

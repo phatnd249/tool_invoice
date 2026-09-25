@@ -26,10 +26,14 @@ export function getInvoiceFileStatusCode(inv: {
   if (baseCode === 'K' && inv.ttxly === 8) baseCode = 'M';
 
   const statusMap: Record<number, string> = {
-    1: '', 2: 'TT', 3: 'DC', 4: 'BTT', 5: 'BDC', 6: 'HUY',
+    1: '',
+    2: 'TT',
+    3: 'DC',
+    4: 'BTT',
+    5: 'BDC',
+    6: 'HUY',
   };
-  const invoiceCode =
-    inv.tthai != null ? (statusMap[inv.tthai] ?? '?') : '';
+  const invoiceCode = inv.tthai != null ? (statusMap[inv.tthai] ?? '?') : '';
 
   if (baseCode && invoiceCode) return `${baseCode}-${invoiceCode}`;
   return baseCode || invoiceCode || 'K';
@@ -66,13 +70,23 @@ export function getInvoiceRelativePath(params: {
 
 /**
  * Resolve đường dẫn tuyệt đối từ relative path trong DB + INVOICES_DIR.
- * Dùng khi cần đọc/ghi file từ đường dẫn lưu trong DB.
+ * Có KIỂM TRA CONTAINMENT: vứt bỏ đường dẫn cố thoát ra ngoài baseDir
+ * (path traversal) — dữ liệu DB bị can thiệp hoặc tên file độc hại sẽ không
+ * thể đọc/ghi file ngoài thư mục cho phép.
  */
 export function resolveInvoicePath(
   baseDir: string,
   relativePath: string,
 ): string {
-  return path.resolve(baseDir, relativePath);
+  const resolved = path.resolve(baseDir, relativePath);
+  const base = path.resolve(baseDir);
+  const rel = path.relative(base, resolved);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(
+      `Đường dẫn không hợp lệ (ngoài phạm vi thư mục gốc): ${relativePath}`,
+    );
+  }
+  return resolved;
 }
 
 /**

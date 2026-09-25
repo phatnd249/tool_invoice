@@ -97,7 +97,12 @@ export class Module7ReportService extends ExcelBaseService {
     const getTaxGroup = (taxRateStr: string | null | undefined): number => {
       if (!taxRateStr) return 1;
       const r = taxRateStr.toUpperCase().replace(/\s%/g, '').trim();
-      if (r.includes('KKKNT') || r.includes('KHN') || r.includes('KKNT') || r.includes('KTPTH'))
+      if (
+        r.includes('KKKNT') ||
+        r.includes('KHN') ||
+        r.includes('KKNT') ||
+        r.includes('KTPTH')
+      )
         return 5;
       if (r.includes('KCT') || r.includes('KHONGCHIUTHUE')) return 1;
       if (r.includes('0') || r === '0%') return 2;
@@ -109,20 +114,46 @@ export class Module7ReportService extends ExcelBaseService {
 
     // ── Sheet: BÁN RA ──
     const sigRowIdx = this.buildSellSheet(
-      workbook, sellInvoices, taxpayerName, taxpayerTaxCode,
-      periodStr, getTaxGroup,
-      m7TitleFont, m7SubtitleFont, m7HeaderFont, m7SectionFont,
-      m7DataFont, m7DataBoldFont, m7ItalicFont,
-      headerAlign, leftAlign, rightAlign, centerAlign, blackBorder,
+      workbook,
+      sellInvoices,
+      taxpayerName,
+      taxpayerTaxCode,
+      periodStr,
+      getTaxGroup,
+      m7TitleFont,
+      m7SubtitleFont,
+      m7HeaderFont,
+      m7SectionFont,
+      m7DataFont,
+      m7DataBoldFont,
+      m7ItalicFont,
+      headerAlign,
+      leftAlign,
+      rightAlign,
+      centerAlign,
+      blackBorder,
     );
 
     // ── Sheet: MUA VÀO ──
     this.buildBuySheet(
-      workbook, buyInvoices, taxpayerName, taxpayerTaxCode,
-      periodStr, sigRowIdx,
-      m7TitleFont, m7SubtitleFont, m7HeaderFont, m7SectionFont,
-      m7DataFont, m7DataBoldFont, m7ItalicFont,
-      headerAlign, leftAlign, rightAlign, centerAlign, blackBorder,
+      workbook,
+      buyInvoices,
+      taxpayerName,
+      taxpayerTaxCode,
+      periodStr,
+      sigRowIdx,
+      m7TitleFont,
+      m7SubtitleFont,
+      m7HeaderFont,
+      m7SectionFont,
+      m7DataFont,
+      m7DataBoldFont,
+      m7ItalicFont,
+      headerAlign,
+      leftAlign,
+      rightAlign,
+      centerAlign,
+      blackBorder,
     );
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -140,10 +171,17 @@ export class Module7ReportService extends ExcelBaseService {
     taxpayerTaxCode: string,
     periodStr: string,
     getTaxGroup: (s: string | null | undefined) => number,
-    m7TitleFont: any, m7SubtitleFont: any, m7HeaderFont: any,
-    m7SectionFont: any, m7DataFont: any, m7DataBoldFont: any,
+    m7TitleFont: any,
+    m7SubtitleFont: any,
+    m7HeaderFont: any,
+    m7SectionFont: any,
+    m7DataFont: any,
+    m7DataBoldFont: any,
     m7ItalicFont: any,
-    headerAlign: any, leftAlign: any, rightAlign: any, centerAlign: any,
+    headerAlign: any,
+    leftAlign: any,
+    rightAlign: any,
+    centerAlign: any,
     blackBorder: any,
   ): number {
     const wsSell = workbook.addWorksheet('BÁN RA', {
@@ -151,17 +189,18 @@ export class Module7ReportService extends ExcelBaseService {
     });
 
     const sellColWidths = [
-      8.38, 8.13, 9.13, 10.38, 11.13, 13.38, 38.88, 21.38, 35.75, 21.38,
-      24.13, 13.88, 22.38, 28.63,
+      8.38, 8.13, 9.13, 10.38, 11.13, 13.38, 38.88, 21.38, 35.75, 21.38, 24.13,
+      13.88, 22.38, 28.63,
     ];
-    sellColWidths.forEach((w, i) => wsSell.getColumn(i + 1).width = w);
+    sellColWidths.forEach((w, i) => (wsSell.getColumn(i + 1).width = w));
     wsSell.getRow(1).height = 15;
 
     wsSell.mergeCells('B2:L2');
     wsSell.getCell('B2').value =
       'BẢNG KÊ HOÁ ĐƠN, CHỨNG TỪ HÀNG HOÁ, DỊCH VỤ BÁN RA';
     this.styleRange(wsSell, 2, 2, 2, 12, {
-      font: m7TitleFont, alignment: headerAlign,
+      font: m7TitleFont,
+      alignment: headerAlign,
     });
     wsSell.getRow(2).height = 25;
 
@@ -169,35 +208,40 @@ export class Module7ReportService extends ExcelBaseService {
     wsSell.getCell('B3').value =
       '(Kèm theo tờ khai thuế GTGT theo mẫu số 01/GTGT)';
     this.styleRange(wsSell, 3, 2, 3, 12, {
-      font: m7SubtitleFont, alignment: headerAlign,
+      font: m7SubtitleFont,
+      alignment: headerAlign,
     });
     wsSell.getRow(3).height = 20;
 
     wsSell.mergeCells('B4:L4');
     wsSell.getCell('B4').value = periodStr;
     this.styleRange(wsSell, 4, 2, 4, 12, {
-      font: m7DataFont, alignment: headerAlign,
+      font: m7DataFont,
+      alignment: headerAlign,
     });
     wsSell.getRow(4).height = 20;
 
     wsSell.mergeCells('B5:L5');
     wsSell.getCell('B5').value = 'Người nộp thuế:  ' + taxpayerName;
     this.styleRange(wsSell, 5, 2, 5, 12, {
-      font: m7TitleFont, alignment: leftAlign,
+      font: m7TitleFont,
+      alignment: leftAlign,
     });
     wsSell.getRow(5).height = 20;
 
     wsSell.mergeCells('B6:L6');
     wsSell.getCell('B6').value = 'Mã số thuế: ' + taxpayerTaxCode;
     this.styleRange(wsSell, 6, 2, 6, 12, {
-      font: m7TitleFont, alignment: leftAlign,
+      font: m7TitleFont,
+      alignment: leftAlign,
     });
     wsSell.getRow(6).height = 20;
 
     wsSell.mergeCells('B7:L7');
     wsSell.getCell('B7').value = 'Đơn vị tiền: đồng Việt Nam';
     this.styleRange(wsSell, 7, 2, 7, 12, {
-      font: m7ItalicFont, alignment: leftAlign,
+      font: m7ItalicFont,
+      alignment: leftAlign,
     });
     wsSell.getRow(7).height = 20;
 
@@ -205,12 +249,16 @@ export class Module7ReportService extends ExcelBaseService {
     wsSell.mergeCells('B8:B10');
     wsSell.getCell('B8').value = 'STT';
     this.styleRange(wsSell, 8, 2, 10, 2, {
-      font: m7HeaderFont, alignment: headerAlign, border: blackBorder,
+      font: m7HeaderFont,
+      alignment: headerAlign,
+      border: blackBorder,
     });
 
     wsSell.mergeCells('C8:F9');
     this.styleRange(wsSell, 8, 3, 9, 6, {
-      font: m7HeaderFont, alignment: headerAlign, border: blackBorder,
+      font: m7HeaderFont,
+      alignment: headerAlign,
+      border: blackBorder,
     });
 
     wsSell.getCell('C10').value = 'Ký hiệu mẫu hóa đơn';
@@ -218,7 +266,9 @@ export class Module7ReportService extends ExcelBaseService {
     wsSell.getCell('E10').value = 'Số hoá đơn';
     wsSell.getCell('F10').value = 'Ngày, tháng, năm lập hóa đơn';
     this.styleRange(wsSell, 10, 3, 10, 6, {
-      font: m7HeaderFont, alignment: headerAlign, border: blackBorder,
+      font: m7HeaderFont,
+      alignment: headerAlign,
+      border: blackBorder,
     });
 
     wsSell.mergeCells('G8:G10');
@@ -235,7 +285,9 @@ export class Module7ReportService extends ExcelBaseService {
     wsSell.getCell('L8').value = 'Ghi chú';
 
     this.styleRange(wsSell, 8, 7, 10, 12, {
-      font: m7HeaderFont, alignment: headerAlign, border: blackBorder,
+      font: m7HeaderFont,
+      alignment: headerAlign,
+      border: blackBorder,
     });
     wsSell.getRow(8).height = 15;
     wsSell.getRow(9).height = 15;
@@ -245,19 +297,35 @@ export class Module7ReportService extends ExcelBaseService {
     const row11 = wsSell.getRow(11);
     row11.height = 20;
     const indicesSell = [
-      '[1]', '[2]', '[3]', '[2]', '[3]', '[4]', '[5]', '[6]',
-      '[7]', '[8]', '[9]',
+      '[1]',
+      '[2]',
+      '[3]',
+      '[2]',
+      '[3]',
+      '[4]',
+      '[5]',
+      '[6]',
+      '[7]',
+      '[8]',
+      '[9]',
     ];
     indicesSell.forEach((val, idx) => {
       row11.getCell(idx + 2).value = val;
     });
     this.styleRange(wsSell, 11, 2, 11, 12, {
-      font: m7DataFont, alignment: centerAlign, border: blackBorder,
+      font: m7DataFont,
+      alignment: centerAlign,
+      border: blackBorder,
     });
 
     // Group selling invoices by tax rate
     const groups: { [key: number]: any[] } = {
-      1: [], 2: [], 50: [], 8: [], 10: [], 5: [],
+      1: [],
+      2: [],
+      50: [],
+      8: [],
+      10: [],
+      5: [],
     };
     sellInvoices.forEach((inv) => {
       const gr = getTaxGroup(inv.items[0]?.taxRate);
@@ -266,12 +334,22 @@ export class Module7ReportService extends ExcelBaseService {
     });
 
     const sellGroupConfigs = [
-      { id: 1, label: '1. Hàng hóa, dịch vụ không chịu thuế giá trị gia tăng (GTGT):' },
+      {
+        id: 1,
+        label: '1. Hàng hóa, dịch vụ không chịu thuế giá trị gia tăng (GTGT):',
+      },
       { id: 2, label: '2. Hàng hoá, dịch vụ chịu thuế suất thuế GTGT 0%:' },
-      { id: 50, label: 'Hàng hoá, dịch vụ chịu thuế suất thuế GTGT 5%:', optional: true },
+      {
+        id: 50,
+        label: 'Hàng hoá, dịch vụ chịu thuế suất thuế GTGT 5%:',
+        optional: true,
+      },
       { id: 8, label: '3. Hàng hoá, dịch vụ chịu thuế suất thuế GTGT 8%:' },
       { id: 10, label: '4. Hàng hoá, dịch vụ chịu thuế suất thuế GTGT 10%:' },
-      { id: 5, label: '5. Hàng hóa, dịch vụ không phải tổng hợp trên tờ khai 01/GTGT:' },
+      {
+        id: 5,
+        label: '5. Hàng hóa, dịch vụ không phải tổng hợp trên tờ khai 01/GTGT:',
+      },
     ];
 
     let sellRowIdx = 12;
@@ -283,7 +361,9 @@ export class Module7ReportService extends ExcelBaseService {
       wsSell.mergeCells(`B${sellRowIdx}:L${sellRowIdx}`);
       wsSell.getCell(`B${sellRowIdx}`).value = g.label;
       this.styleRange(wsSell, sellRowIdx, 2, sellRowIdx, 12, {
-        font: m7SectionFont, alignment: leftAlign, border: blackBorder,
+        font: m7SectionFont,
+        alignment: leftAlign,
+        border: blackBorder,
       });
       wsSell.getRow(sellRowIdx).height = 22;
       sellRowIdx++;
@@ -324,7 +404,8 @@ export class Module7ReportService extends ExcelBaseService {
         row.getCell(13).numFmt = '#,##0';
 
         this.styleRange(wsSell, sellRowIdx, 2, sellRowIdx, 13, {
-          font: m7DataFont, border: blackBorder,
+          font: m7DataFont,
+          border: blackBorder,
         });
         [2, 3, 4, 5, 6, 8, 12].forEach((c) => {
           row.getCell(c).alignment = centerAlign;
@@ -347,9 +428,15 @@ export class Module7ReportService extends ExcelBaseService {
       totalRow.getCell(2).value = 'Tổng';
 
       if (items.length > 0) {
-        totalRow.getCell(10).value = { formula: `=SUM(J${startData}:J${endData})` };
-        totalRow.getCell(11).value = { formula: `=SUM(K${startData}:K${endData})` };
-        totalRow.getCell(13).value = { formula: `=SUM(M${startData}:M${endData})` };
+        totalRow.getCell(10).value = {
+          formula: `=SUM(J${startData}:J${endData})`,
+        };
+        totalRow.getCell(11).value = {
+          formula: `=SUM(K${startData}:K${endData})`,
+        };
+        totalRow.getCell(13).value = {
+          formula: `=SUM(M${startData}:M${endData})`,
+        };
       } else {
         totalRow.getCell(10).value = 0;
         totalRow.getCell(11).value = 0;
@@ -361,10 +448,13 @@ export class Module7ReportService extends ExcelBaseService {
       totalRow.getCell(13).numFmt = '#,##0';
 
       this.styleRange(wsSell, sellRowIdx, 2, sellRowIdx, 13, {
-        font: m7DataBoldFont, border: blackBorder,
+        font: m7DataBoldFont,
+        border: blackBorder,
       });
       totalRow.getCell(2).alignment = centerAlign;
-      [10, 11, 13].forEach((c) => { totalRow.getCell(c).alignment = rightAlign; });
+      [10, 11, 13].forEach((c) => {
+        totalRow.getCell(c).alignment = rightAlign;
+      });
 
       if (g.id !== 5) sellTotalRows.push(sellRowIdx);
       sellRowIdx++;
@@ -391,10 +481,13 @@ export class Module7ReportService extends ExcelBaseService {
     grandRow.getCell(13).numFmt = '#,##0';
 
     this.styleRange(wsSell, sellRowIdx, 2, sellRowIdx, 13, {
-      font: m7DataBoldFont, border: blackBorder,
+      font: m7DataBoldFont,
+      border: blackBorder,
     });
     grandRow.getCell(2).alignment = centerAlign;
-    [10, 11, 13].forEach((c) => { grandRow.getCell(c).alignment = rightAlign; });
+    [10, 11, 13].forEach((c) => {
+      grandRow.getCell(c).alignment = rightAlign;
+    });
 
     const sellGrandRowIdx = sellRowIdx;
     sellRowIdx++;
@@ -408,11 +501,13 @@ export class Module7ReportService extends ExcelBaseService {
     wsSell.getCell(`J${tctRowIdx}`).numFmt = '#,##0';
     wsSell.getCell(`K${tctRowIdx}`).numFmt = '#,##0';
     this.styleRange(wsSell, tctRowIdx, 2, tctRowIdx, 13, {
-      font: m7DataBoldFont, border: blackBorder,
+      font: m7DataBoldFont,
+      border: blackBorder,
     });
     wsSell.getCell(`I${tctRowIdx}`).alignment = centerAlign;
     [10, 11].forEach((c) => {
-      wsSell.getCell(`${String.fromCharCode(64 + c)}${tctRowIdx}`).alignment = rightAlign;
+      wsSell.getCell(`${String.fromCharCode(64 + c)}${tctRowIdx}`).alignment =
+        rightAlign;
     });
     sellRowIdx++;
 
@@ -423,17 +518,23 @@ export class Module7ReportService extends ExcelBaseService {
     wsSell.getCell(`B${clRowIdx}`).value =
       'Tổng doanh thu hàng hoá, dịch vụ bán ra chịu thuế GTGT (*):             ............................';
     wsSell.getCell(`I${clRowIdx}`).value = 'CL';
-    wsSell.getCell(`J${clRowIdx}`).value = { formula: `=J${sellGrandRowIdx}-J${tctRowIdx}` };
-    wsSell.getCell(`K${clRowIdx}`).value = { formula: `=K${sellGrandRowIdx}-K${tctRowIdx}` };
+    wsSell.getCell(`J${clRowIdx}`).value = {
+      formula: `=J${sellGrandRowIdx}-J${tctRowIdx}`,
+    };
+    wsSell.getCell(`K${clRowIdx}`).value = {
+      formula: `=K${sellGrandRowIdx}-K${tctRowIdx}`,
+    };
     wsSell.getCell(`J${clRowIdx}`).numFmt = '#,##0';
     wsSell.getCell(`K${clRowIdx}`).numFmt = '#,##0';
     this.styleRange(wsSell, clRowIdx, 2, clRowIdx, 13, {
-      font: m7DataBoldFont, border: blackBorder,
+      font: m7DataBoldFont,
+      border: blackBorder,
     });
     wsSell.getCell(`B${clRowIdx}`).alignment = leftAlign;
     wsSell.getCell(`I${clRowIdx}`).alignment = centerAlign;
     [10, 11].forEach((c) => {
-      wsSell.getCell(`${String.fromCharCode(64 + c)}${clRowIdx}`).alignment = rightAlign;
+      wsSell.getCell(`${String.fromCharCode(64 + c)}${clRowIdx}`).alignment =
+        rightAlign;
     });
     sellRowIdx++;
 
@@ -462,12 +563,14 @@ export class Module7ReportService extends ExcelBaseService {
     wsSell.getCell(`J${sellRowIdx}`).alignment = centerAlign;
     sellRowIdx++;
 
-    wsSell.getCell(`J${sellRowIdx}`).value = 'ĐẠI DIỆN HỢP PHÁP CỦA NGƯỜI NỘP THUẾ';
+    wsSell.getCell(`J${sellRowIdx}`).value =
+      'ĐẠI DIỆN HỢP PHÁP CỦA NGƯỜI NỘP THUẾ';
     wsSell.getCell(`J${sellRowIdx}`).font = m7DataBoldFont;
     wsSell.getCell(`J${sellRowIdx}`).alignment = centerAlign;
     sellRowIdx++;
 
-    wsSell.getCell(`J${sellRowIdx}`).value = ' Ký tên, đóng dấu (ghi rõ họ tên và chức vụ)';
+    wsSell.getCell(`J${sellRowIdx}`).value =
+      ' Ký tên, đóng dấu (ghi rõ họ tên và chức vụ)';
     wsSell.getCell(`J${sellRowIdx}`).font = m7ItalicFont;
     wsSell.getCell(`J${sellRowIdx}`).alignment = centerAlign;
 
@@ -485,10 +588,17 @@ export class Module7ReportService extends ExcelBaseService {
     taxpayerTaxCode: string,
     periodStr: string,
     sigRowIdx: number,
-    m7TitleFont: any, m7SubtitleFont: any, m7HeaderFont: any,
-    m7SectionFont: any, m7DataFont: any, m7DataBoldFont: any,
+    m7TitleFont: any,
+    m7SubtitleFont: any,
+    m7HeaderFont: any,
+    m7SectionFont: any,
+    m7DataFont: any,
+    m7DataBoldFont: any,
     m7ItalicFont: any,
-    headerAlign: any, leftAlign: any, rightAlign: any, centerAlign: any,
+    headerAlign: any,
+    leftAlign: any,
+    rightAlign: any,
+    centerAlign: any,
     blackBorder: any,
   ): void {
     const wsBuy = workbook.addWorksheet('MUA VÀO', {
@@ -496,30 +606,35 @@ export class Module7ReportService extends ExcelBaseService {
     });
 
     const buyColWidths = [
-      8.38, 8.13, 9.13, 10.38, 11.13, 13.38, 38.88, 21.38, 35.75, 21.38,
-      12.0, 24.13, 13.88, 22.38,
+      8.38, 8.13, 9.13, 10.38, 11.13, 13.38, 38.88, 21.38, 35.75, 21.38, 12.0,
+      24.13, 13.88, 22.38,
     ];
-    buyColWidths.forEach((w, i) => wsBuy.getColumn(i + 1).width = w);
+    buyColWidths.forEach((w, i) => (wsBuy.getColumn(i + 1).width = w));
     wsBuy.getRow(1).height = 15;
 
     wsBuy.mergeCells('B1:M1');
-    wsBuy.getCell('B1').value = 'BẢNG KÊ HOÁ ĐƠN, CHỨNG TỪ HÀNG HOÁ, DỊCH VỤ MUA VÀO';
+    wsBuy.getCell('B1').value =
+      'BẢNG KÊ HOÁ ĐƠN, CHỨNG TỪ HÀNG HOÁ, DỊCH VỤ MUA VÀO';
     this.styleRange(wsBuy, 1, 2, 1, 13, {
-      font: m7TitleFont, alignment: headerAlign,
+      font: m7TitleFont,
+      alignment: headerAlign,
     });
     wsBuy.getRow(1).height = 25;
 
     wsBuy.mergeCells('B2:M2');
-    wsBuy.getCell('B2').value = '(Kèm theo tờ khai thuế GTGT theo mẫu số 01/GTGT)';
+    wsBuy.getCell('B2').value =
+      '(Kèm theo tờ khai thuế GTGT theo mẫu số 01/GTGT)';
     this.styleRange(wsBuy, 2, 2, 2, 13, {
-      font: m7SubtitleFont, alignment: headerAlign,
+      font: m7SubtitleFont,
+      alignment: headerAlign,
     });
     wsBuy.getRow(2).height = 20;
 
     wsBuy.mergeCells('B3:M3');
     wsBuy.getCell('B3').value = periodStr;
     this.styleRange(wsBuy, 3, 2, 3, 13, {
-      font: m7DataFont, alignment: headerAlign,
+      font: m7DataFont,
+      alignment: headerAlign,
     });
     wsBuy.getRow(3).height = 20;
 
@@ -528,21 +643,24 @@ export class Module7ReportService extends ExcelBaseService {
     wsBuy.mergeCells('B5:M5');
     wsBuy.getCell('B5').value = 'Người nộp thuế:  ' + taxpayerName;
     this.styleRange(wsBuy, 5, 2, 5, 13, {
-      font: m7TitleFont, alignment: leftAlign,
+      font: m7TitleFont,
+      alignment: leftAlign,
     });
     wsBuy.getRow(5).height = 20;
 
     wsBuy.mergeCells('B6:M6');
     wsBuy.getCell('B6').value = 'Mã số thuế: ' + taxpayerTaxCode;
     this.styleRange(wsBuy, 6, 2, 6, 13, {
-      font: m7TitleFont, alignment: leftAlign,
+      font: m7TitleFont,
+      alignment: leftAlign,
     });
     wsBuy.getRow(6).height = 20;
 
     wsBuy.mergeCells('B7:M7');
     wsBuy.getCell('B7').value = 'Đơn vị tiền: đồng Việt Nam';
     this.styleRange(wsBuy, 7, 2, 7, 13, {
-      font: m7ItalicFont, alignment: leftAlign,
+      font: m7ItalicFont,
+      alignment: leftAlign,
     });
     wsBuy.getRow(7).height = 20;
 
@@ -550,19 +668,25 @@ export class Module7ReportService extends ExcelBaseService {
     wsBuy.mergeCells('B8:B10');
     wsBuy.getCell('B8').value = 'STT';
     this.styleRange(wsBuy, 8, 2, 10, 2, {
-      font: m7HeaderFont, alignment: headerAlign, border: blackBorder,
+      font: m7HeaderFont,
+      alignment: headerAlign,
+      border: blackBorder,
     });
 
     wsBuy.mergeCells('C8:F9');
     this.styleRange(wsBuy, 8, 3, 9, 6, {
-      font: m7HeaderFont, alignment: headerAlign, border: blackBorder,
+      font: m7HeaderFont,
+      alignment: headerAlign,
+      border: blackBorder,
     });
     wsBuy.getCell('C10').value = 'Ký hiệu mẫu hóa đơn';
     wsBuy.getCell('D10').value = 'Ký hiệu hoá đơn';
     wsBuy.getCell('E10').value = 'Số hoá đơn';
     wsBuy.getCell('F10').value = 'Ngày, tháng, năm lập hóa đơn';
     this.styleRange(wsBuy, 10, 3, 10, 6, {
-      font: m7HeaderFont, alignment: headerAlign, border: blackBorder,
+      font: m7HeaderFont,
+      alignment: headerAlign,
+      border: blackBorder,
     });
 
     wsBuy.mergeCells('G8:G10');
@@ -581,7 +705,9 @@ export class Module7ReportService extends ExcelBaseService {
     wsBuy.getCell('M8').value = 'GHI CHÚ';
 
     this.styleRange(wsBuy, 8, 7, 10, 13, {
-      font: m7HeaderFont, alignment: headerAlign, border: blackBorder,
+      font: m7HeaderFont,
+      alignment: headerAlign,
+      border: blackBorder,
     });
     wsBuy.getRow(8).height = 15;
     wsBuy.getRow(9).height = 15;
@@ -591,14 +717,26 @@ export class Module7ReportService extends ExcelBaseService {
     const row11Buy = wsBuy.getRow(11);
     row11Buy.height = 20;
     const indicesBuy = [
-      '[1]', '[2]', '[3]', '', '', '[4]', '[5]', '[6]',
-      '[7]', '[8]', '[9]', '[10]',
+      '[1]',
+      '[2]',
+      '[3]',
+      '',
+      '',
+      '[4]',
+      '[5]',
+      '[6]',
+      '[7]',
+      '[8]',
+      '[9]',
+      '[10]',
     ];
     indicesBuy.forEach((val, idx) => {
       row11Buy.getCell(idx + 2).value = val;
     });
     this.styleRange(wsBuy, 11, 2, 11, 13, {
-      font: m7DataFont, alignment: centerAlign, border: blackBorder,
+      font: m7DataFont,
+      alignment: centerAlign,
+      border: blackBorder,
     });
 
     let buyRowIdx = 12;
@@ -608,7 +746,9 @@ export class Module7ReportService extends ExcelBaseService {
     wsBuy.getCell(`B${buyRowIdx}`).value =
       '1. Hàng hoá, dịch vụ dùng riêng cho SXKD chịu thuế GTGT và sử dụng cho các hoạt động cung cấp hàng hoá, dịch vụ không kê khai, nộp thuế GTGT đủ điều kiện khấu trừ thuế: ';
     this.styleRange(wsBuy, buyRowIdx, 2, buyRowIdx, 13, {
-      font: m7SectionFont, alignment: leftAlign, border: blackBorder,
+      font: m7SectionFont,
+      alignment: leftAlign,
+      border: blackBorder,
     });
     wsBuy.getRow(buyRowIdx).height = 22;
     buyRowIdx++;
@@ -666,7 +806,8 @@ export class Module7ReportService extends ExcelBaseService {
       row.getCell(14).numFmt = '#,##0';
 
       this.styleRange(wsBuy, buyRowIdx, 2, buyRowIdx, 14, {
-        font: m7DataFont, border: blackBorder,
+        font: m7DataFont,
+        border: blackBorder,
       });
       [2, 3, 4, 5, 6, 8, 11, 13].forEach((c) => {
         row.getCell(c).alignment = centerAlign;
@@ -688,19 +829,32 @@ export class Module7ReportService extends ExcelBaseService {
     wsBuy.getRow(s1TotalRowIdx).height = 24;
     wsBuy.getCell(`B${s1TotalRowIdx}`).value = 'Tổng';
     if (buyInvoices.length > 0) {
-      wsBuy.getCell(`J${s1TotalRowIdx}`).value = { formula: `=SUM(J${s1Start}:J${s1End})` };
-      wsBuy.getCell(`L${s1TotalRowIdx}`).value = { formula: `=SUM(L${s1Start}:L${s1End})` };
-      wsBuy.getCell(`N${s1TotalRowIdx}`).value = { formula: `=SUM(N${s1Start}:N${s1End})` };
+      wsBuy.getCell(`J${s1TotalRowIdx}`).value = {
+        formula: `=SUM(J${s1Start}:J${s1End})`,
+      };
+      wsBuy.getCell(`L${s1TotalRowIdx}`).value = {
+        formula: `=SUM(L${s1Start}:L${s1End})`,
+      };
+      wsBuy.getCell(`N${s1TotalRowIdx}`).value = {
+        formula: `=SUM(N${s1Start}:N${s1End})`,
+      };
     } else {
-      [10, 12, 14].forEach((c) => { wsBuy.getCell(s1TotalRowIdx, c).value = 0; });
+      [10, 12, 14].forEach((c) => {
+        wsBuy.getCell(s1TotalRowIdx, c).value = 0;
+      });
     }
-    [10, 12, 14].forEach((c) => { wsBuy.getCell(s1TotalRowIdx, c).numFmt = '#,##0'; });
+    [10, 12, 14].forEach((c) => {
+      wsBuy.getCell(s1TotalRowIdx, c).numFmt = '#,##0';
+    });
 
     this.styleRange(wsBuy, s1TotalRowIdx, 2, s1TotalRowIdx, 14, {
-      font: m7DataBoldFont, border: blackBorder,
+      font: m7DataBoldFont,
+      border: blackBorder,
     });
     wsBuy.getCell(`B${s1TotalRowIdx}`).alignment = centerAlign;
-    [10, 12, 14].forEach((c) => { wsBuy.getCell(s1TotalRowIdx, c).alignment = rightAlign; });
+    [10, 12, 14].forEach((c) => {
+      wsBuy.getCell(s1TotalRowIdx, c).alignment = rightAlign;
+    });
     buyRowIdx++;
 
     // Section 3 (empty)
@@ -708,7 +862,9 @@ export class Module7ReportService extends ExcelBaseService {
     wsBuy.getCell(`B${buyRowIdx}`).value =
       '3. Hàng hóa, dịch vụ dùng cho dự án đầu tư đủ điều kiện được khấu trừ thuế (*):';
     this.styleRange(wsBuy, buyRowIdx, 2, buyRowIdx, 13, {
-      font: m7SectionFont, alignment: leftAlign, border: blackBorder,
+      font: m7SectionFont,
+      alignment: leftAlign,
+      border: blackBorder,
     });
     wsBuy.getRow(buyRowIdx).height = 22;
     buyRowIdx++;
@@ -721,10 +877,13 @@ export class Module7ReportService extends ExcelBaseService {
       wsBuy.getCell(s3TotalRowIdx, c).numFmt = '#,##0';
     });
     this.styleRange(wsBuy, s3TotalRowIdx, 2, s3TotalRowIdx, 14, {
-      font: m7DataBoldFont, border: blackBorder,
+      font: m7DataBoldFont,
+      border: blackBorder,
     });
     wsBuy.getCell(`B${s3TotalRowIdx}`).alignment = centerAlign;
-    [10, 12, 14].forEach((c) => { wsBuy.getCell(s3TotalRowIdx, c).alignment = rightAlign; });
+    [10, 12, 14].forEach((c) => {
+      wsBuy.getCell(s3TotalRowIdx, c).alignment = rightAlign;
+    });
     buyRowIdx++;
 
     // Section 5
@@ -732,7 +891,9 @@ export class Module7ReportService extends ExcelBaseService {
     wsBuy.getCell(`B${buyRowIdx}`).value =
       '5. Hàng hóa, dịch vụ không phải tổng hợp trên tờ khai 01/GTGT:';
     this.styleRange(wsBuy, buyRowIdx, 2, buyRowIdx, 13, {
-      font: m7SectionFont, alignment: leftAlign, border: blackBorder,
+      font: m7SectionFont,
+      alignment: leftAlign,
+      border: blackBorder,
     });
     wsBuy.getRow(buyRowIdx).height = 22;
     buyRowIdx++;
@@ -741,16 +902,27 @@ export class Module7ReportService extends ExcelBaseService {
     const grandRowBuyIdx = buyRowIdx;
     wsBuy.getRow(grandRowBuyIdx).height = 24;
     wsBuy.getCell(`B${grandRowBuyIdx}`).value = 'Tổng';
-    wsBuy.getCell(`J${grandRowBuyIdx}`).value = { formula: `=J${s1TotalRowIdx}+J${s3TotalRowIdx}` };
-    wsBuy.getCell(`L${grandRowBuyIdx}`).value = { formula: `=L${s1TotalRowIdx}+L${s3TotalRowIdx}` };
-    wsBuy.getCell(`N${grandRowBuyIdx}`).value = { formula: `=J${grandRowBuyIdx}+L${grandRowBuyIdx}` };
-    [10, 12, 14].forEach((c) => { wsBuy.getCell(grandRowBuyIdx, c).numFmt = '#,##0'; });
+    wsBuy.getCell(`J${grandRowBuyIdx}`).value = {
+      formula: `=J${s1TotalRowIdx}+J${s3TotalRowIdx}`,
+    };
+    wsBuy.getCell(`L${grandRowBuyIdx}`).value = {
+      formula: `=L${s1TotalRowIdx}+L${s3TotalRowIdx}`,
+    };
+    wsBuy.getCell(`N${grandRowBuyIdx}`).value = {
+      formula: `=J${grandRowBuyIdx}+L${grandRowBuyIdx}`,
+    };
+    [10, 12, 14].forEach((c) => {
+      wsBuy.getCell(grandRowBuyIdx, c).numFmt = '#,##0';
+    });
 
     this.styleRange(wsBuy, grandRowBuyIdx, 2, grandRowBuyIdx, 14, {
-      font: m7DataBoldFont, border: blackBorder,
+      font: m7DataBoldFont,
+      border: blackBorder,
     });
     wsBuy.getCell(`B${grandRowBuyIdx}`).alignment = centerAlign;
-    [10, 12, 14].forEach((c) => { wsBuy.getCell(grandRowBuyIdx, c).alignment = rightAlign; });
+    [10, 12, 14].forEach((c) => {
+      wsBuy.getCell(grandRowBuyIdx, c).alignment = rightAlign;
+    });
     buyRowIdx++;
 
     // Signature labels
@@ -759,7 +931,9 @@ export class Module7ReportService extends ExcelBaseService {
     wsBuy.mergeCells(`B${buyLabel1Idx}:H${buyLabel1Idx}`);
     wsBuy.getCell(`B${buyLabel1Idx}`).value =
       'Tổng giá trị HHDV mua vào phục vụ SXKD được khấu trừ thuế GTGT (**):              ............................';
-    for (let col = 2; col <= 8; col++) { wsBuy.getCell(buyLabel1Idx, col).font = m7DataBoldFont; }
+    for (let col = 2; col <= 8; col++) {
+      wsBuy.getCell(buyLabel1Idx, col).font = m7DataBoldFont;
+    }
     buyRowIdx++;
 
     const buyLabel2Idx = buyRowIdx;
@@ -767,13 +941,17 @@ export class Module7ReportService extends ExcelBaseService {
     wsBuy.mergeCells(`B${buyLabel2Idx}:H${buyLabel2Idx}`);
     wsBuy.getCell(`B${buyLabel2Idx}`).value =
       'Tổng số thuế GTGT của HHDV mua vào đủ điều kiện được khấu trừ (***):          ............................';
-    for (let col = 2; col <= 8; col++) { wsBuy.getCell(buyLabel2Idx, col).font = m7DataBoldFont; }
+    for (let col = 2; col <= 8; col++) {
+      wsBuy.getCell(buyLabel2Idx, col).font = m7DataBoldFont;
+    }
     buyRowIdx += 2;
 
     // Signatures
     const sigBuyRowIdx = buyRowIdx;
     wsBuy.getRow(sigBuyRowIdx).height = 22;
-    wsBuy.getCell(`J${sigBuyRowIdx}`).value = { formula: `='BÁN RA'!J${sigRowIdx}` };
+    wsBuy.getCell(`J${sigBuyRowIdx}`).value = {
+      formula: `='BÁN RA'!J${sigRowIdx}`,
+    };
     wsBuy.getCell(`J${sigBuyRowIdx}`).font = m7ItalicFont;
     wsBuy.getCell(`J${sigBuyRowIdx}`).alignment = centerAlign;
     buyRowIdx++;
@@ -783,12 +961,14 @@ export class Module7ReportService extends ExcelBaseService {
     wsBuy.getCell(`J${buyRowIdx}`).alignment = centerAlign;
     buyRowIdx++;
 
-    wsBuy.getCell(`J${buyRowIdx}`).value = 'ĐẠI DIỆN HỢP PHÁP CỦA NGƯỜI NỘP THUẾ';
+    wsBuy.getCell(`J${buyRowIdx}`).value =
+      'ĐẠI DIỆN HỢP PHÁP CỦA NGƯỜI NỘP THUẾ';
     wsBuy.getCell(`J${buyRowIdx}`).font = m7DataBoldFont;
     wsBuy.getCell(`J${buyRowIdx}`).alignment = centerAlign;
     buyRowIdx++;
 
-    wsBuy.getCell(`J${buyRowIdx}`).value = ' Ký tên, đóng dấu (ghi rõ họ tên và chức vụ)';
+    wsBuy.getCell(`J${buyRowIdx}`).value =
+      ' Ký tên, đóng dấu (ghi rõ họ tên và chức vụ)';
     wsBuy.getCell(`J${buyRowIdx}`).font = m7ItalicFont;
     wsBuy.getCell(`J${buyRowIdx}`).alignment = centerAlign;
   }

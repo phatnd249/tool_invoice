@@ -43,14 +43,22 @@ describe('JwtStrategy', () => {
       jti: 'jti-1',
     });
 
-    expect(result).toEqual({ id: 'uid-1', email: 'john@example.com', jti: 'jti-1' });
+    expect(result).toEqual({
+      id: 'uid-1',
+      email: 'john@example.com',
+      jti: 'jti-1',
+    });
   });
 
   it('should throw UnauthorizedException when token is blacklisted', async () => {
     mockPrisma.tokenBlacklist.findUnique.mockResolvedValue({ jti: 'jti-1' });
 
     await expect(
-      strategy.validate({ sub: 'uid-1', email: 'john@example.com', jti: 'jti-1' }),
+      strategy.validate({
+        sub: 'uid-1',
+        email: 'john@example.com',
+        jti: 'jti-1',
+      }),
     ).rejects.toThrow(UnauthorizedException);
   });
 
@@ -59,7 +67,11 @@ describe('JwtStrategy', () => {
     mockPrisma.user.findUnique.mockResolvedValue(null);
 
     await expect(
-      strategy.validate({ sub: 'uid-1', email: 'john@example.com', jti: 'jti-1' }),
+      strategy.validate({
+        sub: 'uid-1',
+        email: 'john@example.com',
+        jti: 'jti-1',
+      }),
     ).rejects.toThrow(UnauthorizedException);
   });
 
@@ -71,7 +83,11 @@ describe('JwtStrategy', () => {
     });
 
     await expect(
-      strategy.validate({ sub: 'uid-1', email: 'john@example.com', jti: 'jti-1' }),
+      strategy.validate({
+        sub: 'uid-1',
+        email: 'john@example.com',
+        jti: 'jti-1',
+      }),
     ).rejects.toThrow(UnauthorizedException);
   });
 
@@ -83,7 +99,11 @@ describe('JwtStrategy', () => {
     });
 
     await expect(
-      strategy.validate({ sub: 'uid-1', email: 'john@example.com', jti: 'jti-1' }),
+      strategy.validate({
+        sub: 'uid-1',
+        email: 'john@example.com',
+        jti: 'jti-1',
+      }),
     ).rejects.toThrow(UnauthorizedException);
   });
 });

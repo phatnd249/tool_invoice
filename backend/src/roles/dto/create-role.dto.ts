@@ -1,9 +1,4 @@
-import {
-  IsArray,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { IsCuid } from '../../common/decorators/is-cuid.decorator';
 
 export class CreateRoleDto {

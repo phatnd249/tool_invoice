@@ -41,9 +41,7 @@ export class GdtDownloadClientService {
     const isSco =
       invoice._sourceApi === 'sco-query' ||
       String(khhdon).toUpperCase().startsWith('M');
-    const apiPaths = isSco
-      ? ['sco-query', 'query']
-      : ['query', 'sco-query'];
+    const apiPaths = isSco ? ['sco-query', 'query'] : ['query', 'sco-query'];
 
     const statusCode = getInvoiceFileStatusCode(invoice);
     // Tên file dùng MST của công ty đang tải (công ty bên mua/bán),
@@ -60,22 +58,30 @@ export class GdtDownloadClientService {
     let lastError: any;
 
     for (const apiPath of apiPaths) {
-      const exportUrl = `${this.http.GDT_BASE}/${apiPath}/invoices/export-xml?nbmst=${nbmst}&khhdon=${khhdon}&shdon=${shdon}&khmshdon=${khmshdon}`;
+      const exportUrl =
+        `${this.http.GDT_BASE}/${apiPath}/invoices/export-xml` +
+        `?nbmst=${encodeURIComponent(nbmst)}` +
+        `&khhdon=${encodeURIComponent(khhdon)}` +
+        `&shdon=${encodeURIComponent(shdon)}` +
+        `&khmshdon=${encodeURIComponent(khmshdon)}`;
 
-      this.logger.debug(
-        `Trying ZIP download (${apiPath}): ${exportUrl}`,
-      );
+      this.logger.debug(`Trying ZIP download (${apiPath}): ${exportUrl}`);
 
       // Retry tự động khi gặp timeout hoặc lỗi mạng (retries = 2):
       // - HTTP 429 / Timeout → fetchWithRetry retry (429 backoff dài, timeout backoff ngắn)
       // - HTTP 500 → KHÔNG retry nội bộ (retry5xx: false): 500 = GDT không có hồ sơ gốc,
       //   trả ngay để thử path còn lại, tránh chờ backoff vô ích
-      const response = await this.http.fetchWithRetry(exportUrl, {
-        headers: this.http.buildHeaders(token),
-        responseType: 'arraybuffer',
-        timeout: 90000,
-        validateStatus: () => true,
-      }, 2, { retry5xx: false });
+      const response = await this.http.fetchWithRetry(
+        exportUrl,
+        {
+          headers: this.http.buildHeaders(token),
+          responseType: 'arraybuffer',
+          timeout: 90000,
+          validateStatus: () => true,
+        },
+        2,
+        { retry5xx: false },
+      );
 
       if (response.status === 200) {
         fs.writeFileSync(zipPath, Buffer.from(response.data));
@@ -88,7 +94,10 @@ export class GdtDownloadClientService {
         : '(empty)';
 
       // Nếu là 500, thử path còn lại
-      if (response.status === 500 && apiPath !== apiPaths[apiPaths.length - 1]) {
+      if (
+        response.status === 500 &&
+        apiPath !== apiPaths[apiPaths.length - 1]
+      ) {
         this.logger.warn(
           `GDT returned 500 for ${apiPath}, trying fallback path...`,
         );
@@ -111,7 +120,8 @@ export class GdtDownloadClientService {
 
       throw Object.assign(
         new Error(
-          gdtMessage || `GDT trả về lỗi (HTTP ${response.status}) cho hoá đơn ${invNum}`,
+          gdtMessage ||
+            `GDT trả về lỗi (HTTP ${response.status}) cho hoá đơn ${invNum}`,
         ),
         { statusCode: response.status },
       );
@@ -154,7 +164,11 @@ export class GdtDownloadClientService {
       String(khhdon).toUpperCase().startsWith('M');
     const apiPath = isSco ? 'sco-query' : 'query';
     const detailUrl =
-      `${this.http.GDT_BASE}/${apiPath}/invoices/detail?nbmst=${nbmst}&khhdon=${khhdon}&shdon=${shdon}&khmshdon=${khmshdon}`;
+      `${this.http.GDT_BASE}/${apiPath}/invoices/detail` +
+      `?nbmst=${encodeURIComponent(nbmst)}` +
+      `&khhdon=${encodeURIComponent(khhdon)}` +
+      `&shdon=${encodeURIComponent(shdon)}` +
+      `&khmshdon=${encodeURIComponent(khmshdon)}`;
 
     try {
       const response = await this.http.fetchWithRetry(detailUrl, {
@@ -203,16 +217,12 @@ export class GdtDownloadClientService {
 
     const startStr = fmt(startDate, false);
     const endStr = fmt(endDate, true);
-    const searchStr =
-      `tdlap=ge=${startStr};tdlap=le=${endStr}`;
+    const searchStr = `tdlap=ge=${startStr};tdlap=le=${endStr}`;
 
     // Ngày theo quy ước tên file (dd-mm-yyyy)
-    const fileStart =
-      `${String(startDate.getDate()).padStart(2, '0')}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${startDate.getFullYear()}`;
-    const fileEnd =
-      `${String(endDate.getDate()).padStart(2, '0')}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${endDate.getFullYear()}`;
-    const fileName =
-      `${companyTaxCode}-${fileStart}-${fileEnd}.xlsx`;
+    const fileStart = `${String(startDate.getDate()).padStart(2, '0')}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${startDate.getFullYear()}`;
+    const fileEnd = `${String(endDate.getDate()).padStart(2, '0')}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${endDate.getFullYear()}`;
+    const fileName = `${companyTaxCode}-${fileStart}-${fileEnd}.xlsx`;
     const filePath = path.join(outputDir, fileName);
 
     // Nếu đã có file hợp lệ → bỏ qua (idempotent)
@@ -223,22 +233,24 @@ export class GdtDownloadClientService {
 
     const apiPaths = ['query', 'sco-query'];
     for (const apiPath of apiPaths) {
-      const url =
-        `${this.http.GDT_BASE}/${apiPath}/invoices/export-excel?sort=tdlap:desc&search=${encodeURIComponent(searchStr)}`;
+      const url = `${this.http.GDT_BASE}/${apiPath}/invoices/export-excel?sort=tdlap:desc&search=${encodeURIComponent(searchStr)}`;
 
       try {
-        const response = await this.http.fetchWithRetry(url, {
-          headers: this.http.buildHeaders(token),
-          responseType: 'arraybuffer',
-          timeout: 90000,
-          validateStatus: () => true,
-        }, 2, { retry5xx: false });
+        const response = await this.http.fetchWithRetry(
+          url,
+          {
+            headers: this.http.buildHeaders(token),
+            responseType: 'arraybuffer',
+            timeout: 90000,
+            validateStatus: () => true,
+          },
+          2,
+          { retry5xx: false },
+        );
 
         if (response.status === 200 && response.data) {
           fs.writeFileSync(filePath, Buffer.from(response.data));
-          this.logger.log(
-            `Downloaded Excel report (${apiPath}): ${filePath}`,
-          );
+          this.logger.log(`Downloaded Excel report (${apiPath}): ${filePath}`);
           return [filePath];
         }
 

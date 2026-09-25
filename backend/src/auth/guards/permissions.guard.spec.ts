@@ -40,7 +40,10 @@ describe('PermissionsGuard', () => {
   });
 
   it('should allow request when user has all required permissions', async () => {
-    mockReflector.getAllAndOverride.mockReturnValue(['user:read', 'user:create']);
+    mockReflector.getAllAndOverride.mockReturnValue([
+      'user:read',
+      'user:create',
+    ]);
     mockPrisma.permission.findMany.mockResolvedValue([
       { name: 'user:read' },
       { name: 'user:create' },

@@ -14,6 +14,7 @@ import { UpdateCompanyDto } from './dto/update-company.dto';
 import { QueryCompaniesDto } from './dto/query-companies.dto';
 import { ManualLoginDto } from './dto/manual-login.dto';
 import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
+import { TenantAccessService } from '../tenant/tenant-access.service';
 
 @Injectable()
 export class CompaniesService {
@@ -24,6 +25,7 @@ export class CompaniesService {
     private readonly gdtAuth: GdtAuthService,
     private readonly captchaResolver: CaptchaResolverService,
     private readonly maSoThueService: MaSoThueService,
+    private readonly tenant: TenantAccessService,
   ) {}
 
   // ─── CRUD ─────────────────────────────────────────────────────────────────
@@ -35,7 +37,9 @@ export class CompaniesService {
    * Vẫn trả về `hasToken` (boolean) và `tokenExpiredAt` (ngày hết hạn — không
    * nhạy cảm) để frontend hiển thị đúng trạng thái đăng nhập mà không lộ token.
    */
-  private sanitizeCompany<T extends { lookupPassword?: any; token?: any; tokenExpiredAt?: any }>(
+  private sanitizeCompany<
+    T extends { lookupPassword?: any; token?: any; tokenExpiredAt?: any },
+  >(
     company: T,
   ): Omit<T, 'lookupPassword' | 'token' | 'tokenExpiredAt'> & {
     tokenExpiredAt: any;
@@ -49,7 +53,10 @@ export class CompaniesService {
     };
   }
 
-  async findAll(query: QueryCompaniesDto, userId?: string): Promise<PaginatedResult<any>> {
+  async findAll(
+    query: QueryCompaniesDto,
+    userId?: string,
+  ): Promise<PaginatedResult<any>> {
     const {
       page = 1,
       limit = 10,
@@ -68,18 +75,16 @@ export class CompaniesService {
 
     const where: any = {
       ...(search && {
-        OR: [
-          { taxCode: { contains: search } },
-          { name: { contains: search } },
-        ],
+        OR: [{ taxCode: { contains: search } }, { name: { contains: search } }],
       }),
       ...(loginMode && { loginMode }),
       // If user has no global scope, restrict to assigned companies only
-      ...(userId && !hasGlobalScope && {
-        userCompanies: {
-          some: { userId },
-        },
-      }),
+      ...(userId &&
+        !hasGlobalScope && {
+          userCompanies: {
+            some: { userId },
+          },
+        }),
     };
 
     const [companies, total] = await Promise.all([
@@ -92,34 +97,22 @@ export class CompaniesService {
       this.prisma.company.count({ where }),
     ]);
 
-    return paginate(companies.map((c) => this.sanitizeCompany(c)), total, page, limit);
+    return paginate(
+      companies.map((c) => this.sanitizeCompany(c)),
+      total,
+      page,
+      limit,
+    );
   }
 
   private async hasCompanyScope(userId: string): Promise<boolean> {
-    const isSuperAdmin = await this.prisma.role.findFirst({
-      where: {
-        name: 'SUPER_ADMIN',
-        userRoles: { some: { userId } },
-      },
-    });
-    if (isSuperAdmin) return true;
-
-    const hasScope = await this.prisma.permission.findFirst({
-      where: {
-        name: 'company:scope',
-        rolePermissions: {
-          some: {
-            role: {
-              userRoles: { some: { userId } },
-            },
-          },
-        },
-      },
-    });
-    return !!hasScope;
+    return this.tenant.hasGlobalScope(userId);
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, userId?: string) {
+    if (userId) {
+      await this.tenant.assertCompanyAccess(userId, id);
+    }
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) {
       throw new NotFoundException('Không tìm thấy doanh nghiệp');
@@ -159,7 +152,9 @@ export class CompaniesService {
       token = await this.gdtAuth.loginAuto(dto.taxCode, dto.lookupPassword);
     }
 
-    const tokenExpiredAt = token ? this.gdtAuth.getTokenExpiration(token) : null;
+    const tokenExpiredAt = token
+      ? this.gdtAuth.getTokenExpiration(token)
+      : null;
     const resolvedName =
       dto.name ||
       (token ? await this.gdtAuth.getTaxpayerName(token) : '') ||
@@ -180,7 +175,8 @@ export class CompaniesService {
     );
   }
 
-  async update(id: string, dto: UpdateCompanyDto) {
+  async update(id: string, dto: UpdateCompanyDto, userId: string) {
+    await this.tenant.assertCompanyAccess(userId, id);
     await this.findOne(id);
 
     return this.sanitizeCompany(
@@ -191,7 +187,8 @@ export class CompaniesService {
     );
   }
 
-  async delete(id: string) {
+  async delete(id: string, userId: string) {
+    await this.tenant.assertCompanyAccess(userId, id);
     await this.findOne(id);
     await this.prisma.company.delete({ where: { id } });
     return { message: 'Đã xoá doanh nghiệp thành công' };
@@ -199,7 +196,8 @@ export class CompaniesService {
 
   // ─── Token & Login ────────────────────────────────────────────────────────
 
-  async refreshToken(id: string) {
+  async refreshToken(id: string, userId: string) {
+    await this.tenant.assertCompanyAccess(userId, id);
     const company = await this.findCompanyRaw(id);
 
     if (company.loginMode !== 'AUTO') {
@@ -224,7 +222,8 @@ export class CompaniesService {
     );
   }
 
-  async loginManual(id: string, dto: ManualLoginDto) {
+  async loginManual(id: string, dto: ManualLoginDto, userId: string) {
+    await this.tenant.assertCompanyAccess(userId, id);
     const company = await this.findCompanyRaw(id);
 
     const token = await this.gdtAuth.authenticate(
@@ -250,14 +249,16 @@ export class CompaniesService {
    * Không sinh phiên/lưu trạng thái: ckey được trả về client và gửi lại
    * kèm cvalue ở endpoint login-manual.
    */
-  async getLoginManualCaptcha(id: string) {
+  async getLoginManualCaptcha(id: string, userId: string) {
+    await this.tenant.assertCompanyAccess(userId, id);
     await this.findOne(id);
     return this.captchaResolver.fetchCaptchaAsPng();
   }
 
   // ─── Sync Info ────────────────────────────────────────────────────────────
 
-  async syncCompanyInfo(id: string) {
+  async syncCompanyInfo(id: string, userId: string) {
+    await this.tenant.assertCompanyAccess(userId, id);
     const company = await this.findCompanyRaw(id);
 
     try {
@@ -268,26 +269,24 @@ export class CompaniesService {
           where: { id },
           data: {
             name: info.name !== 'Không xác định' ? info.name : company.name,
-          address:
-            info.address !== 'Đang cập nhật' ? info.address : null,
-          taxAddress:
-            info.taxAddress !== 'Đang cập nhật' ? info.taxAddress : null,
-          representative:
-            info.representative !== 'Đang cập nhật'
-              ? info.representative
-              : null,
-          phone: info.phone !== 'Đang cập nhật' ? info.phone : null,
-          activeDate:
-            info.activeDate !== 'Đang cập nhật' ? info.activeDate : null,
-          managedBy:
-            info.managedBy !== 'Đang cập nhật' ? info.managedBy : null,
-          companyType:
-            info.type !== 'Đang cập nhật' ? info.type : null,
-          status: info.status !== 'Đang cập nhật' ? info.status : null,
-          lastSyncedAt: new Date(),
-        },
-      }),
-    );
+            address: info.address !== 'Đang cập nhật' ? info.address : null,
+            taxAddress:
+              info.taxAddress !== 'Đang cập nhật' ? info.taxAddress : null,
+            representative:
+              info.representative !== 'Đang cập nhật'
+                ? info.representative
+                : null,
+            phone: info.phone !== 'Đang cập nhật' ? info.phone : null,
+            activeDate:
+              info.activeDate !== 'Đang cập nhật' ? info.activeDate : null,
+            managedBy:
+              info.managedBy !== 'Đang cập nhật' ? info.managedBy : null,
+            companyType: info.type !== 'Đang cập nhật' ? info.type : null,
+            status: info.status !== 'Đang cập nhật' ? info.status : null,
+            lastSyncedAt: new Date(),
+          },
+        }),
+      );
     } catch (error: any) {
       this.logger.error(
         `Failed to sync company info for ${company.taxCode}: ${error.message}`,

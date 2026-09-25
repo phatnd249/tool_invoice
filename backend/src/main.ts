@@ -6,7 +6,18 @@ import { vietnameseValidationFactory } from './common/validation-messages';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.getHttpAdapter().getInstance().disable('x-powered-by');
+
   app.setGlobalPrefix('api');
+
+  app.use((req, res, next) => {
+    if (!res.headersSent) {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('X-Frame-Options', 'DENY');
+    }
+    next();
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

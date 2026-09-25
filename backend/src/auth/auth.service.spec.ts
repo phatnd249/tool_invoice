@@ -121,7 +121,7 @@ describe('AuthService', () => {
         dto.email,
         expect.any(String),
       );
-      expect(result.message).toContain('verify your email');
+      expect(result.message).toContain('thành công');
     });
 
     it('should throw ConflictException if email already in use', async () => {
@@ -152,10 +152,13 @@ describe('AuthService', () => {
 
       expect(mockPrisma.user.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ emailVerified: true, status: 'ACTIVE' }),
+          data: expect.objectContaining({
+            emailVerified: true,
+            status: 'ACTIVE',
+          }),
         }),
       );
-      expect(result.message).toContain('verified successfully');
+      expect(result.message).toContain('thành công');
     });
 
     it('should throw BadRequestException on invalid token', async () => {
@@ -209,9 +212,9 @@ describe('AuthService', () => {
         deletedAt: null,
       });
 
-      await expect(service.resendVerification('john@example.com')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.resendVerification('john@example.com'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -383,10 +386,14 @@ describe('AuthService', () => {
       mockJwtService.verify.mockReturnValue({ jti: 'rt-jti-1' });
       mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
 
-      const result = await service.logout('uid-1', 'at-jti-1', 'valid.refresh.token');
+      const result = await service.logout(
+        'uid-1',
+        'at-jti-1',
+        'valid.refresh.token',
+      );
 
       expect(mockPrisma.tokenBlacklist.upsert).toHaveBeenCalled();
-      expect(result.message).toContain('Logged out');
+      expect(result.message).toContain('thành công');
     });
   });
 
@@ -405,7 +412,7 @@ describe('AuthService', () => {
           data: { revokedAt: expect.any(Date) },
         }),
       );
-      expect(result.message).toContain('all devices');
+      expect(result.message).toContain('đăng xuất');
     });
   });
 
@@ -464,7 +471,7 @@ describe('AuthService', () => {
           data: expect.objectContaining({ password: '$newhashed$' }),
         }),
       );
-      expect(result.message).toContain('reset successfully');
+      expect(result.message).toContain('thành công');
     });
 
     it('should throw BadRequestException when passwords do not match', async () => {

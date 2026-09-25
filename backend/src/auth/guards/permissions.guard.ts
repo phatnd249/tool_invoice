@@ -55,7 +55,8 @@ export class PermissionsGuard implements CanActivate {
     const permissionSet = new Set(userPermissions.map((p) => p.name));
     const hasAll = requiredPermissions.every((p) => permissionSet.has(p));
 
-    if (!hasAll) throw new ForbiddenException('Bạn không có quyền thực hiện thao tác này');
+    if (!hasAll)
+      throw new ForbiddenException('Bạn không có quyền thực hiện thao tác này');
     return true;
   }
 }

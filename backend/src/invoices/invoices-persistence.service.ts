@@ -114,17 +114,14 @@ export class InvoicesPersistenceService {
       buyerName: (inv.nmten || inv.nmtnmua || '').trim() || null,
 
       // Financial
-      totalBeforeTax:
-        inv.tgtcthue != null ? Number(inv.tgtcthue) : null,
+      totalBeforeTax: inv.tgtcthue != null ? Number(inv.tgtcthue) : null,
       taxAmount: inv.tgtthue != null ? Number(inv.tgtthue) : null,
       totalAmount: Number(inv.tgtttbso) || 0,
       totalAmountInWords: inv.tgtttbchu?.trim() || null,
 
       // Status
-      invoiceStatus:
-        inv.tthai != null ? Number(inv.tthai) : null,
-      processStatus:
-        inv.ttxly != null ? Number(inv.ttxly) : null,
+      invoiceStatus: inv.tthai != null ? Number(inv.tthai) : null,
+      processStatus: inv.ttxly != null ? Number(inv.ttxly) : null,
 
       // Type & source
       type,
@@ -178,9 +175,7 @@ export class InvoicesPersistenceService {
         await tx.invoiceItem.createMany({
           data: items.map((item, idx) => ({
             invoiceId: invoice.id,
-            lineNumber: item.lineNumber
-              ? Number(item.lineNumber)
-              : idx + 1,
+            lineNumber: item.lineNumber ? Number(item.lineNumber) : idx + 1,
             name: item.name,
             unit: item.unit || null,
             quantity: item.quantity ?? null,
@@ -203,9 +198,7 @@ export class InvoicesPersistenceService {
       });
     });
 
-    this.logger.debug(
-      `Saved ${items.length} items for invoice ${inv.shdon}`,
-    );
+    this.logger.debug(`Saved ${items.length} items for invoice ${inv.shdon}`);
 
     return invoice.id;
   }
@@ -276,9 +269,7 @@ export class InvoicesPersistenceService {
         await tx.invoiceItem.createMany({
           data: items.map((item, idx) => ({
             invoiceId: invoice.id,
-            lineNumber: item.lineNumber
-              ? Number(item.lineNumber)
-              : idx + 1,
+            lineNumber: item.lineNumber ? Number(item.lineNumber) : idx + 1,
             name: item.name,
             unit: item.unit || null,
             quantity: item.quantity ?? null,

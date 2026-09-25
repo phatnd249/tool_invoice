@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsOptional, IsIn, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsIn,
+  IsDateString,
+} from 'class-validator';
 
 export class DownloadInvoicesDto {
   @IsString()

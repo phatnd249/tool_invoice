@@ -16,7 +16,11 @@ export class PreviewService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.cacheDir = path.join(process.cwd(), 'public', 'preview');
+    // Cache KHÔNG đặt trong public/ (tránh lộ qua ServeStaticModule vô điều kiện).
+    this.cacheDir = path.join(
+      this.config.get('INVOICES_DIR') || './invoices',
+      '.preview-cache',
+    );
     fs.mkdirSync(this.cacheDir, { recursive: true });
   }
 
@@ -119,8 +123,7 @@ export class PreviewService {
             if (ext === 'js') mimeType = 'text/javascript';
             else if (ext === 'css') mimeType = 'text/css';
             else if (ext === 'svg') mimeType = 'image/svg+xml';
-            else if (ext === 'jpg' || ext === 'jpeg')
-              mimeType = 'image/jpeg';
+            else if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
             else if (ext === 'png') mimeType = 'image/png';
             else if (ext === 'gif') mimeType = 'image/gif';
 
@@ -150,15 +153,15 @@ export class PreviewService {
 
       // Inject background image để PDF render đúng
       try {
-        const bgPath = path.resolve(
-          this.cacheDir,
-          '../../../images/viewinvoice-bg.jpg',
-        );
+        const bgName = 'viewinvoice-bg.jpg';
+        const bgCandidates = [
+          path.join(process.cwd(), '..', 'images', bgName),
+          path.join(process.cwd(), 'images', bgName),
+        ];
+        const bgPath = bgCandidates.find((p) => fs.existsSync(p));
 
-        if (fs.existsSync(bgPath)) {
-          const bgBase64 = fs
-            .readFileSync(bgPath)
-            .toString('base64');
+        if (bgPath) {
+          const bgBase64 = fs.readFileSync(bgPath).toString('base64');
           const bgDataUri = `data:image/jpeg;base64,${bgBase64}`;
           const styleInjection = `
             <style>
@@ -179,9 +182,7 @@ export class PreviewService {
             `${styleInjection}</head>`,
           );
         } else {
-          this.logger.warn(
-            `Background image not found at ${bgPath}`,
-          );
+          this.logger.warn(`Background image not found at ${bgPath}`);
         }
       } catch (err: any) {
         this.logger.warn(
@@ -192,9 +193,7 @@ export class PreviewService {
 
       return htmlContent;
     } catch (error: any) {
-      this.logger.error(
-        `Error extracting HTML from ZIP: ${error.message}`,
-      );
+      this.logger.error(`Error extracting HTML from ZIP: ${error.message}`);
       return null;
     }
   }
@@ -261,8 +260,7 @@ export class PreviewService {
       tsuat: it.taxRate || '',
     }));
 
-    const buyerName =
-      invoice.buyerName || invoice.buyerTaxCode || '';
+    const buyerName = invoice.buyerName || invoice.buyerTaxCode || '';
 
     return {
       khmshdon: invoice.templateSymbol,

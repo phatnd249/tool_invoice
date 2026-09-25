@@ -55,7 +55,9 @@ describe('AuthController', () => {
 
     await controller.resendVerification({ email: 'john@example.com' });
 
-    expect(mockAuthService.resendVerification).toHaveBeenCalledWith('john@example.com');
+    expect(mockAuthService.resendVerification).toHaveBeenCalledWith(
+      'john@example.com',
+    );
   });
 
   it('should call authService.login', async () => {
@@ -83,21 +85,35 @@ describe('AuthController', () => {
   });
 
   it('should call authService.logout with user and refreshToken', async () => {
-    const user: any = { id: 'uid-1', email: 'john@example.com', jti: 'jti-1' };
+    const user: any = {
+      id: 'uid-1',
+      email: 'john@example.com',
+      jti: 'jti-1',
+      exp: 1750000000,
+    };
     mockAuthService.logout.mockResolvedValue({ message: 'ok' });
 
     await controller.logout(user, { refreshToken: 'rt' });
 
-    expect(mockAuthService.logout).toHaveBeenCalledWith('uid-1', 'jti-1', 'rt');
+    expect(mockAuthService.logout).toHaveBeenCalledWith(
+      'uid-1',
+      'jti-1',
+      'rt',
+      1750000000,
+    );
   });
 
   it('should call authService.logoutAll', async () => {
-    const user: any = { id: 'uid-1', jti: 'jti-1' };
+    const user: any = { id: 'uid-1', jti: 'jti-1', exp: 1750000000 };
     mockAuthService.logoutAll.mockResolvedValue({ message: 'ok' });
 
     await controller.logoutAll(user);
 
-    expect(mockAuthService.logoutAll).toHaveBeenCalledWith('uid-1', 'jti-1');
+    expect(mockAuthService.logoutAll).toHaveBeenCalledWith(
+      'uid-1',
+      'jti-1',
+      1750000000,
+    );
   });
 
   it('should call authService.forgotPassword', async () => {
@@ -105,7 +121,9 @@ describe('AuthController', () => {
 
     await controller.forgotPassword({ email: 'john@example.com' });
 
-    expect(mockAuthService.forgotPassword).toHaveBeenCalledWith('john@example.com');
+    expect(mockAuthService.forgotPassword).toHaveBeenCalledWith(
+      'john@example.com',
+    );
   });
 
   it('should call authService.resetPassword', async () => {

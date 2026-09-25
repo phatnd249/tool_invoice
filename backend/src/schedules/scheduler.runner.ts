@@ -99,14 +99,28 @@ export class SchedulerRunner implements OnModuleDestroy {
    * Run the download task for all companies in a schedule.
    */
   private async runDownload(schedule: ScheduleWithCompanies): Promise<void> {
-    const { id, repeatMode, dateRangeDays, invoiceType, overwriteMode, companies } = schedule;
+    const {
+      id,
+      repeatMode,
+      dateRangeDays,
+      invoiceType,
+      overwriteMode,
+      companies,
+    } = schedule;
     const taxCodes = companies.map((c) => c.company.taxCode).join(', ');
 
-    this.logger.log(`Running schedule #${id} (${schedule.name || 'unnamed'}) for companies: ${taxCodes}`);
+    this.logger.log(
+      `Running schedule #${id} (${schedule.name || 'unnamed'}) for companies: ${taxCodes}`,
+    );
 
     try {
-      const { startDate, endDate } = getDateRange({ repeatMode, dateRangeDays });
-      this.logger.log(`  Date range: ${formatDate(startDate)} → ${formatDate(endDate)}`);
+      const { startDate, endDate } = getDateRange({
+        repeatMode,
+        dateRangeDays,
+      });
+      this.logger.log(
+        `  Date range: ${formatDate(startDate)} → ${formatDate(endDate)}`,
+      );
 
       for (const sc of companies) {
         this.logger.log(`  Downloading for ${sc.company.taxCode}...`);
@@ -151,7 +165,8 @@ export class SchedulerRunner implements OnModuleDestroy {
    */
   startJob(schedule: ScheduleWithCompanies): void {
     const { id, cronExpression, repeatMode, scheduledAt, companies } = schedule;
-    const taxCodes = companies.map((c) => c.company.taxCode).join(', ') || 'none';
+    const taxCodes =
+      companies.map((c) => c.company.taxCode).join(', ') || 'none';
 
     // Stop existing job first
     this.stopJob(id);
@@ -185,7 +200,9 @@ export class SchedulerRunner implements OnModuleDestroy {
     }
 
     if (!cron.validate(cronExpression)) {
-      this.logger.error(`Invalid cron expression: "${cronExpression}" for schedule #${id}`);
+      this.logger.error(
+        `Invalid cron expression: "${cronExpression}" for schedule #${id}`,
+      );
       return;
     }
 

@@ -35,8 +35,9 @@ export class CompaniesController {
 
   @Get(':id')
   @RequirePermissions('company:read')
-  findOne(@Param('id') id: string) {
-    return this.companiesService.findOne(id);
+  findOne(@Param('id') id: string, @Request() req: any) {
+    const user: AuthUser = req.user;
+    return this.companiesService.findOne(id, user.id);
   }
 
   @Post()
@@ -48,37 +49,51 @@ export class CompaniesController {
 
   @Put(':id')
   @RequirePermissions('company:update')
-  update(@Param('id') id: string, @Body() dto: UpdateCompanyDto) {
-    return this.companiesService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateCompanyDto,
+    @Request() req: any,
+  ) {
+    const user: AuthUser = req.user;
+    return this.companiesService.update(id, dto, user.id);
   }
 
   @Delete(':id')
   @RequirePermissions('company:delete')
-  delete(@Param('id') id: string) {
-    return this.companiesService.delete(id);
+  delete(@Param('id') id: string, @Request() req: any) {
+    const user: AuthUser = req.user;
+    return this.companiesService.delete(id, user.id);
   }
 
   @Post(':id/refresh')
   @RequirePermissions('company:login')
-  refreshToken(@Param('id') id: string) {
-    return this.companiesService.refreshToken(id);
+  refreshToken(@Param('id') id: string, @Request() req: any) {
+    const user: AuthUser = req.user;
+    return this.companiesService.refreshToken(id, user.id);
   }
 
   @Post(':id/login-manual')
   @RequirePermissions('company:login')
-  loginManual(@Param('id') id: string, @Body() dto: ManualLoginDto) {
-    return this.companiesService.loginManual(id, dto);
+  loginManual(
+    @Param('id') id: string,
+    @Body() dto: ManualLoginDto,
+    @Request() req: any,
+  ) {
+    const user: AuthUser = req.user;
+    return this.companiesService.loginManual(id, dto, user.id);
   }
 
   @Get(':id/login-manual/captcha')
   @RequirePermissions('company:login')
-  getLoginManualCaptcha(@Param('id') id: string) {
-    return this.companiesService.getLoginManualCaptcha(id);
+  getLoginManualCaptcha(@Param('id') id: string, @Request() req: any) {
+    const user: AuthUser = req.user;
+    return this.companiesService.getLoginManualCaptcha(id, user.id);
   }
 
   @Put(':id/sync-info')
   @RequirePermissions('company:update')
-  syncInfo(@Param('id') id: string) {
-    return this.companiesService.syncCompanyInfo(id);
+  syncInfo(@Param('id') id: string, @Request() req: any) {
+    const user: AuthUser = req.user;
+    return this.companiesService.syncCompanyInfo(id, user.id);
   }
 }

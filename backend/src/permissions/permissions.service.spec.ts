@@ -72,7 +72,9 @@ describe('PermissionsService', () => {
     it('should throw NotFoundException when not found', async () => {
       mockPrisma.permission.findUnique.mockResolvedValue(null);
 
-      await expect(service.findOne('bad-id')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('bad-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -114,7 +116,9 @@ describe('PermissionsService', () => {
         description: 'Updated desc',
       });
 
-      const result = await service.update('perm-1', { description: 'Updated desc' });
+      const result = await service.update('perm-1', {
+        description: 'Updated desc',
+      });
 
       expect(result.description).toBe('Updated desc');
     });
@@ -122,7 +126,9 @@ describe('PermissionsService', () => {
     it('should throw NotFoundException when permission not found', async () => {
       mockPrisma.permission.findUnique.mockResolvedValue(null);
 
-      await expect(service.update('bad-id', {})).rejects.toThrow(NotFoundException);
+      await expect(service.update('bad-id', {})).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -141,7 +147,7 @@ describe('PermissionsService', () => {
       expect(mockPrisma.permission.delete).toHaveBeenCalledWith({
         where: { id: 'perm-1' },
       });
-      expect(result.message).toContain('deleted');
+      expect(result.message).toContain('thành công');
     });
 
     it('should throw BadRequestException when permission is assigned to roles', async () => {
@@ -150,7 +156,9 @@ describe('PermissionsService', () => {
         _count: { rolePermissions: 2 },
       });
 
-      await expect(service.delete('perm-1')).rejects.toThrow(BadRequestException);
+      await expect(service.delete('perm-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw NotFoundException when permission not found', async () => {

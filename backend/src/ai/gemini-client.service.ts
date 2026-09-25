@@ -9,8 +9,7 @@ export class GeminiClientService {
   constructor(private readonly config: ConfigService) {}
 
   getClient(apiKeyOverride?: string): GoogleGenerativeAI {
-    const apiKey =
-      apiKeyOverride || this.config.get<string>('GEMINI_API_KEY');
+    const apiKey = apiKeyOverride || this.config.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
       throw new InternalServerErrorException(
         'Gemini API key is not configured. Please set GEMINI_API_KEY in .env',
@@ -49,6 +48,9 @@ export class GeminiClientService {
 
     const responseText = result.response.text();
     // Clean result: keep only alphanumeric characters, uppercase
-    return responseText.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().trim();
+    return responseText
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toUpperCase()
+      .trim();
   }
 }

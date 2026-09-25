@@ -1,10 +1,4 @@
-import {
-  IsEmail,
-  IsIn,
-  IsOptional,
-  IsString,
-  IsArray,
-} from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, IsArray } from 'class-validator';
 import { IsCuid } from '../../common/decorators/is-cuid.decorator';
 
 export class UpdateUserDto {

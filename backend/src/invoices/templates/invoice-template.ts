@@ -3,13 +3,13 @@ import { numberToWords } from '../utils/number-to-words';
 
 export function renderInvoiceTemplate(detail: any): string {
   const items = detail.cttkhac || [];
-  
+
   let itemsHtml = '';
   items.forEach((item: any, index: number) => {
     itemsHtml += `
       <tr>
         <td class="tx-center">${index + 1}</td>
-        <td class="tx-left"><span>${item.tchat === '1' ? 'Hàng hóa, dịch vụ' : (item.tchat || '')}</span></td>
+        <td class="tx-left"><span>${item.tchat === '1' ? 'Hàng hóa, dịch vụ' : item.tchat || ''}</span></td>
         <td class="tx-left" style="max-width: 200px;word-wrap: break-word;"></td>
         <td class="tx-left">${item.thdon || ''}</td>
         <td class="tx-left">${item.dvtinh || ''}</td>
@@ -22,7 +22,9 @@ export function renderInvoiceTemplate(detail: any): string {
     `;
   });
 
-  let day = '...', month = '...', year = '...';
+  let day = '...',
+    month = '...',
+    year = '...';
   if (detail.tdlap) {
     const parts = detail.tdlap.split('-');
     if (parts.length >= 3) {
