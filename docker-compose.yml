@@ -28,8 +28,8 @@ services:
       # Reach Gotenberg through the Docker network
       GOTENBERG_URL: http://gotenberg:3000
       # Security secrets (override these in production!)
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-me-access-secret}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh-secret}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
       # Optional integrations
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -39,8 +39,21 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       FEEDBACK_TO_EMAIL: ${FEEDBACK_TO_EMAIL:-}
       GDT_BASE_URL: ${GDT_BASE_URL:-https://hoadondientu.gdt.gov.vn/api}
+      # Google Drive Backup
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
+      GOOGLE_SERVICE_ACCOUNT_KEY_PATH: ${GOOGLE_SERVICE_ACCOUNT_KEY_PATH:-}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
+      GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL:-}
+      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:-}
+      BACKUP_AUTO_ENABLED: ${BACKUP_AUTO_ENABLED:-true}
+      BACKUP_CRON_SCHEDULE: ${BACKUP_CRON_SCHEDULE:-0 2 * * *}
+      BACKUP_RETENTION_COUNT: ${BACKUP_RETENTION_COUNT:-10}
       # Set to "false" to skip seeding on every boot
-      SEED_ON_START: ${SEED_ON_START:-true}
+      SEED_ON_START: ${SEED_ON_START:-false}
+      # Admin account created by the seed script (only when both are set)
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
+
     volumes:
       # Persist SQLite database + generated invoice files across restarts
       - app_data:/app/backend/data

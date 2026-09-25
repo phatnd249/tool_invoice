@@ -65,3 +65,14 @@ src/generated/prisma
 *.swp
 *.swo
 *.swn
+
+# Credentials & Service Accounts
+credentials/
+*service-account*.json
+*.pem
+
+# Backups
+backups/
+*.db-wal
+*.db-shm
+
