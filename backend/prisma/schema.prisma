@@ -279,3 +279,20 @@ model UserCompany {
   @@id([userId, companyId])
   @@map("user_companies")
 }
+
+model BackupLog {
+  id           String    @id @default(cuid())
+  fileName     String
+  fileSize     Float?
+  driveFileId  String?
+  driveFileUrl String?
+  status       String    // "SUCCESS" | "FAILED" | "IN_PROGRESS"
+  triggerType  String    // "AUTO" | "MANUAL"
+  errorMessage String?
+  durationMs   Int?
+  createdAt    DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@map("backup_logs")
+}
+

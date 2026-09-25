@@ -69,7 +69,10 @@ async function main() {
     { name: 'invoice:download', group: 'invoice', description: 'Tải hoá đơn từ Tổng cục Thuế' },
 
     { name: 'company:scope', group: 'company', description: 'Xem tất cả doanh nghiệp (toàn cục). Nếu không có, user chỉ thấy công ty được gán.' },
+
+    { name: 'backup:manage', group: 'system', description: 'Quản lý sao lưu dữ liệu và Google Drive' },
   ];
+
 
   const permissionIds: Record<string, string> = {};
 
@@ -140,39 +143,51 @@ async function main() {
 
   console.log('✅ Role permissions assigned');
 
-  // ─── 4. Seed Super Admin user ──────────────────────────────────────────────
+  // ─── 4. Seed Super Admin user (chỉ khi có ADMIN_EMAIL + ADMIN_INITIAL_PASSWORD) ──
 
-  const hashedPassword = await bcrypt.hash('Admin@123', 10);
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_INITIAL_PASSWORD;
 
-  const superAdminUser = await prisma.user.upsert({
-    where: { email: 'admin@example.com' },
-    update: {},
-    create: {
-      fullName: 'Super Admin',
-      email: 'admin@example.com',
-      password: hashedPassword,
-      status: 'ACTIVE',
-      emailVerified: true,
-    },
-  });
+  if (!adminEmail || !adminPassword) {
+    console.warn(
+      '⚠️  Bỏ qua tạo admin: bật ADMIN_EMAIL + ADMIN_INITIAL_PASSWORD để seed tài khoản quản trị',
+    );
+  } else if (adminPassword.length < 8) {
+    console.warn(
+      '⚠️  Bỏ qua tạo admin: ADMIN_INITIAL_PASSWORD phải có ít nhất 8 ký tự',
+    );
+  } else {
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
-  await prisma.userRole.upsert({
-    where: {
-      userId_roleId: {
+    const superAdminUser = await prisma.user.upsert({
+      where: { email: adminEmail },
+      update: {},
+      create: {
+        fullName: 'Super Admin',
+        email: adminEmail,
+        password: hashedPassword,
+        status: 'ACTIVE',
+        emailVerified: true,
+      },
+    });
+
+    await prisma.userRole.upsert({
+      where: {
+        userId_roleId: {
+          userId: superAdminUser.id,
+          roleId: superAdminRole.id,
+        },
+      },
+      update: {},
+      create: {
         userId: superAdminUser.id,
         roleId: superAdminRole.id,
       },
-    },
-    update: {},
-    create: {
-      userId: superAdminUser.id,
-      roleId: superAdminRole.id,
-    },
-  });
+    });
 
-  console.log('✅ Super Admin user seeded');
-  console.log('📧 Email: admin@example.com');
-  console.log('🔑 Password: Admin@123');
+    console.log(`✅ Super Admin user seeded: ${adminEmail}`);
+  }
+
   console.log('🎉 Seed completed!');
 }
 
