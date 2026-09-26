@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CaptchaResolverService } from './captcha-resolver.service';
 import axios from 'axios';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class GdtAuthService {
@@ -13,8 +14,28 @@ export class GdtAuthService {
       'Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0',
     'Content-Type': 'application/json',
     Accept: 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    Origin: 'https://hoadondientu.gdt.gov.vn',
     Referer: 'https://hoadondientu.gdt.gov.vn/',
   };
+
+  /**
+   * Headers chống bot của GDT (bắt buộc cho mọi endpoint /api/security-taxpayer/*):
+   * - request-id: UUID mới cho mỗi request
+   * - End-Point / Action: giá trị frontend gửi kèm
+   * Thiếu các header này GDT trả 403 "Hệ thống phát hiện hành vi không hợp lệ. Yêu cầu đã bị chặn".
+   */
+  private buildAntiBotHeaders(
+    extra?: Record<string, string>,
+  ): Record<string, string> {
+    return {
+      ...this.headers,
+      'request-id': randomUUID(),
+      'End-Point': '/',
+      Action: '',
+      ...(extra || {}),
+    };
+  }
 
   constructor(
     private readonly config: ConfigService,
@@ -92,7 +113,7 @@ export class GdtAuthService {
       const response = await axios.post(
         loginUrl,
         { username, password, cvalue, ckey },
-        { headers: this.headers, timeout: 20000 },
+        { headers: this.buildAntiBotHeaders(), timeout: 20000 },
       );
       if (response.data?.token) {
         return response.data.token;
@@ -114,10 +135,7 @@ export class GdtAuthService {
     const profileUrl = `${this.gdtBaseUrl}/security-taxpayer/profile`;
     try {
       const response = await axios.get(profileUrl, {
-        headers: {
-          ...this.headers,
-          Authorization: `Bearer ${token}`,
-        },
+        headers: this.buildAntiBotHeaders({ Authorization: `Bearer ${token}` }),
         timeout: 15000,
       });
       return response.data?.name || '';
