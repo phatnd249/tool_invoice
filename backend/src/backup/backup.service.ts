@@ -13,7 +13,7 @@ import AdmZip from 'adm-zip';
 
 export interface BackupConfigStatus {
   isDriveConfigured: boolean;
-  authMethod: 'KEY_PATH' | 'KEY_JSON' | 'ENV_CREDENTIALS' | 'NOT_CONFIGURED';
+  authMethod: 'JSON_CONTENT' | 'NOT_CONFIGURED';
   clientEmail: string | null;
   folderId: string | null;
   autoBackupEnabled: boolean;
@@ -40,7 +40,7 @@ export class BackupService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly googleDriveService: GoogleDriveService,
-  ) {}
+  ) { }
 
   /**
    * Resolve SQLite database file path from DATABASE_URL

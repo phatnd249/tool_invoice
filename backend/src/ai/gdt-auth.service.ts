@@ -51,13 +51,15 @@ export class GdtAuthService {
 
         return await this.authenticate(taxCode, lookupPassword, ckey, cvalue);
       } catch (error: any) {
+        this.logger.warn(
+          `Lần thử ${attempt}/${maxRetries} thất bại: ${error.message}`,
+        );
         const errorMsg = error.message?.toLowerCase() || '';
 
         // Fail fast if credentials are wrong
         const isCredentialError =
           errorMsg.includes('tài khoản') ||
           errorMsg.includes('mật khẩu') ||
-          errorMsg.includes('không đúng') ||
           errorMsg.includes('không tồn tại');
 
         if (isCredentialError) {

@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { google } from 'googleapis';
 import * as fs from 'fs';
-import * as path from 'path';
 import { Readable } from 'stream';
 
 export interface DriveFileInfo {
@@ -23,126 +22,62 @@ export class GoogleDriveService {
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
     if (!folderId || folderId.trim() === '') return false;
 
-    // Check Service Account Key Path
-    const keyPath = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH;
-    if (keyPath && fs.existsSync(this.resolveFilePath(keyPath))) return true;
-
-    // Check JSON content in env
     const jsonContent = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-    if (jsonContent && jsonContent.trim() !== '') {
-      try {
-        JSON.parse(jsonContent);
-        return true;
-      } catch {
-        // invalid json
-      }
+    if (!jsonContent || jsonContent.trim() === '') return false;
+
+    try {
+      JSON.parse(jsonContent);
+      return true;
+    } catch {
+      return false;
     }
-
-    // Check individual client email + private key
-    const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL;
-    const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
-    if (clientEmail && privateKey) return true;
-
-    return false;
   }
 
-  getAuthMethod(): 'KEY_PATH' | 'KEY_JSON' | 'ENV_CREDENTIALS' | 'NOT_CONFIGURED' {
-    const keyPath = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH;
-    if (keyPath && fs.existsSync(this.resolveFilePath(keyPath))) return 'KEY_PATH';
-
-    const jsonContent = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-    if (jsonContent && jsonContent.trim() !== '') return 'KEY_JSON';
-
-    const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL;
-    const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
-    if (clientEmail && privateKey) return 'ENV_CREDENTIALS';
-
-    return 'NOT_CONFIGURED';
+  getAuthMethod(): 'JSON_CONTENT' | 'NOT_CONFIGURED' {
+    return this.isConfigured() ? 'JSON_CONTENT' : 'NOT_CONFIGURED';
   }
 
   getClientEmail(): string | null {
-    const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL;
-    if (clientEmail) return clientEmail;
-
     const jsonContent = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-    if (jsonContent) {
-      try {
-        const parsed = JSON.parse(jsonContent);
-        if (parsed.client_email) return parsed.client_email;
-      } catch {
-        // ignore
-      }
-    }
+    if (!jsonContent) return null;
 
-    const keyPath = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH;
-    if (keyPath) {
-      const resolved = this.resolveFilePath(keyPath);
-      if (fs.existsSync(resolved)) {
-        try {
-          const raw = fs.readFileSync(resolved, 'utf-8');
-          const parsed = JSON.parse(raw);
-          if (parsed.client_email) return parsed.client_email;
-        } catch {
-          // ignore
-        }
-      }
+    try {
+      const parsed = JSON.parse(jsonContent);
+      return parsed.client_email || null;
+    } catch {
+      return null;
     }
-
-    return null;
   }
 
   getFolderId(): string | null {
     return process.env.GOOGLE_DRIVE_FOLDER_ID?.trim() || null;
   }
 
-  private resolveFilePath(p: string): string {
-    if (path.isAbsolute(p)) return p;
-    return path.resolve(process.cwd(), p);
-  }
-
   private getDriveClient() {
     const scopes = ['https://www.googleapis.com/auth/drive'];
-
-    const keyPath = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH;
-    if (keyPath) {
-      const resolved = this.resolveFilePath(keyPath);
-      if (fs.existsSync(resolved)) {
-        const auth = new google.auth.GoogleAuth({
-          keyFile: resolved,
-          scopes,
-        });
-        return google.drive({ version: 'v3', auth });
-      }
-    }
-
     const jsonContent = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-    if (jsonContent) {
-      try {
-        const credentials = JSON.parse(jsonContent);
-        const auth = new google.auth.GoogleAuth({
-          credentials,
-          scopes,
-        });
-        return google.drive({ version: 'v3', auth });
-      } catch (err: any) {
-        throw new Error(`Cấu hình GOOGLE_SERVICE_ACCOUNT_JSON không hợp lệ: ${err.message}`);
-      }
+
+    if (!jsonContent || jsonContent.trim() === '') {
+      throw new Error(
+        'Chưa cấu hình GOOGLE_SERVICE_ACCOUNT_JSON. ' +
+        'Vui lòng thêm Service Account credentials JSON vào biến môi trường này. ' +
+        'Xem hướng dẫn tại README.md'
+      );
     }
 
-    const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL;
-    let privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
-    if (clientEmail && privateKey) {
-      // Replace escaped newlines if passed in single-line env var
-      privateKey = privateKey.replace(/\\n/g, '\n');
-      const auth = new google.auth.JWT({
-        email: clientEmail,
-        key: privateKey,
+    try {
+      const credentials = JSON.parse(jsonContent);
+      const auth = new google.auth.GoogleAuth({
+        credentials,
         scopes,
       });
       return google.drive({ version: 'v3', auth });
+    } catch (err: any) {
+      throw new Error(
+        `Cấu hình GOOGLE_SERVICE_ACCOUNT_JSON không hợp lệ: ${err.message}. ` +
+        'Hãy đảm bảo đây là JSON hợp lệ từ Google Cloud Console.'
+      );
     }
-
-    throw new Error('Chưa cấu hình thông tin xác thực Google Service Account');
   }
 
   /**
@@ -166,7 +101,7 @@ export class GoogleDriveService {
     if (!this.isConfigured()) {
       return {
         success: false,
-        message: 'Chưa cấu hình thông tin xác thực Google Service Account (File JSON hoặc biến môi trường)',
+        message: 'Chưa cấu hình GOOGLE_SERVICE_ACCOUNT_JSON hoặc GOOGLE_DRIVE_FOLDER_ID. Xem hướng dẫn tại README.md',
       };
     }
 

@@ -18,7 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "prisma:seed": "npx tsx prisma/seed.ts"
+    "prisma:seed": "npx tsx prisma/seed.ts",
+    "backup:setup": "node scripts/setup-google-drive.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
