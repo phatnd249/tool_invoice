@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
+import { randomUUID } from 'crypto';
 import { delay } from '../../common/invoice-utils';
 
 /**
@@ -31,6 +32,8 @@ export class GdtHttpClientService {
 
   /**
    * Tạo headers cho GDT API với Bearer token.
+   * Gồm bộ header chống bot (request-id UUID mới mỗi request, End-Point, Action,
+   * Origin, Referer) — thiếu là GDT trả 403 "Hệ thống phát hiện hành vi không hợp lệ".
    */
   buildHeaders(token: string): Record<string, string> {
     return {
@@ -39,6 +42,11 @@ export class GdtHttpClientService {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       Accept: 'application/json, text/plain, */*',
       'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+      Origin: 'https://hoadondientu.gdt.gov.vn',
+      Referer: 'https://hoadondientu.gdt.gov.vn/',
+      'request-id': randomUUID(),
+      'End-Point': '/',
+      Action: '',
     };
   }
 

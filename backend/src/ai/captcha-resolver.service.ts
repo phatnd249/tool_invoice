@@ -18,6 +18,7 @@ export class CaptchaResolverService {
       'Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0',
     Accept: 'application/json, text/plain, */*',
     'Accept-Language': 'en-US,en;q=0.9',
+    Origin: 'https://hoadondientu.gdt.gov.vn',
     Referer: 'https://hoadondientu.gdt.gov.vn/',
   };
 
