@@ -50,6 +50,7 @@ export class InvoicesPersistenceService {
           sellerName: data.sellerName,
           type: data.type,
           source: data.source,
+          ...(data.companyId && { companyId: data.companyId }),
         },
       });
       return { id: existing.id, isNew: false };

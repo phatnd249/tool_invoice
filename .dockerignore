@@ -17,6 +17,8 @@ backend/prisma/dev.db*
 # Runtime / temp files
 temp/
 backend/invoices/
+backend/data/
+data/
 *.log
 .env
 backend/.env

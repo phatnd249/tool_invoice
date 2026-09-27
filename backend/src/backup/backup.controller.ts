@@ -9,6 +9,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Body,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { BackupService } from './backup.service';
@@ -53,8 +54,8 @@ export class BackupController {
   @Post('trigger')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('backup:manage')
-  async triggerBackup() {
-    return this.backupService.executeBackup('MANUAL');
+  async triggerBackup(@Body() body?: { isFullBackup?: boolean }) {
+    return this.backupService.executeBackup('MANUAL', body?.isFullBackup ?? false);
   }
 
   /**

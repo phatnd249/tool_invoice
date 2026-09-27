@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BackupService } from './backup.service';
+import { BackupService, BackupArchiveInfo } from './backup.service';
 import { GoogleDriveService } from './google-drive.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BadRequestException } from '@nestjs/common';
@@ -45,7 +45,7 @@ describe('BackupService', () => {
   describe('getConfigStatus', () => {
     it('should return system backup configuration and stats', async () => {
       mockGoogleDriveService.isConfigured.mockReturnValue(true);
-      mockGoogleDriveService.getAuthMethod.mockReturnValue('KEY_PATH');
+      mockGoogleDriveService.getAuthMethod.mockReturnValue('JSON_CONTENT');
       mockGoogleDriveService.getClientEmail.mockReturnValue('test@example.iam.gserviceaccount.com');
       mockGoogleDriveService.getFolderId.mockReturnValue('folder-123');
       mockPrisma.backupLog.findFirst.mockResolvedValue(null);
@@ -53,11 +53,14 @@ describe('BackupService', () => {
       const result = await service.getConfigStatus();
 
       expect(result.isDriveConfigured).toBe(true);
-      expect(result.authMethod).toBe('KEY_PATH');
+      expect(result.authMethod).toBe('JSON_CONTENT');
       expect(result.clientEmail).toBe('test@example.iam.gserviceaccount.com');
       expect(result.folderId).toBe('folder-123');
       expect(result.database).toBeDefined();
       expect(result.invoices).toBeDefined();
+      expect(result.backupMode).toBeDefined();
+      expect(result.maxChunkSizeMb).toBeGreaterThan(0);
+      expect(result.chunkDelayMs).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -70,17 +73,21 @@ describe('BackupService', () => {
       );
     });
 
-    it('should successfully execute backup and update log when configured', async () => {
+    it('should successfully execute backup with single archive and update log when configured', async () => {
       mockGoogleDriveService.isConfigured.mockReturnValue(true);
       mockPrisma.backupLog.create.mockResolvedValue({ id: 'log-1', status: 'IN_PROGRESS' });
       mockPrisma.backupLog.update.mockImplementation(({ data }) => Promise.resolve({ id: 'log-1', ...data }));
 
-      jest.spyOn(service, 'createBackupArchive').mockResolvedValue({
-        archivePath: 'fake-path.zip',
-        fileName: 'invoice_backup_fake.zip',
-        fileSize: 1024,
-        fileCount: 5,
-      });
+      jest.spyOn(service, 'createBackupArchives').mockResolvedValue([
+        {
+          archivePath: 'fake-path.zip',
+          fileName: 'invoice_backup_fake.zip',
+          fileSize: 1024,
+          partIndex: 1,
+          totalParts: 1,
+          fileCount: 5,
+        },
+      ]);
 
       mockGoogleDriveService.uploadFile.mockResolvedValue({
         fileId: 'drive-file-1',
@@ -98,8 +105,69 @@ describe('BackupService', () => {
 
       expect(result.status).toBe('SUCCESS');
       expect(result.driveFileId).toBe('drive-file-1');
-      expect(mockGoogleDriveService.uploadFile).toHaveBeenCalled();
+      expect(mockGoogleDriveService.uploadFile).toHaveBeenCalledTimes(1);
       expect(mockGoogleDriveService.pruneOldBackups).toHaveBeenCalled();
+    });
+
+    it('should split into multiple parts and progressively upload them with delay', async () => {
+      mockGoogleDriveService.isConfigured.mockReturnValue(true);
+      mockPrisma.backupLog.create.mockResolvedValue({ id: 'log-2', status: 'IN_PROGRESS' });
+      mockPrisma.backupLog.update.mockImplementation(({ data }) => Promise.resolve({ id: 'log-2', ...data }));
+
+      // Mock chunk delay to 10ms for fast test execution
+      jest.spyOn(service, 'getChunkSettings').mockReturnValue({
+        maxChunkBytes: 1024 * 1024,
+        maxChunkSizeMb: 1,
+        chunkDelayMs: 10,
+        backupMode: 'INCREMENTAL',
+      });
+
+      const part1: BackupArchiveInfo = {
+        archivePath: 'fake-part1.zip',
+        fileName: 'invoice_backup_test_part01_of_02.zip',
+        fileSize: 500,
+        partIndex: 1,
+        totalParts: 2,
+        fileCount: 3,
+      };
+
+      const part2: BackupArchiveInfo = {
+        archivePath: 'fake-part2.zip',
+        fileName: 'invoice_backup_test_part02_of_02.zip',
+        fileSize: 600,
+        partIndex: 2,
+        totalParts: 2,
+        fileCount: 4,
+      };
+
+      jest.spyOn(service, 'createBackupArchives').mockResolvedValue([part1, part2]);
+
+      mockGoogleDriveService.uploadFile
+        .mockResolvedValueOnce({
+          fileId: 'drive-file-part1',
+          fileName: part1.fileName,
+          webViewLink: 'https://drive.google.com/view/part1',
+          size: 500,
+        })
+        .mockResolvedValueOnce({
+          fileId: 'drive-file-part2',
+          fileName: part2.fileName,
+          webViewLink: 'https://drive.google.com/view/part2',
+          size: 600,
+        });
+
+      mockGoogleDriveService.pruneOldBackups.mockResolvedValue({
+        deletedCount: 0,
+        deletedFiles: [],
+      });
+
+      const result = await service.executeBackup('MANUAL');
+
+      expect(result.status).toBe('SUCCESS');
+      expect(mockGoogleDriveService.uploadFile).toHaveBeenCalledTimes(2);
+      expect(result.driveFileId).toBe('drive-file-part1,drive-file-part2');
+      expect(result.fileSize).toBe(1100);
+      expect(result.uploadedParts).toHaveLength(2);
     });
   });
 

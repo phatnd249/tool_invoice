@@ -19,6 +19,12 @@ import {
   ChevronDown,
 } from 'lucide-react'
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
+import {
   backupApi,
   type BackupConfigStatus,
   type BackupLog,
@@ -142,14 +148,18 @@ export function BackupPage() {
     }
   }
 
-  const handleTriggerBackup = async () => {
+  const handleTriggerBackup = async (isFullBackup = false) => {
     try {
       setTriggering(true)
-      toast.info('Đang nén dữ liệu và tải lên Google Drive...')
-      const { data } = await backupApi.triggerBackup()
+      toast.info(
+        isFullBackup
+          ? 'Đang chuẩn bị gói sao lưu toàn bộ (FULL)...'
+          : 'Đang nén dữ liệu tối ưu băng thông (INCREMENTAL) và tải lên Google Drive...',
+      )
+      const { data } = await backupApi.triggerBackup({ isFullBackup })
       if (data.status === 'SUCCESS') {
         toast.success(
-          `Sao lưu thành công! File: ${data.fileName} (${formatBytes(data.fileSize)})`,
+          `Sao lưu thành công! ${data.fileName} (${formatBytes(data.fileSize)})`,
         )
       } else {
         toast.error(`Sao lưu thất bại: ${data.errorMessage || 'Lỗi không xác định'}`)
@@ -211,17 +221,51 @@ export function BackupPage() {
               Kiểm tra kết nối
             </Button>
 
-            <Button
-              size="sm"
-              onClick={handleTriggerBackup}
-              disabled={triggering || loading || !config?.isDriveConfigured}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              <CloudUpload
-                className={`mr-2 size-4 ${triggering ? 'animate-spin' : ''}`}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    size="sm"
+                    disabled={triggering || loading || !config?.isDriveConfigured}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    <CloudUpload
+                      className={`mr-2 size-4 ${triggering ? 'animate-spin' : ''}`}
+                    />
+                    {triggering ? 'Đang sao lưu...' : 'Sao lưu ngay'}
+                    <ChevronDown className="ml-1.5 size-3 opacity-70" />
+                  </Button>
+                }
               />
-              {triggering ? 'Đang sao lưu...' : 'Sao lưu ngay'}
-            </Button>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem
+                  onClick={() => handleTriggerBackup(false)}
+                  className="cursor-pointer py-2"
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-xs text-foreground">
+                      Sao lưu thông minh (Khuyên dùng)
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Chỉ gửi hóa đơn mới, tối ưu băng thông và tự động chia nhỏ file
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleTriggerBackup(true)}
+                  className="cursor-pointer py-2"
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-xs text-foreground">
+                      Sao lưu toàn bộ (Full Backup)
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Nén toàn bộ database và tất cả hóa đơn từ trước đến nay
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -341,6 +385,18 @@ export function BackupPage() {
                     {config?.invoices.totalFiles || 0} tệp (
                     {formatBytes(config?.invoices.sizeBytes)})
                   </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] py-0 px-1.5 h-4.5 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800"
+                  >
+                    {config?.backupMode === 'FULL' ? 'Sao lưu toàn bộ' : 'Tối ưu băng thông'}
+                  </Badge>
+                  <span>Tách file: ≤ {config?.maxChunkSizeMb || 15} MB/phần</span>
+                  <span>•</span>
+                  <span>Giãn cách: {((config?.chunkDelayMs ?? 2000) / 1000).toFixed(0)}s</span>
                 </div>
               </CardContent>
             </Card>

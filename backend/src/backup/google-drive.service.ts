@@ -287,20 +287,36 @@ export class GoogleDriveService {
       // Keep only zip files or files created by backup
       const backupFiles = files.filter((f) => f.name.endsWith('.zip'));
 
-      if (backupFiles.length <= retentionCount) {
+      // Group files by backup session prefix (e.g. invoice_backup_2026-09-27_14-30-00)
+      const sessionMap = new Map<string, DriveFileInfo[]>();
+      for (const file of backupFiles) {
+        const match = file.name.match(
+          /^(invoice_backup_\d{4}[-_]\d{2}[-_]\d{2}[-_]\d{2}[-_]\d{2}[-_]\d{2})/,
+        );
+        const sessionKey = match ? match[1] : file.name;
+        if (!sessionMap.has(sessionKey)) {
+          sessionMap.set(sessionKey, []);
+        }
+        sessionMap.get(sessionKey)!.push(file);
+      }
+
+      const sessions = Array.from(sessionMap.entries());
+      if (sessions.length <= retentionCount) {
         return { deletedCount: 0, deletedFiles: [] };
       }
 
-      const filesToDelete = backupFiles.slice(retentionCount);
+      const sessionsToDelete = sessions.slice(retentionCount);
       const deletedFiles: string[] = [];
 
-      for (const file of filesToDelete) {
-        try {
-          await this.deleteFile(file.id);
-          deletedFiles.push(file.name);
-          this.logger.log(`Tự động dọn dẹp bản backup cũ: ${file.name} (${file.id})`);
-        } catch (err: any) {
-          this.logger.warn(`Không thể xoá bản backup cũ ${file.name}: ${err.message}`);
+      for (const [, sessionFiles] of sessionsToDelete) {
+        for (const file of sessionFiles) {
+          try {
+            await this.deleteFile(file.id);
+            deletedFiles.push(file.name);
+            this.logger.log(`Tự động dọn dẹp bản backup cũ: ${file.name} (${file.id})`);
+          } catch (err: any) {
+            this.logger.warn(`Không thể xoá bản backup cũ ${file.name}: ${err.message}`);
+          }
         }
       }
 

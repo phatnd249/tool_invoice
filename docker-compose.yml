@@ -17,6 +17,11 @@ services:
     restart: unless-stopped
     ports:
       - "9000:3000"
+    env_file:
+      - path: backend/.env
+        required: false
+      - path: .env
+        required: false
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -28,8 +33,8 @@ services:
       # Reach Gotenberg through the Docker network
       GOTENBERG_URL: http://gotenberg:3000
       # Security secrets (override these in production!)
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-1547a23bb1794befdc8a336b0117670daba3304c672a24587aaf7453fc275a22}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-7fef1916488cf0e4575ce73fc70c8827fadb2d120208c8fb6058c700f8a84923}
       # Optional integrations
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       SMTP_HOST: ${SMTP_HOST:-}

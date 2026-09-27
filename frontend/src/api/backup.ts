@@ -2,13 +2,16 @@ import { apiClient } from '@/lib/apiClient'
 
 export interface BackupConfigStatus {
   isDriveConfigured: boolean
-  authMethod: 'KEY_PATH' | 'KEY_JSON' | 'ENV_CREDENTIALS' | 'NOT_CONFIGURED'
+  authMethod: 'KEY_PATH' | 'KEY_JSON' | 'ENV_CREDENTIALS' | 'JSON_CONTENT' | 'NOT_CONFIGURED'
   clientEmail: string | null
   folderId: string | null
   autoBackupEnabled: boolean
   cronSchedule: string
   retentionCount: number
   lastBackup: BackupLog | null
+  backupMode?: 'INCREMENTAL' | 'FULL'
+  maxChunkSizeMb?: number
+  chunkDelayMs?: number
   database: {
     path: string
     exists: boolean
@@ -57,7 +60,8 @@ export const backupApi = {
   testConnection: () =>
     apiClient.post<TestConnectionResult>('/backup/test-connection'),
 
-  triggerBackup: () => apiClient.post<BackupLog>('/backup/trigger'),
+  triggerBackup: (options?: { isFullBackup?: boolean }) =>
+    apiClient.post<BackupLog>('/backup/trigger', options),
 
   getHistory: (limit = 30) =>
     apiClient.get<BackupLog[]>(`/backup/history?limit=${limit}`),

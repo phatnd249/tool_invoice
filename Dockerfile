@@ -15,6 +15,9 @@ FROM node:22-slim AS build
 
 WORKDIR /app
 
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 # Copy package manifests first so dependency layers benefit from Docker cache
 COPY package.json ./
 COPY backend/package.json ./backend/
@@ -22,9 +25,6 @@ COPY frontend/package.json ./frontend/
 
 # Install all dependencies (npm workspaces install backend + frontend together)
 RUN npm install
-
-# Add `tsx` (not in package.json) to run the TypeScript seed script at runtime
-RUN npm install --prefix backend --no-save --no-package-lock tsx
 
 # Copy the rest of the source (node_modules / dist are excluded by .dockerignore)
 COPY . .
@@ -43,6 +43,7 @@ RUN npm run build
 # ------------------------------ RUNTIME STAGE -------------------------------
 FROM node:22-slim AS runner
 
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 WORKDIR /app/backend
 
@@ -64,7 +65,7 @@ COPY --from=build /app/backend/.env.example ./.env
 
 # Entrypoint: migrate -> (optional seed) -> start the API
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3000
 

@@ -1,0 +1,20 @@
+# =============================================================================
+# Caddyfile - Caddy Server Configuration (Tối ưu cho Cloudflare Proxy)
+# Chạy tốt trên cả Windows Server và Ubuntu Server
+# =============================================================================
+
+invoice.yourcompany.com {
+    # Nếu dùng Cloudflare Origin Certificate (hạn 15 năm):
+    # tls C:/ssl/cloudflare/invoice.crt C:/ssl/cloudflare/invoice.key
+    # (Trên Linux: tls /etc/ssl/cloudflare/invoice.crt /etc/ssl/cloudflare/invoice.key)
+
+    encode zstd gzip
+
+    # Reverse proxy tới backend NestJS chạy tại cổng 3000
+    reverse_proxy 127.0.0.1:3000 {
+        # Timeout cho Server-Sent Events (SSE) theo dõi tiến độ tải hoá đơn
+        transport http {
+            response_header_timeout 3600s
+        }
+    }
+}

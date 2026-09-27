@@ -11,6 +11,15 @@ import * as path from 'path';
 import * as os from 'os';
 import AdmZip from 'adm-zip';
 
+export interface BackupArchiveInfo {
+  archivePath: string;
+  fileName: string;
+  fileSize: number;
+  partIndex: number;
+  totalParts: number;
+  fileCount: number;
+}
+
 export interface BackupConfigStatus {
   isDriveConfigured: boolean;
   authMethod: 'JSON_CONTENT' | 'NOT_CONFIGURED';
@@ -20,6 +29,9 @@ export interface BackupConfigStatus {
   cronSchedule: string;
   retentionCount: number;
   lastBackup: any;
+  backupMode: 'INCREMENTAL' | 'FULL';
+  maxChunkSizeMb: number;
+  chunkDelayMs: number;
   database: {
     path: string;
     exists: boolean;
@@ -33,6 +45,13 @@ export interface BackupConfigStatus {
   };
 }
 
+export interface InvoiceFileInfo {
+  fullPath: string;
+  relPath: string;
+  size: number;
+  mtimeMs: number;
+}
+
 @Injectable()
 export class BackupService {
   private readonly logger = new Logger(BackupService.name);
@@ -40,7 +59,31 @@ export class BackupService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly googleDriveService: GoogleDriveService,
-  ) { }
+  ) {}
+
+  /**
+   * Cấu hình phân tách file và tối ưu băng thông
+   */
+  getChunkSettings(): {
+    maxChunkBytes: number;
+    maxChunkSizeMb: number;
+    chunkDelayMs: number;
+    backupMode: 'INCREMENTAL' | 'FULL';
+  } {
+    const rawChunkSize = parseInt(process.env.BACKUP_MAX_CHUNK_SIZE_MB || '15', 10);
+    const maxChunkSizeMb = isNaN(rawChunkSize) || rawChunkSize <= 0 ? 15 : rawChunkSize;
+    const rawDelay = parseInt(process.env.BACKUP_CHUNK_DELAY_MS || '2000', 10);
+    const chunkDelayMs = isNaN(rawDelay) || rawDelay < 0 ? 2000 : rawDelay;
+    const rawMode = (process.env.BACKUP_MODE || 'INCREMENTAL').toUpperCase();
+    const backupMode = rawMode === 'FULL' ? 'FULL' : 'INCREMENTAL';
+
+    return {
+      maxChunkSizeMb,
+      maxChunkBytes: maxChunkSizeMb * 1024 * 1024,
+      chunkDelayMs,
+      backupMode,
+    };
+  }
 
   /**
    * Resolve SQLite database file path from DATABASE_URL
@@ -117,6 +160,44 @@ export class BackupService {
   }
 
   /**
+   * Liệt kê toàn bộ file trong thư mục invoices (kèm đường dẫn tương đối và thời gian sửa đổi)
+   */
+  private getAllInvoiceFiles(baseDir: string): InvoiceFileInfo[] {
+    const results: InvoiceFileInfo[] = [];
+    if (!fs.existsSync(baseDir)) return results;
+
+    const scan = (currentDir: string) => {
+      try {
+        const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(currentDir, entry.name);
+          if (entry.isDirectory()) {
+            scan(fullPath);
+          } else if (entry.isFile()) {
+            try {
+              const stat = fs.statSync(fullPath);
+              const relPath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+              results.push({
+                fullPath,
+                relPath,
+                size: stat.size,
+                mtimeMs: stat.mtimeMs,
+              });
+            } catch {
+              // ignore transient error
+            }
+          }
+        }
+      } catch {
+        // ignore unreadable dir
+      }
+    };
+
+    scan(baseDir);
+    return results;
+  }
+
+  /**
    * Get backup configuration status and data statistics
    */
   async getConfigStatus(): Promise<BackupConfigStatus> {
@@ -142,7 +223,8 @@ export class BackupService {
     const autoBackupEnabled =
       (process.env.BACKUP_AUTO_ENABLED ?? 'true').toLowerCase() === 'true';
     const cronSchedule = process.env.BACKUP_CRON_SCHEDULE || '0 2 * * *';
-    const retentionCount = parseInt(process.env.BACKUP_RETENTION_COUNT || '0', 10);
+    const retentionCount = parseInt(process.env.BACKUP_RETENTION_COUNT ?? '7', 10);
+    const { maxChunkSizeMb, chunkDelayMs, backupMode } = this.getChunkSettings();
 
     return {
       isDriveConfigured: this.googleDriveService.isConfigured(),
@@ -151,8 +233,11 @@ export class BackupService {
       folderId: this.googleDriveService.getFolderId(),
       autoBackupEnabled,
       cronSchedule,
-      retentionCount: isNaN(retentionCount) ? 0 : retentionCount,
+      retentionCount: isNaN(retentionCount) ? 7 : retentionCount,
       lastBackup,
+      backupMode,
+      maxChunkSizeMb,
+      chunkDelayMs,
       database: {
         path: dbPath,
         exists: dbExists,
@@ -168,95 +253,288 @@ export class BackupService {
   }
 
   /**
-   * Create a ZIP archive containing database and invoice files
+   * Đóng gói các tệp sao lưu.
+   * - Hỗ trợ INCREMENTAL (chỉ file mới/thay đổi) để tiết kiệm băng thông tối đa.
+   * - Tự động tách thành nhiều file nhỏ (multi-part archives) nếu tổng dung lượng vượt quá maxChunkSizeMb.
    */
-  async createBackupArchive(): Promise<{
-    archivePath: string;
-    fileName: string;
-    fileSize: number;
-    fileCount: number;
-  }> {
+  async createBackupArchives(options?: {
+    forceFull?: boolean;
+  }): Promise<BackupArchiveInfo[]> {
     const tempDir = path.join(os.tmpdir(), 'invoice-tool-backups');
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
+
+    const { maxChunkBytes, maxChunkSizeMb, backupMode } = this.getChunkSettings();
+    const effectiveMode = options?.forceFull ? 'FULL' : backupMode;
 
     const timestamp = new Date()
       .toISOString()
       .replace(/T/, '_')
       .replace(/:/g, '-')
       .replace(/\..+/, '');
-    const fileName = `invoice_backup_${timestamp}.zip`;
-    const archivePath = path.join(tempDir, fileName);
 
-    this.logger.log(`Tạo gói sao lưu: ${fileName}...`);
-    const zip = new AdmZip();
-    let fileCount = 0;
-
-    // 1. Pack database
+    // 1. Collect database files (luôn sao lưu DB vì thay đổi liên tục và nhẹ)
     const dbPath = this.getDatabasePath();
-    if (fs.existsSync(dbPath)) {
-      zip.addLocalFile(dbPath, 'database');
-      fileCount++;
+    const dbFiles: Array<{ fullPath: string; zipSubPath: string; size: number }> = [];
+    let dbTotalBytes = 0;
 
-      // Check for SQLite WAL & SHM files if WAL mode is enabled
+    if (fs.existsSync(dbPath)) {
+      try {
+        const stat = fs.statSync(dbPath);
+        dbFiles.push({ fullPath: dbPath, zipSubPath: 'database', size: stat.size });
+        dbTotalBytes += stat.size;
+      } catch {
+        // ignore
+      }
+
       const walPath = `${dbPath}-wal`;
       if (fs.existsSync(walPath)) {
-        zip.addLocalFile(walPath, 'database');
-        fileCount++;
+        try {
+          const walStat = fs.statSync(walPath);
+          dbFiles.push({ fullPath: walPath, zipSubPath: 'database', size: walStat.size });
+          dbTotalBytes += walStat.size;
+        } catch {
+          // ignore
+        }
       }
+
       const shmPath = `${dbPath}-shm`;
       if (fs.existsSync(shmPath)) {
-        zip.addLocalFile(shmPath, 'database');
-        fileCount++;
+        try {
+          const shmStat = fs.statSync(shmPath);
+          dbFiles.push({ fullPath: shmPath, zipSubPath: 'database', size: shmStat.size });
+          dbTotalBytes += shmStat.size;
+        } catch {
+          // ignore
+        }
       }
     } else {
       this.logger.warn(`Không tìm thấy file database tại ${dbPath}`);
     }
 
-    // 2. Pack invoices directory
+    // 2. Collect invoices files (Incremental vs Full)
     const invoicesPath = this.getInvoicesDirPath();
-    if (fs.existsSync(invoicesPath)) {
-      zip.addLocalFolder(invoicesPath, 'invoices');
-      const stats = this.getDirStats(invoicesPath);
-      fileCount += stats.totalFiles;
+    const allInvoiceFiles = this.getAllInvoiceFiles(invoicesPath);
+    let invoiceFilesToPack = allInvoiceFiles;
+    let cutoffDate: Date | null = null;
+
+    if (effectiveMode === 'INCREMENTAL') {
+      const lastSuccess = await this.prisma.backupLog.findFirst({
+        where: { status: 'SUCCESS' },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (lastSuccess?.createdAt) {
+        cutoffDate = lastSuccess.createdAt;
+        const cutoffMs = cutoffDate.getTime();
+        invoiceFilesToPack = allInvoiceFiles.filter((f) => f.mtimeMs > cutoffMs);
+        this.logger.log(
+          `[Backup] Chế độ INCREMENTAL: Chọn ${invoiceFilesToPack.length}/${allInvoiceFiles.length} file hoá đơn mới/sửa đổi kể từ ${cutoffDate.toISOString()}`,
+        );
+      } else {
+        this.logger.log(
+          `[Backup] Chưa có bản sao lưu thành công trước đó, thực hiện sao lưu toàn bộ (FULL).`,
+        );
+      }
+    } else {
+      this.logger.log(
+        `[Backup] Chế độ FULL: Sao lưu toàn bộ ${invoiceFilesToPack.length} file hoá đơn.`,
+      );
     }
 
-    // 3. Manifest file
-    const manifest = {
-      system: 'Invoice Pro',
-      version: '1.0.0',
-      createdAt: new Date().toISOString(),
-      databasePath: dbPath,
-      invoicesPath,
-      totalPackedFiles: fileCount,
-      hostname: os.hostname(),
-      platform: process.platform,
-      nodeVersion: process.version,
-    };
-    zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
-    fileCount++;
+    const invoicesTotalBytes = invoiceFilesToPack.reduce((sum, f) => sum + f.size, 0);
+    const totalEstimatedBytes = dbTotalBytes + invoicesTotalBytes;
 
-    // Write zip file
-    zip.writeZip(archivePath);
+    // 3. Phân tách file theo giới hạn kích thước
+    // Nếu toàn bộ dữ liệu vừa trong 1 file nhỏ <= maxChunkBytes:
+    if (totalEstimatedBytes <= maxChunkBytes || invoiceFilesToPack.length === 0) {
+      const fileName = `invoice_backup_${timestamp}.zip`;
+      const archivePath = path.join(tempDir, fileName);
 
-    const stat = fs.statSync(archivePath);
+      this.logger.log(`Tạo gói sao lưu đơn: ${fileName}...`);
+      const zip = new AdmZip();
+      let fileCount = 0;
+
+      // Add DB files
+      for (const dbFile of dbFiles) {
+        zip.addLocalFile(dbFile.fullPath, dbFile.zipSubPath);
+        fileCount++;
+      }
+
+      // Add Invoices
+      for (const invFile of invoiceFilesToPack) {
+        const zipSubDir = path.dirname(path.join('invoices', invFile.relPath)).replace(/\\/g, '/');
+        zip.addLocalFile(invFile.fullPath, zipSubDir);
+        fileCount++;
+      }
+
+      // Add Manifest
+      const manifest = {
+        system: 'Invoice Pro',
+        version: '1.0.0',
+        backupMode: effectiveMode,
+        timestamp,
+        createdAt: new Date().toISOString(),
+        totalParts: 1,
+        partIndex: 1,
+        databaseIncluded: dbFiles.length > 0,
+        incrementalCutoff: cutoffDate?.toISOString() || null,
+        totalInvoiceFilesPacked: invoiceFilesToPack.length,
+        totalAllInvoiceFiles: allInvoiceFiles.length,
+        totalPackedFiles: fileCount,
+        hostname: os.hostname(),
+        platform: process.platform,
+        nodeVersion: process.version,
+      };
+      zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
+      fileCount++;
+
+      zip.writeZip(archivePath);
+      const stat = fs.statSync(archivePath);
+
+      this.logger.log(
+        `Đóng gói hoàn tất: ${fileName} (${(stat.size / 1024 / 1024).toFixed(2)} MB, ${fileCount} files)`,
+      );
+
+      return [
+        {
+          archivePath,
+          fileName,
+          fileSize: stat.size,
+          partIndex: 1,
+          totalParts: 1,
+          fileCount,
+        },
+      ];
+    }
+
+    // Nếu dung lượng lớn hơn maxChunkBytes: Chia thành nhiều file nhỏ (parts)
     this.logger.log(
-      `Đóng gói sao lưu hoàn tất: ${fileName} (${(stat.size / 1024 / 1024).toFixed(2)} MB, ~${fileCount} files)`,
+      `Tổng dung lượng ước tính (~${(totalEstimatedBytes / 1024 / 1024).toFixed(2)} MB) vượt giới hạn ${maxChunkSizeMb} MB/file. Đang tự động tách thành từng file nhỏ...`,
     );
 
-    return {
-      archivePath,
-      fileName,
-      fileSize: stat.size,
-      fileCount,
-    };
+    const partsBatches: Array<{
+      hasDb: boolean;
+      files: InvoiceFileInfo[];
+    }> = [];
+
+    let currentBatchFiles: InvoiceFileInfo[] = [];
+    let currentBatchBytes = dbTotalBytes; // Part 1 luôn chứa DB
+    let isFirstPart = true;
+
+    for (const invFile of invoiceFilesToPack) {
+      if (currentBatchFiles.length > 0 && currentBatchBytes + invFile.size > maxChunkBytes) {
+        partsBatches.push({
+          hasDb: isFirstPart,
+          files: currentBatchFiles,
+        });
+        currentBatchFiles = [invFile];
+        currentBatchBytes = invFile.size;
+        isFirstPart = false;
+      } else {
+        currentBatchFiles.push(invFile);
+        currentBatchBytes += invFile.size;
+      }
+    }
+
+    if (currentBatchFiles.length > 0 || isFirstPart) {
+      partsBatches.push({
+        hasDb: isFirstPart,
+        files: currentBatchFiles,
+      });
+    }
+
+    const totalParts = partsBatches.length;
+    const archives: BackupArchiveInfo[] = [];
+
+    for (let p = 0; p < totalParts; p++) {
+      const partIndex = p + 1;
+      const batch = partsBatches[p];
+      const partNumStr = String(partIndex).padStart(2, '0');
+      const totalPartsStr = String(totalParts).padStart(2, '0');
+      const fileName = `invoice_backup_${timestamp}_part${partNumStr}_of_${totalPartsStr}.zip`;
+      const archivePath = path.join(tempDir, fileName);
+
+      this.logger.log(
+        `Đóng gói phần ${partIndex}/${totalParts}: ${fileName} (${batch.files.length} hóa đơn, DB: ${batch.hasDb ? 'Có' : 'Không'})...`,
+      );
+
+      const zip = new AdmZip();
+      let fileCount = 0;
+
+      if (batch.hasDb) {
+        for (const dbFile of dbFiles) {
+          zip.addLocalFile(dbFile.fullPath, dbFile.zipSubPath);
+          fileCount++;
+        }
+      }
+
+      for (const invFile of batch.files) {
+        const zipSubDir = path.dirname(path.join('invoices', invFile.relPath)).replace(/\\/g, '/');
+        zip.addLocalFile(invFile.fullPath, zipSubDir);
+        fileCount++;
+      }
+
+      const manifest = {
+        system: 'Invoice Pro',
+        version: '1.0.0',
+        backupMode: effectiveMode,
+        timestamp,
+        createdAt: new Date().toISOString(),
+        totalParts,
+        partIndex,
+        databaseIncluded: batch.hasDb,
+        incrementalCutoff: cutoffDate?.toISOString() || null,
+        filesInPartCount: batch.files.length,
+        totalInvoiceFilesPacked: invoiceFilesToPack.length,
+        totalAllInvoiceFiles: allInvoiceFiles.length,
+        filesList: batch.files.map((f) => f.relPath),
+        hostname: os.hostname(),
+        platform: process.platform,
+        nodeVersion: process.version,
+      };
+      zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
+      fileCount++;
+
+      zip.writeZip(archivePath);
+      const stat = fs.statSync(archivePath);
+
+      this.logger.log(
+        `Đóng gói xong phần ${partIndex}/${totalParts}: ${fileName} (${(stat.size / 1024 / 1024).toFixed(2)} MB, ${fileCount} files)`,
+      );
+
+      archives.push({
+        archivePath,
+        fileName,
+        fileSize: stat.size,
+        partIndex,
+        totalParts,
+        fileCount,
+      });
+    }
+
+    return archives;
   }
 
   /**
-   * Execute complete backup process and upload to Google Drive
+   * Helper tương thích ngược đóng gói trả về 1 archive
    */
-  async executeBackup(triggerType: 'MANUAL' | 'AUTO'): Promise<any> {
+  async createBackupArchive(options?: {
+    forceFull?: boolean;
+  }): Promise<BackupArchiveInfo> {
+    const archives = await this.createBackupArchives(options);
+    return archives[0];
+  }
+
+  /**
+   * Execute complete backup process and upload to Google Drive.
+   * - Hỗ trợ đẩy từ từ từng file nhỏ với khoảng chờ chunkDelayMs để tránh nghẽn băng thông.
+   */
+  async executeBackup(
+    triggerType: 'MANUAL' | 'AUTO',
+    forceFull = false,
+  ): Promise<any> {
     if (!this.googleDriveService.isConfigured()) {
       throw new BadRequestException(
         'Google Drive chưa được cấu hình. Vui lòng thiết lập biến môi trường Google Service Account và Folder ID.',
@@ -264,7 +542,7 @@ export class BackupService {
     }
 
     const startTime = Date.now();
-    let archiveInfo: { archivePath: string; fileName: string; fileSize: number } | null = null;
+    let archives: BackupArchiveInfo[] = [];
 
     // Create log record with IN_PROGRESS status
     const backupLog = await this.prisma.backupLog.create({
@@ -276,49 +554,82 @@ export class BackupService {
     });
 
     try {
-      // 1. Create local ZIP archive
-      archiveInfo = await this.createBackupArchive();
+      // 1. Create local archives (single file or split into smaller parts)
+      archives = await this.createBackupArchives({ forceFull });
+
+      const totalSize = archives.reduce((sum, a) => sum + a.fileSize, 0);
+      const mainFileName =
+        archives.length === 1
+          ? archives[0].fileName
+          : `${archives[0].fileName.replace(/_part01_of_\d+/, '')} (${archives.length} parts)`;
 
       await this.prisma.backupLog.update({
         where: { id: backupLog.id },
         data: {
-          fileName: archiveInfo.fileName,
-          fileSize: archiveInfo.fileSize,
+          fileName: mainFileName,
+          fileSize: totalSize,
         },
       });
 
-      // 2. Upload to Google Drive
-      const uploadRes = await this.googleDriveService.uploadFile(
-        archiveInfo.archivePath,
-        archiveInfo.fileName,
-      );
+      // 2. Upload to Google Drive progressively ("đẩy từ từ để tiết kiệm băng thông")
+      const { chunkDelayMs } = this.getChunkSettings();
+      const uploadedFiles: Array<{
+        fileId: string;
+        fileName: string;
+        webViewLink?: string;
+        size: number;
+      }> = [];
 
-      // 3. Prune old backups on Drive (retentionCount=0 means keep all)
-      const retentionCount = parseInt(process.env.BACKUP_RETENTION_COUNT || '0', 10);
-      const pruneResult = retentionCount > 0
-        ? await this.googleDriveService.pruneOldBackups(retentionCount)
-        : { deletedCount: 0, deletedFiles: [] };
+      for (let i = 0; i < archives.length; i++) {
+        const archive = archives[i];
+        this.logger.log(
+          `[Backup] [${i + 1}/${archives.length}] Đang tải lên Google Drive: ${archive.fileName} (${(archive.fileSize / 1024 / 1024).toFixed(2)} MB)...`,
+        );
+
+        const uploadRes = await this.googleDriveService.uploadFile(
+          archive.archivePath,
+          archive.fileName,
+        );
+        uploadedFiles.push(uploadRes);
+
+        // Nếu còn part tiếp theo, tạm nghỉ chunkDelayMs để giãn cách băng thông
+        if (i < archives.length - 1 && chunkDelayMs > 0) {
+          this.logger.log(
+            `[Backup] Đã tải lên phần ${i + 1}/${archives.length}. Tạm nghỉ ${chunkDelayMs}ms trước khi tải tiếp để tiết kiệm băng thông...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, chunkDelayMs));
+        }
+      }
+
+      // 3. Prune old backups on Drive
+      const retentionCount = parseInt(process.env.BACKUP_RETENTION_COUNT ?? '7', 10);
+      const pruneResult =
+        retentionCount > 0
+          ? await this.googleDriveService.pruneOldBackups(retentionCount)
+          : { deletedCount: 0, deletedFiles: [] };
 
       const durationMs = Date.now() - startTime;
 
       // 4. Update log to SUCCESS
+      const firstUpload = uploadedFiles[0];
       const updatedLog = await this.prisma.backupLog.update({
         where: { id: backupLog.id },
         data: {
           status: 'SUCCESS',
-          driveFileId: uploadRes.fileId,
-          driveFileUrl: uploadRes.webViewLink,
-          fileSize: uploadRes.size,
+          driveFileId: uploadedFiles.map((u) => u.fileId).join(','),
+          driveFileUrl: firstUpload?.webViewLink || null,
+          fileSize: totalSize,
           durationMs,
         },
       });
 
       this.logger.log(
-        `Sao lưu thành công [${triggerType}]: ${archiveInfo.fileName} (${(uploadRes.size / 1024 / 1024).toFixed(2)} MB) trong ${durationMs}ms`,
+        `Sao lưu thành công [${triggerType}]: ${mainFileName} (${(totalSize / 1024 / 1024).toFixed(2)} MB, ${uploadedFiles.length} file tải lên) trong ${durationMs}ms`,
       );
 
       return {
         ...updatedLog,
+        uploadedParts: uploadedFiles,
         prunedFilesCount: pruneResult.deletedCount,
       };
     } catch (err: any) {
@@ -336,13 +647,15 @@ export class BackupService {
 
       throw new InternalServerErrorException(`Sao lưu thất bại: ${err.message}`);
     } finally {
-      // Always cleanup local temporary zip file
-      if (archiveInfo && fs.existsSync(archiveInfo.archivePath)) {
-        try {
-          fs.unlinkSync(archiveInfo.archivePath);
-          this.logger.log(`Đã dọn dẹp file tạm cục bộ: ${archiveInfo.archivePath}`);
-        } catch (cleanupErr: any) {
-          this.logger.warn(`Không thể xoá file tạm: ${cleanupErr.message}`);
+      // Always cleanup all temporary zip files
+      for (const archive of archives) {
+        if (fs.existsSync(archive.archivePath)) {
+          try {
+            fs.unlinkSync(archive.archivePath);
+            this.logger.log(`Đã dọn dẹp file tạm cục bộ: ${archive.archivePath}`);
+          } catch (cleanupErr: any) {
+            this.logger.warn(`Không thể xoá file tạm: ${cleanupErr.message}`);
+          }
         }
       }
     }
