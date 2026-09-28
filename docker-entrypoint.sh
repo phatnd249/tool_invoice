@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+# 0. Ensure persistent directories exist
+mkdir -p data/invoices
+
 # 1. Apply pending database migrations (creates the SQLite DB if missing)
 echo "==> Applying database migrations..."
 npx prisma migrate deploy

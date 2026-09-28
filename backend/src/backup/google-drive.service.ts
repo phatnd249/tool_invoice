@@ -19,7 +19,7 @@ export class GoogleDriveService {
    * Determine whether Google Drive credentials and Folder ID are configured.
    */
   isConfigured(): boolean {
-    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    const folderId = this.getFolderId();
     if (!folderId || folderId.trim() === '') return false;
 
     const jsonContent = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -50,7 +50,17 @@ export class GoogleDriveService {
   }
 
   getFolderId(): string | null {
-    return process.env.GOOGLE_DRIVE_FOLDER_ID?.trim() || null;
+    const raw = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
+    if (!raw) return null;
+
+    // Trích xuất ID nếu người dùng dán toàn bộ URL: https://drive.google.com/drive/folders/<id>?...
+    const urlMatch = raw.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (urlMatch) {
+      return urlMatch[1];
+    }
+
+    // Loại bỏ query params thừa (ví dụ ?hl=vi, ?usp=sharing, v.v.)
+    return raw.split('?')[0].split('&')[0].trim() || null;
   }
 
   private getDriveClient() {

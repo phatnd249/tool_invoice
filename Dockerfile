@@ -19,7 +19,7 @@ RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Copy package manifests first so dependency layers benefit from Docker cache
-COPY package.json ./
+COPY package.json package-lock.json ./
 COPY backend/package.json ./backend/
 COPY frontend/package.json ./frontend/
 

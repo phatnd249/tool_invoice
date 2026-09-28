@@ -16,57 +16,73 @@ services:
     container_name: backend
     restart: unless-stopped
     ports:
-      - "9000:3000"
+      - "${HOST_PORT:-9000}:3000"
+    stop_grace_period: 30s
     env_file:
       - path: backend/.env
         required: false
       - path: .env
         required: false
     environment:
-      # ── Hạ tầng container: GIÁ TRỊ KHÁC với host nên phải đặt ở đây ──
+      # ── Hạ tầng container: GIÁ TRỊ KHÁC với host nên đặt ở đây ──
       NODE_ENV: production
       PORT: 3000
-      # SQLite DB + invoice files live in ./data (persisted via the volume)
+      # SQLite DB + invoice files lưu trong volume persistent ./data
       DATABASE_URL: file:./data/dev.db
       INVOICES_DIR: ./data/invoices
-      # Reach Gotenberg through the Docker network
+      # Kết nối nội bộ tới Gotenberg service qua Docker network
       GOTENBERG_URL: http://gotenberg:3000
 
-      # ⚠️ CHỈ khai báo biến hạ tầng ở đây.
-      # `environment` có độ ưu tiên CAO HƠN `env_file`, nên mọi biến ứng dụng
-      # (JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, APP_URL, GEMINI_API_KEY, SMTP_*,
-      # GOOGLE_*, BACKUP_*, GDT_BASE_URL, SEED_ON_START, ADMIN_*) KHÔNG được
-      # khai báo ở đây - nếu không giá trị trong backend/.env sẽ bị GHI ĐÈ ÂM THẦM
-      # và rơi về default (tức là mất cấu hình bí mật/mạng).
-      # Đọc chúng từ env_file: backend/.env, hoặc .env ở root (ưu tiên hơn).
-      # Mẫu cấu hình: backend/.env.example
-
+      # ⚠️ LƯU Ý: Các biến nghiệp vụ (JWT_ACCESS_SECRET, JWT_REFRESH_SECRET,
+      # APP_URL, GEMINI_API_KEY, SEED_ON_START, ADMIN_*, SMTP_*, GOOGLE_*)
+      # nên được cấu hình trong file .env ở thư mục gốc hoặc backend/.env
+      # để đảm bảo bảo mật và dễ quản lý.
     volumes:
-      # Persist SQLite database + generated invoice files across restarts
+      # Lưu trữ bền vững CSDL SQLite và toàn bộ file hoá đơn
       - app_data:/app/backend/data
     networks:
       - app
     depends_on:
-      - gotenberg
+      gotenberg:
+        condition: service_healthy
     healthcheck:
-      # /api phải trả 200 (AppController) - 404/500 đều coi là unhealthy
+      # Kiểm tra API backend đã sẵn sàng phục vụ
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 25s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   gotenberg:
     image: gotenberg/gotenberg:8
     container_name: gotenberg
     restart: unless-stopped
-    # Internal only - not exposed to the host
     networks:
       - app
+    healthcheck:
+      # Kiểm tra Gotenberg đã khởi động xong engine Chromium/LibreOffice
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   app_data:
+    name: tool_invoice_data
 
 networks:
   app:
+    name: tool_invoice_net
     driver: bridge
+
