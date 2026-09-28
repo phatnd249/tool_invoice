@@ -703,6 +703,7 @@ async function generateDocx() {
             'invoice.yourcompany.com {',
             '    tls C:/ssl/cloudflare/invoice.crt C:/ssl/cloudflare/invoice.key',
             '    encode zstd gzip',
+            '    # Cổng 3000 cho PM2 native (hoặc 9000 nếu dùng Docker Compose trên Windows):',
             '    reverse_proxy 127.0.0.1:3000 {',
             '        transport http {',
             '            response_header_timeout 3600s',
@@ -817,6 +818,7 @@ async function generateDocx() {
           p('Hệ thống tích hợp sẵn module sao lưu đám mây Google Drive với 2 thuật toán tiên tiến: Incremental Backup (chỉ sao lưu tệp mới) và Chunking (tự động chia nhỏ tệp nếu vượt ngưỡng dung lượng).'),
 
           h2('10.1 Các bước thiết lập Google Drive Service Account:'),
+          bullet([text('Bật '), bold('Google Drive API'), text(' cho project trên Google Cloud Console (APIs & Services -> Library -> Google Drive API -> Enable). BẮT BUỘC để tránh lỗi 403 SERVICE_DISABLED.')]),
           bullet([text('Truy cập Google Cloud Console -> IAM & Admin -> Service Accounts.')]),
           bullet([text('Tạo Service Account mới -> Tab Keys -> Add Key -> Tạo khóa định dạng '), bold('JSON'), text(' và tải về.')]),
           bullet([text('Tạo thư mục trên Google Drive cá nhân/doanh nghiệp (ví dụ: Invoice-Backups).')]),
@@ -826,6 +828,7 @@ async function generateDocx() {
           h2('10.2 Cấu hình tệp backend/.env:'),
           ...codeBlock([
             'GOOGLE_DRIVE_FOLDER_ID=1D1oZQ2yIOT9Ya7A661pKrT4Nks8xCAg4',
+            '# Chuỗi JSON phải trên 1 dòng, ký tự xuống dòng của private_key là \\n',
             'GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...",...}',
             'BACKUP_AUTO_ENABLED=true',
             'BACKUP_CRON_SCHEDULE="0 2 * * *"   # Tự động sao lưu lúc 2:00 sáng mỗi ngày',
@@ -834,19 +837,33 @@ async function generateDocx() {
             'BACKUP_MAX_CHUNK_SIZE_MB=15         # Tự động chia nhỏ nếu gói dữ liệu > 15MB',
           ]),
 
+          p('Áp dụng cấu hình môi trường mới cho container Docker:'),
+          ...codeBlock([
+            'docker compose up -d --force-recreate backend',
+            '# Kiểm tra log xác nhận: "Đã kích hoạt lịch sao lưu Google Drive tự động"',
+          ]),
+
+          callout(
+            'Lưu Ý Kiểm Thử Backup',
+            'Endpoint /api/backup/trigger luôn trả về HTTP 200 kể cả khi upload thất bại. Cần kiểm tra thuộc tính status và errorMessage trong response body (hoặc kiểm tra log container). Trên giao diện web KHÔNG có nút phục hồi (restore), thao tác khôi phục bắt buộc thực hiện thủ công trên server.',
+            'warning',
+          ),
+
           h2('10.3 Kịch bản khôi phục dữ liệu khi gặp sự cố (Disaster Recovery):'),
           ...codeBlock([
             '# 1. Tải tệp backup ZIP từ Google Drive về máy chủ',
-            '# 2. Giải nén vào thư mục tạm:',
-            'unzip invoice_backup_2026-09-28_02-00-00.zip -d /tmp/restore',
-            '# 3. Tạm dừng dịch vụ:',
-            'docker compose stop backend   # (hoặc: pm2 stop invoice-backend)',
-            '# 4. Ghi đè cơ sở dữ liệu và thư mục hóa đơn:',
-            'cp /tmp/restore/database/dev.db backend/data/dev.db',
-            'cp -r /tmp/restore/invoices/* backend/data/invoices/',
-            '# 5. Chạy migration schema và khởi động lại:',
-            'cd backend && npx prisma migrate deploy && cd ..',
-            'docker compose start backend  # (hoặc: pm2 start invoice-backend)',
+            '# 2. Giải nén vào thư mục tạm (/tmp/restore):',
+            'mkdir -p /tmp/restore && unzip invoice_backup_2026-09-28_02-00-00.zip -d /tmp/restore',
+            '#    (Nếu backup chia nhiều part: giải nén toàn bộ part*.zip vào cùng thư mục)',
+            '# 3. Tạm dừng dịch vụ backend:',
+            'docker compose stop backend',
+            '# 4. Ghi đè vào Named Volume Docker (KHÔNG copy vào backend/data/ trên host):',
+            'docker cp /tmp/restore/database/dev.db backend:/app/backend/data/dev.db',
+            'docker cp /tmp/restore/invoices/. backend:/app/backend/data/invoices/',
+            '#    (Nếu chạy PM2 không Docker: cp /tmp/restore/database/dev.db backend/prisma/dev.db && cp -r /tmp/restore/invoices/* backend/invoices/)',
+            '# 5. Khởi động lại (docker-entrypoint.sh tự động migrate schema):',
+            'docker compose up -d backend',
+            'curl -s http://localhost:9000/api     # Kiểm tra: phải trả "Hello World!"',
           ]),
 
           // ---------------------------------------------------------------------

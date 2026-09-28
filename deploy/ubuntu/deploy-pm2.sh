@@ -37,7 +37,7 @@ echo "🔄 [6/6] Khởi động lại ứng dụng qua PM2..."
 if pm2 list | grep -q "invoice-backend"; then
     pm2 restart invoice-backend --update-env
 else
-    pm2 start backend/dist/src/main.js --name "invoice-backend" --time
+    pm2 start dist/src/main.js --name "invoice-backend" --cwd backend --time
     pm2 save
 fi
 

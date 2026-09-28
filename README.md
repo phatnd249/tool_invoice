@@ -141,7 +141,15 @@ npx prisma studio
 
 Hệ thống hỗ trợ tự động sao lưu database và file hoá đơn lên Google Drive theo lịch trình.
 
-### Bước 1: Tạo Google Service Account
+### Bước 1: Bật Google Drive API (BẮT BUỘC)
+
+> ⚠️ Bỏ qua bước này thì mọi thao tác backup sẽ lỗi **403 `SERVICE_DISABLED`**.
+
+1. Truy cập https://console.cloud.google.com/ → chọn Project của bạn
+2. Menu **APIs & Services** → **Library**
+3. Tìm **Google Drive API** → **Enable**
+
+### Bước 2: Tạo Google Service Account
 
 1. **Truy cập Google Cloud Console**: https://console.cloud.google.com/
 2. **Chọn hoặc tạo Project**:
@@ -155,14 +163,14 @@ Hệ thống hỗ trợ tự động sao lưu database và file hoá đơn lên 
    - Role: có thể bỏ qua (không cần role vì chỉ dùng Drive API)
    - Click **Done**
 
-### Bước 2: Tạo và Download JSON Key
+### Bước 3: Tạo và Download JSON Key
 
 1. Click vào service account vừa tạo
 2. Tab **Keys** → **Add Key** → **Create new key**
 3. Chọn **JSON** → **Create**
 4. File JSON sẽ được tự động download (ví dụ: `my-project-abc123.json`)
 
-### Bước 3: Tạo thư mục Google Drive
+### Bước 4: Tạo thư mục Google Drive
 
 1. Vào Google Drive: https://drive.google.com/
 2. Tạo thư mục mới cho backup (ví dụ: "Invoice Backups")
@@ -172,11 +180,11 @@ Hệ thống hỗ trợ tự động sao lưu database và file hoá đơn lên 
                                            ↑ Đây là Folder ID
    ```
 
-### Bước 4: Share thư mục với Service Account
+### Bước 5: Share thư mục với Service Account
 
 ⚠️ **QUAN TRỌNG** - Nếu không thực hiện bước này, backup sẽ lỗi 403!
 
-1. Mở file JSON key đã download ở Bước 2
+1. Mở file JSON key đã download ở Bước 3
 2. Tìm field `"client_email"`, copy email (dạng `xxx@xxx.iam.gserviceaccount.com`)
 3. Quay lại thư mục Google Drive đã tạo
 4. Click **Share** (hoặc biểu tượng người + dấu cộng)
@@ -185,16 +193,16 @@ Hệ thống hỗ trợ tự động sao lưu database và file hoá đơn lên 
 7. **Bỏ tick** "Notify people" (không cần gửi email)
 8. Click **Share**
 
-### Bước 5: Cấu hình trong .env
+### Bước 6: Cấu hình trong .env
 
 Mở file `backend/.env` và thêm:
 
 ```env
-# 1. Paste Folder ID từ bước 3
+# 1. Paste Folder ID từ bước 4
 GOOGLE_DRIVE_FOLDER_ID=1D1oZQ2yIOT9Ya7A661pKrT4Nks8xCAg4
 
-# 2. Paste TOÀN BỘ nội dung file JSON từ bước 2
-# Có thể để trên 1 dòng (xóa xuống dòng) hoặc giữ nguyên format nhiều dòng
+# 2. Paste TOÀN BỘ nội dung file JSON từ bước 3
+# ⚠️ Phải nằm trên MỘT dòng; ký tự xuống dòng trong private_key phải là \n (2 ký tự)
 GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"my-project-123","private_key_id":"abc...","private_key":"-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n","client_email":"invoice-backup@my-project-123.iam.gserviceaccount.com",...}
 
 # 3. Tùy chỉnh lịch backup (optional)
@@ -203,18 +211,32 @@ BACKUP_CRON_SCHEDULE="0 2 * * *"
 BACKUP_RETENTION_COUNT=7
 ```
 
-### Bước 6: Test kết nối
+### Bước 7: Áp dụng cấu hình
 
-Khởi động backend và test:
+Biến môi trường chỉ được đọc **một lần lúc khởi động container** — sửa `.env` xong phải recreate:
 
 ```bash
-cd backend
-npm run dev
+# Docker
+docker compose up -d --force-recreate backend
+docker logs backend | grep -i "sao lưu\|Drive"    # xác nhận đã kích hoạt lịch
 
-# Test API (cần đăng nhập trước để lấy JWT token)
-curl -X POST http://localhost:4000/api/backup/test-connection \
+# Local (PM2 / npm)
+npm run dev:backend
+```
+
+### Bước 8: Test kết nối
+
+```bash
+# Docker: app ở cổng 9000
+curl -X POST http://localhost:9000/api/backup/test-connection \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+# Local dev: theo PORT trong backend/.env
+curl -X POST http://localhost:3000/api/backup/test-connection \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
+
+> ⚠️ `POST /api/backup/trigger` **luôn trả HTTP 200** kể cả khi thất bại — phải kiểm tra `status` / `errorMessage` trong **body**, không chỉ HTTP status.
 
 Hoặc dùng Postman/Frontend để gọi endpoint `/api/backup/test-connection`
 
@@ -254,6 +276,16 @@ BACKUP_CRON_SCHEDULE="0 0 * * 0"     # Chủ nhật hàng tuần
 BACKUP_CRON_SCHEDULE="0 3 1 * *"     # Ngày 1 mỗi tháng
 ```
 
+### Tối ưu băng thông (chunking)
+
+| Biến | Mặc định | Ý nghĩa |
+|---|---|---|
+| `BACKUP_MODE` | `INCREMENTAL` | `INCREMENTAL` chỉ đóng gói file hoá đơn mới/sửa kể từ lần backup **thành công** cuối. `FULL` luôn đóng gói toàn bộ. Database luôn được backup đầy đủ. |
+| `BACKUP_MAX_CHUNK_SIZE_MB` | `15` | Tổng dữ liệu vượt ngưỡng này sẽ tự tách thành nhiều file `..._part01_of_0N.zip`. **Chỉ nhận số nguyên** (giá trị thập phân sẽ bị bỏ qua). |
+| `BACKUP_CHUNK_DELAY_MS` | `2000` | Nghỉ giữa các lần upload từng phần để tránh chạm giới hạn Google Drive API. |
+
+> ⚠️ **Với `BACKUP_MODE=INCREMENTAL`, việc khôi phục phải gộp TẤT CẢ các file backup từ lần thành công đầu tiên trở đi** (mỗi bản chỉ chứa phần *thay đổi*). Nếu cần bản sao lưu độc lập tại một thời điểm, dùng nút **"Backup toàn bộ"** trong UI (tương đương `isFullBackup: true`) hoặc đặt `BACKUP_MODE=FULL`.
+
 ### Troubleshooting
 
 **Lỗi 404 - Folder not found:**
@@ -264,6 +296,7 @@ BACKUP_CRON_SCHEDULE="0 3 1 * *"     # Ngày 1 mỗi tháng
 - Kiểm tra đã Share thư mục với service account chưa
 - Email service account phải khớp với `client_email` trong JSON
 - Quyền phải là "Editor" (không phải "Viewer")
+- **Google Drive API chưa được Enable** cho project → lỗi `SERVICE_DISABLED` (xem Bước 1)
 
 **Lỗi JSON parse:**
 - Kiểm tra JSON có hợp lệ không (dùng jsonlint.com)

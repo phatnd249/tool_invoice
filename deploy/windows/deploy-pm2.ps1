@@ -31,7 +31,7 @@ $pm2App = pm2 list | Select-String "invoice-backend"
 if ($pm2App) {
     pm2 restart invoice-backend --update-env
 } else {
-    pm2 start backend/dist/src/main.js --name "invoice-backend" --time
+    pm2 start dist/src/main.js --name "invoice-backend" --cwd backend --time
     pm2 save
 }
 

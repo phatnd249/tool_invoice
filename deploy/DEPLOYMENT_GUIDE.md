@@ -79,7 +79,7 @@ sudo nano backend/.env
   # Chạy 2 lần, dùng kết quả cho 2 biến khác nhau
   openssl rand -hex 32
   ```
-  > ⚠️ **KHÔNG sử dụng giá trị mặc định** trong docker-compose.yml cho production. Hãy ghi đè bằng biến môi trường hoặc file `.env`.
+  > ⚠️ **Bắt buộc cấu hình bí mật:** Docker Compose không còn gán secret mặc định trong code nhằm đảm bảo an toàn tuyệt đối. Bắt buộc phải khai báo `JWT_ACCESS_SECRET` và `JWT_REFRESH_SECRET` trong `backend/.env`, nếu thiếu ứng dụng sẽ dừng ngay lập tức (fail-fast) khi khởi động.
 * `GOOGLE_SERVICE_ACCOUNT_JSON` và `GOOGLE_DRIVE_FOLDER_ID`: Thiết lập backup Drive
 
 #### Bước 3: Cấu hình Nginx với Cloudflare Real IP & Origin SSL
@@ -169,6 +169,8 @@ Chỉnh sửa file [deploy/caddy/Caddyfile](file:///d:/Projects/tool-invoice/dep
 invoice.yourcompany.com {
     tls C:/ssl/cloudflare/invoice.crt C:/ssl/cloudflare/invoice.key
     encode zstd gzip
+
+    # Cổng 3000 khi chạy PM2 native (hoặc 9000 nếu dùng Docker Compose trên Windows)
     reverse_proxy 127.0.0.1:3000 {
         transport http {
             response_header_timeout 3600s
@@ -294,19 +296,24 @@ backend/
 
 ### 9.1 Cấu hình Backup tự động lên Google Drive
 
-1. **Tạo Service Account trên Google Cloud Console:**
+1. **Bật Google Drive API cho project** (BẮT BUỘC - bỏ qua bước này sẽ lỗi 403 `SERVICE_DISABLED`):
+   - https://console.cloud.google.com/ → chọn Project → **APIs & Services** → **Library**
+   - Tìm **Google Drive API** → **Enable**
+
+2. **Tạo Service Account trên Google Cloud Console:**
    - Truy cập https://console.cloud.google.com/ → IAM & Admin → Service Accounts
    - Tạo Service Account mới → Keys → Add Key → Create new key → **JSON**
    - Tải file JSON về
 
-2. **Tạo thư mục backup trên Google Drive:**
+3. **Tạo thư mục backup trên Google Drive:**
    - Tạo thư mục mới (ví dụ: `Invoice-Backups`)
    - Copy **Folder ID** từ URL: `https://drive.google.com/drive/folders/<FOLDER_ID>`
    - Share thư mục cho email Service Account (trong file JSON, field `client_email`) → quyền **Editor**
 
-3. **Cấu hình biến môi trường** trong `backend/.env`:
+4. **Cấu hình biến môi trường** trong `backend/.env`:
    ```env
    GOOGLE_DRIVE_FOLDER_ID=<Folder_ID_ở_trên>
+   # JSON phải nằm trên MỘT dòng, ký tự xuống dòng trong private_key phải là \n
    GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...",...}
 
    # Tùy chọn
@@ -317,34 +324,49 @@ backend/
    BACKUP_MAX_CHUNK_SIZE_MB=15         # Tách file nếu > 15MB
    ```
 
-4. **Kiểm tra kết nối:** Vào giao diện web → Trang **Sao lưu** → Bấm **Kiểm tra kết nối**.
+5. **Áp dụng cấu hình** (biến môi trường chỉ được đọc lúc khởi động container):
+   ```bash
+   docker compose up -d --force-recreate backend
+   ```
+   Log phải có dòng: `Đã kích hoạt lịch sao lưu Google Drive tự động: "0 2 * * *"`
+   → Nếu thấy `Google Drive chưa được cấu hình` thì JSON/Folder ID sai hoặc chưa share.
+
+6. **Kiểm tra kết nối:** Vào giao diện web → Trang **Sao lưu** → Bấm **Kiểm tra kết nối**, sau đó bấm **Backup ngay** để xác nhận upload thật sự hoạt động.
+
+> ⚠️ Endpoint `/api/backup/trigger` **luôn trả HTTP 200**, kể cả khi thất bại — lỗi nằm trong body (`status`, `errorMessage`) và trong log container. Luôn kiểm tra body, không chỉ HTTP status.
 
 ### 9.2 Phục hồi (Restore) từ file backup
 
+> ⚠️ **Không có chức năng restore trong giao diện web** — phải thao tác thủ công trên server.
+
 ```bash
-# 1. Tải file backup ZIP từ Google Drive về server
-# 2. Giải nén
-unzip invoice_backup_2026-09-28_02-00-00.zip -d /tmp/restore
+# 1. Tải file backup ZIP từ Google Drive về server (UI: Trang Sao lưu → tải tệp)
+
+# 2. Giải nén ra thư mục tạm
+mkdir -p /tmp/restore && unzip invoice_backup_2026-09-28_02-00-00.zip -d /tmp/restore
+#    Nếu backup bị tách nhiều phần: giải nén TẤT CẢ các file part*.zip vào cùng /tmp/restore
 
 # 3. Dừng ứng dụng
-docker compose stop backend   # hoặc: pm2 stop invoice-backend
+docker compose stop backend
 
-# 4. Khôi phục database
-cp /tmp/restore/database/dev.db backend/data/dev.db        # Docker
-# hoặc: cp /tmp/restore/database/dev.db backend/prisma/dev.db  # PM2
+# 4. Khôi phục database + file hoá đơn
+#    ⚠️ Dữ liệu nằm trong NAMED VOLUME `tool-invoice_app_data`, KHÔNG phải thư mục
+#       `backend/data/` trên host. Copy vào `backend/data/` sẽ im lặng không có tác dụng.
+docker cp /tmp/restore/database/dev.db backend:/app/backend/data/dev.db
+docker cp /tmp/restore/invoices/. backend:/app/backend/data/invoices/
 
-# 5. Khôi phục file hoá đơn
-cp -r /tmp/restore/invoices/* backend/data/invoices/        # Docker
-# hoặc: cp -r /tmp/restore/invoices/* backend/invoices/        # PM2
+# 5. (PM2 - dữ liệu nằm trên host, dùng cp thường)
+#    cp /tmp/restore/database/dev.db backend/prisma/dev.db
+#    cp -r /tmp/restore/invoices/* backend/invoices/
 
-# 6. Chạy migration (đảm bảo schema đúng phiên bản)
-cd backend && npx prisma migrate deploy && cd ..
-
-# 7. Khởi động lại
-docker compose start backend   # hoặc: pm2 start invoice-backend
+# 6. Khởi động lại. `docker-entrypoint.sh` tự chạy `prisma migrate deploy`
+#    nên không cần migrate thủ công.
+docker compose up -d backend
+curl -s http://localhost:9000/api     # phải trả: Hello World!
 ```
 
-> Nếu backup chia thành nhiều phần (multi-part), giải nén tất cả các phần rồi gộp thư mục `invoices/` lại.
+> **Kiểm tra sau khi restore:** vào UI xác nhận số hoá đơt / người dùng khớp với thời điểm backup; và kiểm tra `/api/backup/history` có bản ghi `SUCCESS` mới nhất.
+
 
 ---
 
