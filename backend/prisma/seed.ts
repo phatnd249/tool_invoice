@@ -150,7 +150,7 @@ async function main() {
 
   if (!adminEmail || !adminPassword) {
     console.warn(
-      '⚠️  Bỏ qua tạo admin: bật ADMIN_EMAIL + ADMIN_INITIAL_PASSWORD để seed tài khoản quản trị',
+      '⚠️  Bỏ qua tạo tài khoản admin: Vui lòng cấu hình ADMIN_EMAIL và ADMIN_INITIAL_PASSWORD trong file .env để khởi tạo.',
     );
   } else if (adminPassword.length < 8) {
     console.warn(
