@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -21,7 +21,7 @@ export class PdfService {
    */
   async convertHtmlToPdf(htmlContent: string): Promise<Buffer> {
     const gotenbergUrl =
-      this.config.get('GOTENBERG_URL') || 'http://localhost:3001';
+      this.config.get<string>('GOTENBERG_URL') ?? 'http://localhost:3001';
 
     const form = new FormData();
     form.append('files', Buffer.from(htmlContent, 'utf-8'), {
@@ -59,7 +59,9 @@ export class PdfService {
     pdfDir: string,
     pdfFileName: string,
   ): Promise<string> {
-    const pdfPath = path.join(pdfDir, pdfFileName);
+    // path.resolve để luôn trả về đường dẫn TUYỆT ĐỐI (controller gọi
+    // res.sendFile → Express bắt buộc path phải absolute).
+    const pdfPath = path.resolve(pdfDir, pdfFileName);
 
     if (fs.existsSync(pdfPath)) {
       return pdfPath;

@@ -10,8 +10,10 @@ invoice.yourcompany.com {
 
     encode zstd gzip
 
-    # Reverse proxy tới backend NestJS chạy tại cổng 3000
-    reverse_proxy 127.0.0.1:3000 {
+    # Reverse proxy tới backend NestJS:
+    # - Cổng 9000: nếu chạy qua Docker Compose (mặc định map 9000:3000)
+    # - Cổng 3000: nếu chạy trực tiếp bằng PM2 (hoặc theo PORT trong backend/.env)
+    reverse_proxy 127.0.0.1:9000 {
         # Timeout cho Server-Sent Events (SSE) theo dõi tiến độ tải hoá đơn
         transport http {
             response_header_timeout 3600s

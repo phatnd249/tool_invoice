@@ -4,7 +4,7 @@
 #   - gotenberg : HTML -> PDF conversion used by the invoice PDF export
 #
 # Quick start:  docker compose up -d --build
-# App         -> http://localhost:3000
+# App         -> http://localhost:9000   (ports: 9000 -> 3000)
 # Gotenberg   -> internal only, reached by the backend at http://gotenberg:3000
 # =============================================================================
 
@@ -23,41 +23,23 @@ services:
       - path: .env
         required: false
     environment:
+      # ── Hạ tầng container: GIÁ TRỊ KHÁC với host nên phải đặt ở đây ──
       NODE_ENV: production
       PORT: 3000
-      # Origin the API is served on / used for CORS
-      APP_URL: http://localhost:3000
       # SQLite DB + invoice files live in ./data (persisted via the volume)
       DATABASE_URL: file:./data/dev.db
       INVOICES_DIR: ./data/invoices
       # Reach Gotenberg through the Docker network
       GOTENBERG_URL: http://gotenberg:3000
-      # Security secrets (override these in production!)
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-1547a23bb1794befdc8a336b0117670daba3304c672a24587aaf7453fc275a22}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-7fef1916488cf0e4575ce73fc70c8827fadb2d120208c8fb6058c700f8a84923}
-      # Optional integrations
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      FEEDBACK_TO_EMAIL: ${FEEDBACK_TO_EMAIL:-}
-      GDT_BASE_URL: ${GDT_BASE_URL:-https://hoadondientu.gdt.gov.vn/api}
-      # Google Drive Backup
-      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
-      GOOGLE_SERVICE_ACCOUNT_KEY_PATH: ${GOOGLE_SERVICE_ACCOUNT_KEY_PATH:-}
-      GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
-      GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL:-}
-      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:-}
-      BACKUP_AUTO_ENABLED: ${BACKUP_AUTO_ENABLED:-true}
-      BACKUP_CRON_SCHEDULE: ${BACKUP_CRON_SCHEDULE:-0 2 * * *}
-      BACKUP_RETENTION_COUNT: ${BACKUP_RETENTION_COUNT:-10}
-      # Set to "false" to skip seeding on every boot
-      SEED_ON_START: ${SEED_ON_START:-false}
-      # Admin account created by the seed script (only when both are set)
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
-      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
+
+      # ⚠️ CHỈ khai báo biến hạ tầng ở đây.
+      # `environment` có độ ưu tiên CAO HƠN `env_file`, nên mọi biến ứng dụng
+      # (JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, APP_URL, GEMINI_API_KEY, SMTP_*,
+      # GOOGLE_*, BACKUP_*, GDT_BASE_URL, SEED_ON_START, ADMIN_*) KHÔNG được
+      # khai báo ở đây - nếu không giá trị trong backend/.env sẽ bị GHI ĐÈ ÂM THẦM
+      # và rơi về default (tức là mất cấu hình bí mật/mạng).
+      # Đọc chúng từ env_file: backend/.env, hoặc .env ở root (ưu tiên hơn).
+      # Mẫu cấu hình: backend/.env.example
 
     volumes:
       # Persist SQLite database + generated invoice files across restarts
@@ -67,7 +49,8 @@ services:
     depends_on:
       - gotenberg
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      # /api phải trả 200 (AppController) - 404/500 đều coi là unhealthy
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 5

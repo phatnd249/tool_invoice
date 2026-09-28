@@ -60,6 +60,10 @@ COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/backend/node_modules ./node_modules
 COPY --from=build /app/backend/package.json ./package.json
 
+# Background image used by the HTML/PDF invoice preview (preview.service.ts
+# looks in <cwd>/images and <cwd>/../images)
+COPY --from=build /app/images ./images
+
 # Default env file; secrets are overridden via docker-compose `environment`/env_file
 COPY --from=build /app/backend/.env.example ./.env
 
