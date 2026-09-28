@@ -16,7 +16,8 @@ services:
     container_name: backend
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-9000}:3000"
+      # Lắng nghe trên tất cả card mạng (Wi-Fi, LAN, VPN, localhost) tại cổng 8080
+      - "0.0.0.0:${HOST_PORT:-8080}:3000"
     stop_grace_period: 30s
     env_file:
       - path: backend/.env

@@ -29,7 +29,29 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: process.env.APP_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Cho phép request cùng nguồn (same-origin), mobile app hoặc không có header Origin
+      if (!origin) return callback(null, true);
+
+      const configuredOrigins = process.env.APP_URL
+        ? process.env.APP_URL.split(',').map((u) => u.trim())
+        : [];
+
+      if (configuredOrigins.includes('*') || configuredOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Tự động cho phép localhost và các dải IP mạng nội bộ (LAN / Wi-Fi / VPN)
+      if (
+        /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|26\.\d+\.\d+\.\d+)(:\d+)?$/.test(
+          origin,
+        )
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(null, true);
+    },
     credentials: true,
   });
 
