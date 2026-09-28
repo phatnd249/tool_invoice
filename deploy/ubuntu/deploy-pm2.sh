@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Kịch bản triển khai & cập nhật trên Ubuntu Server (Dùng PM2 Native)
-# Yêu cầu: Node.js 20+, npm, pm2 đã cài đặt sẵn
+# Yêu cầu: Node.js 22 LTS, npm, pm2 đã cài đặt sẵn
 # Cách chạy: bash deploy/ubuntu/deploy-pm2.sh
 # =============================================================================
 
 set -e
 
 echo "🚀 [1/6] Kéo mã nguồn mới nhất từ Git..."
-git pull origin develop || git pull
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+if [ -n "$CURRENT_BRANCH" ]; then
+    git pull origin "$CURRENT_BRANCH" || git pull
+else
+    git pull
+fi
 
 echo "📦 [2/6] Cài đặt dependencies (NPM Workspaces)..."
 npm install

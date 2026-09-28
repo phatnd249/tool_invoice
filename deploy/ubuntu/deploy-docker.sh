@@ -7,7 +7,12 @@
 set -e
 
 echo "🚀 [1/5] Kéo mã nguồn mới nhất từ Git..."
-git pull origin develop || git pull
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+if [ -n "$CURRENT_BRANCH" ]; then
+    git pull origin "$CURRENT_BRANCH" || git pull
+else
+    git pull
+fi
 
 echo "📦 [2/5] Kiểm tra cấu hình môi trường (.env)..."
 if [ ! -f "backend/.env" ]; then

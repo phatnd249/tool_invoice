@@ -2,6 +2,8 @@
 
 Tài liệu này hướng dẫn chi tiết từng bước triển khai hệ thống **Invoice Pro (tool-invoice)** lên máy chủ thật (Production Server), bao gồm cấu hình tên miền, bảo mật **HTTPS SSL thông qua Cloudflare** (hạn 15 năm, không cần gia hạn định kỳ) hoặc Let's Encrypt Certbot, hỗ trợ cả **Ubuntu Server (Linux)** và **Windows Server**.
 
+> **Yêu cầu:** Node.js **22 LTS** trở lên (Dockerfile sử dụng `node:22-slim`).
+
 ---
 
 ## 1. Yêu Cầu Máy Chủ & Tên Miền
@@ -72,7 +74,12 @@ sudo nano backend/.env
 *Các biến môi trường quan trọng:*
 * `APP_URL=https://invoice.yourcompany.com` (Bắt buộc dùng domain HTTPS)
 * `PORT=3000`
-* `JWT_ACCESS_SECRET` và `JWT_REFRESH_SECRET`: Tạo bằng lệnh `openssl rand -hex 32`
+* `JWT_ACCESS_SECRET` và `JWT_REFRESH_SECRET`: **Bắt buộc** tạo giá trị ngẫu nhiên mạnh:
+  ```bash
+  # Chạy 2 lần, dùng kết quả cho 2 biến khác nhau
+  openssl rand -hex 32
+  ```
+  > ⚠️ **KHÔNG sử dụng giá trị mặc định** trong docker-compose.yml cho production. Hãy ghi đè bằng biến môi trường hoặc file `.env`.
 * `GOOGLE_SERVICE_ACCOUNT_JSON` và `GOOGLE_DRIVE_FOLDER_ID`: Thiết lập backup Drive
 
 #### Bước 3: Cấu hình Nginx với Cloudflare Real IP & Origin SSL
@@ -102,9 +109,10 @@ sudo docker compose ps
 
 ### Phương pháp 2: Triển khai trực tiếp với PM2 (Không dùng Docker)
 ```bash
+# 0. Yêu cầu: Node.js 22 LTS
 # 1. Cài đặt Node.js 22 LTS & PM2
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
+sudo apt install -y nodejs build-essential
 sudo npm install -g pm2
 
 # 2. Chạy Gotenberg (Engine chuyển đổi PDF)
@@ -209,3 +217,224 @@ Chỉ mở port **80** và **443** ra ngoài:
   Set-Location D:\Projects\tool-invoice
   powershell -ExecutionPolicy Bypass -File deploy\windows\deploy-pm2.ps1
   ```
+
+---
+
+## 7. Bảo Mật Production (Security Hardening)
+
+### 7.1 Tạo JWT Secret mạnh
+Không bao giờ dùng giá trị mặc định trong production. Tạo secret ngẫu nhiên:
+```bash
+# Ubuntu / macOS
+openssl rand -hex 32
+
+# Windows PowerShell
+[System.BitConverter]::ToString((1..32 | % { Get-Random -Max 256 }) -as [byte[]]).Replace('-','').ToLower()
+```
+Gán kết quả vào file `backend/.env`:
+```env
+JWT_ACCESS_SECRET=<giá_trị_ngẫu_nhiên_1>
+JWT_REFRESH_SECRET=<giá_trị_ngẫu_nhiên_2>
+```
+
+### 7.2 Đổi mật khẩu Admin sau lần đầu triển khai
+Sau khi seed tạo tài khoản admin (qua `ADMIN_EMAIL` và `ADMIN_INITIAL_PASSWORD`), hãy **đăng nhập và đổi mật khẩu ngay lập tức**.
+
+### 7.3 Không expose port nội bộ ra ngoài
+* Port `9000` (backend) và Gotenberg chỉ nên truy cập qua reverse proxy (Nginx/Caddy), **không mở trực tiếp ra Internet**.
+* Nếu dùng Docker, Gotenberg đã được cấu hình internal-only (không `ports` mapping).
+
+---
+
+## 8. Dữ Liệu & Volume (Data Persistence)
+
+### 8.1 Khi dùng Docker Compose
+Docker Compose sử dụng volume `app_data` để lưu trữ lâu dài:
+```
+app_data:/app/backend/data
+    ├── dev.db          ← SQLite database (toàn bộ dữ liệu hệ thống)
+    ├── dev.db-wal      ← SQLite WAL journal
+    └── invoices/       ← File hoá đơn (ZIP, XML, PDF) đã tải
+```
+> ⚠️ Xoá volume = **mất toàn bộ dữ liệu**. Chỉ chạy `docker compose down` (không có flag `-v`).
+
+**Backup volume Docker:**
+```bash
+# Tạo bản sao thủ công của volume
+docker run --rm -v tool-invoice_app_data:/data -v $(pwd):/backup alpine \
+  tar czf /backup/data_backup_$(date +%Y%m%d).tar.gz -C /data .
+```
+
+**Migrate volume sang server mới:**
+```bash
+# Trên server cũ: export
+docker run --rm -v tool-invoice_app_data:/data -v $(pwd):/backup alpine \
+  tar czf /backup/data_export.tar.gz -C /data .
+
+# Chuyển file data_export.tar.gz sang server mới, sau đó:
+docker compose up -d  # Tạo volume trống trước
+docker compose stop backend
+docker run --rm -v tool-invoice_app_data:/data -v $(pwd):/backup alpine \
+  sh -c "cd /data && tar xzf /backup/data_export.tar.gz"
+docker compose start backend
+```
+
+### 8.2 Khi dùng PM2 (không Docker)
+Dữ liệu lưu trực tiếp trong thư mục dự án:
+```
+backend/
+    ├── prisma/dev.db   ← SQLite database
+    └── invoices/       ← File hoá đơn
+```
+**Cần backup định kỳ** các thư mục trên (hoặc cấu hình Google Drive backup tự động).
+
+---
+
+## 9. Sao Lưu & Phục Hồi Với Google Drive
+
+### 9.1 Cấu hình Backup tự động lên Google Drive
+
+1. **Tạo Service Account trên Google Cloud Console:**
+   - Truy cập https://console.cloud.google.com/ → IAM & Admin → Service Accounts
+   - Tạo Service Account mới → Keys → Add Key → Create new key → **JSON**
+   - Tải file JSON về
+
+2. **Tạo thư mục backup trên Google Drive:**
+   - Tạo thư mục mới (ví dụ: `Invoice-Backups`)
+   - Copy **Folder ID** từ URL: `https://drive.google.com/drive/folders/<FOLDER_ID>`
+   - Share thư mục cho email Service Account (trong file JSON, field `client_email`) → quyền **Editor**
+
+3. **Cấu hình biến môi trường** trong `backend/.env`:
+   ```env
+   GOOGLE_DRIVE_FOLDER_ID=<Folder_ID_ở_trên>
+   GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...",...}
+
+   # Tùy chọn
+   BACKUP_AUTO_ENABLED=true
+   BACKUP_CRON_SCHEDULE="0 2 * * *"   # 2 giờ sáng mỗi ngày
+   BACKUP_RETENTION_COUNT=7            # Giữ 7 bản mới nhất
+   BACKUP_MODE=INCREMENTAL             # Chỉ backup file mới/thay đổi
+   BACKUP_MAX_CHUNK_SIZE_MB=15         # Tách file nếu > 15MB
+   ```
+
+4. **Kiểm tra kết nối:** Vào giao diện web → Trang **Sao lưu** → Bấm **Kiểm tra kết nối**.
+
+### 9.2 Phục hồi (Restore) từ file backup
+
+```bash
+# 1. Tải file backup ZIP từ Google Drive về server
+# 2. Giải nén
+unzip invoice_backup_2026-09-28_02-00-00.zip -d /tmp/restore
+
+# 3. Dừng ứng dụng
+docker compose stop backend   # hoặc: pm2 stop invoice-backend
+
+# 4. Khôi phục database
+cp /tmp/restore/database/dev.db backend/data/dev.db        # Docker
+# hoặc: cp /tmp/restore/database/dev.db backend/prisma/dev.db  # PM2
+
+# 5. Khôi phục file hoá đơn
+cp -r /tmp/restore/invoices/* backend/data/invoices/        # Docker
+# hoặc: cp -r /tmp/restore/invoices/* backend/invoices/        # PM2
+
+# 6. Chạy migration (đảm bảo schema đúng phiên bản)
+cd backend && npx prisma migrate deploy && cd ..
+
+# 7. Khởi động lại
+docker compose start backend   # hoặc: pm2 start invoice-backend
+```
+
+> Nếu backup chia thành nhiều phần (multi-part), giải nén tất cả các phần rồi gộp thư mục `invoices/` lại.
+
+---
+
+## 10. Giám Sát Hệ Thống (Monitoring)
+
+### 10.1 Kiểm tra Healthcheck
+```bash
+# Docker: xem trạng thái health
+docker inspect --format='{{.State.Health.Status}}' backend
+
+# Hoặc gọi API trực tiếp
+curl -s http://localhost:9000/api | head -c 200
+```
+
+### 10.2 Theo dõi dung lượng ổ cứng
+SQLite database và thư mục invoices sẽ **tăng dần theo thời gian**:
+```bash
+# Docker: kiểm tra dung lượng volume
+docker exec backend du -sh /app/backend/data/
+
+# PM2: kiểm tra trực tiếp
+du -sh backend/prisma/dev.db backend/invoices/
+```
+
+### 10.3 Xem Log ứng dụng
+```bash
+# Docker
+docker compose logs -f backend --tail 100
+
+# PM2
+pm2 logs invoice-backend --lines 100
+```
+
+---
+
+## 11. PM2 Tự Khởi Động Khi Reboot
+
+### Ubuntu
+```bash
+pm2 startup        # Tạo script systemd tự khởi động
+pm2 save           # Lưu danh sách process hiện tại
+```
+
+### Windows Server
+PM2 trên Windows **không hỗ trợ `pm2 startup`** mặc định. Cần cài thêm:
+```powershell
+# Cách 1: pm2-windows-startup (đơn giản)
+npm install -g pm2-windows-startup
+pm2-startup install
+pm2 save
+
+# Cách 2: Tạo Windows Service thủ công bằng NSSM
+# Tải NSSM: https://nssm.cc/download
+nssm install InvoiceBackend "C:\Program Files\nodejs\node.exe" "C:\Users\<user>\AppData\Roaming\npm\node_modules\pm2\bin\pm2" resurrect
+nssm start InvoiceBackend
+```
+
+---
+
+## 12. Xử Lý Sự Cố (Troubleshooting)
+
+| Triệu chứng | Nguyên nhân | Cách khắc phục |
+|---|---|---|
+| `ERR_TOO_MANY_REDIRECTS` | Cloudflare SSL đặt chế độ **Flexible** | Đổi sang **Full (Strict)** trong Cloudflare Dashboard |
+| Container backend khởi động rồi crash | DB migration lỗi hoặc thiếu biến môi trường | `docker compose logs backend` để xem chi tiết lỗi |
+| `EACCES: permission denied` (PM2) | Chạy npm install bằng root nhưng PM2 chạy bằng user khác | `sudo chown -R $USER:$USER /var/www/tool-invoice` |
+| Port 9000/3000 bị chiếm | Có process khác đang dùng port | Ubuntu: `sudo lsof -i :9000` / Windows: `netstat -ano \| findstr :9000` |
+| Backup lỗi 403 Forbidden | Chưa share thư mục Drive cho Service Account | Share thư mục cho email `client_email` với quyền **Editor** |
+| `JavaScript heap out of memory` khi build | Server thiếu RAM | Thêm `NODE_OPTIONS="--max-old-space-size=4096"` trước lệnh build |
+| Gotenberg timeout khi xuất PDF | File hoá đơn quá lớn hoặc Gotenberg chưa chạy | Kiểm tra `docker ps \| grep gotenberg`, restart nếu cần |
+| PM2 không tự khởi động sau reboot (Windows) | Chưa cài `pm2-windows-startup` | Xem mục 11 ở trên |
+
+---
+
+## 13. Checklist Triển Khai Lần Đầu
+
+- [ ] Server đáp ứng yêu cầu tối thiểu (2 Core, 4GB RAM, 40GB SSD)
+- [ ] Node.js 22 LTS đã cài đặt (nếu dùng PM2)
+- [ ] Docker + Docker Compose đã cài đặt (nếu dùng Docker)
+- [ ] Tên miền đã trỏ A Record về IP server trên Cloudflare (Proxied 🟠)
+- [ ] Cloudflare SSL/TLS đặt chế độ **Full (Strict)**
+- [ ] Chứng chỉ Cloudflare Origin Certificate đã tạo và lưu trên server
+- [ ] File `backend/.env` đã cấu hình đầy đủ:
+  - [ ] `APP_URL` = domain HTTPS
+  - [ ] `JWT_ACCESS_SECRET` = giá trị ngẫu nhiên (không dùng mặc định)
+  - [ ] `JWT_REFRESH_SECRET` = giá trị ngẫu nhiên (không dùng mặc định)
+  - [ ] `GOOGLE_DRIVE_FOLDER_ID` + `GOOGLE_SERVICE_ACCOUNT_JSON` (nếu cần backup)
+- [ ] Firewall chỉ mở port 80, 443 (và 22/3389 cho quản trị)
+- [ ] Nginx/Caddy đã cấu hình reverse proxy + SSL
+- [ ] Ứng dụng chạy thành công, truy cập được qua domain HTTPS
+- [ ] Đã đăng nhập và **đổi mật khẩu admin** mặc định
+- [ ] Backup Google Drive đã kiểm tra kết nối thành công
+- [ ] PM2 đã thiết lập auto-startup (Ubuntu: `pm2 startup`, Windows: `pm2-windows-startup`)

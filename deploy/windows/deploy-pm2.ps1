@@ -1,13 +1,18 @@
 # =============================================================================
 # Kịch bản triển khai & cập nhật trên Windows Server (PowerShell)
-# Yêu cầu: Node.js 20+, Git, PM2 (npm install -g pm2)
+# Yêu cầu: Node.js 22 LTS, Git, PM2 (npm install -g pm2)
 # Cách chạy: powershell -ExecutionPolicy Bypass -File deploy\windows\deploy-pm2.ps1
 # =============================================================================
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "🚀 [1/5] Kéo mã nguồn mới nhất từ Git..." -ForegroundColor Cyan
-git pull origin develop
+$currentBranch = git branch --show-current
+if ($currentBranch) {
+    git pull origin $currentBranch
+} else {
+    git pull
+}
 
 Write-Host "📦 [2/5] Cài đặt dependencies (Workspaces)..." -ForegroundColor Cyan
 npm install
