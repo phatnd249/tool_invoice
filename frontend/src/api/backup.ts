@@ -2,9 +2,16 @@ import { apiClient } from '@/lib/apiClient'
 
 export interface BackupConfigStatus {
   isDriveConfigured: boolean
-  authMethod: 'KEY_PATH' | 'KEY_JSON' | 'ENV_CREDENTIALS' | 'JSON_CONTENT' | 'NOT_CONFIGURED'
+  authMethod: 'OAUTH' | 'NOT_CONFIGURED'
   clientEmail: string | null
   folderId: string | null
+  folderName?: string | null
+  folderUrl?: string | null
+  isConnected?: boolean
+  hasOAuthConfig?: boolean
+  oauthClientId?: string | null
+  lastTestedAt?: string | null
+  lastError?: string | null
   autoBackupEnabled: boolean
   cronSchedule: string
   retentionCount: number
@@ -23,6 +30,15 @@ export interface BackupConfigStatus {
     totalFiles: number
     sizeBytes: number
   }
+}
+
+export interface UpdateBackupSchedulePayload {
+  autoBackupEnabled: boolean
+  cronSchedule: string
+  retentionCount?: number
+  backupMode?: 'INCREMENTAL' | 'FULL'
+  maxChunkSizeMb?: number
+  chunkDelayMs?: number
 }
 
 export interface TestConnectionResult {
@@ -57,6 +73,36 @@ export interface DriveFileInfo {
 export const backupApi = {
   getConfig: () => apiClient.get<BackupConfigStatus>('/backup/config'),
 
+  updateSchedule: (data: UpdateBackupSchedulePayload) =>
+    apiClient.put<{
+      success: boolean
+      message: string
+      data: UpdateBackupSchedulePayload
+    }>('/backup/schedule', data),
+
+  getOAuthUrl: (redirectUri?: string) =>
+    apiClient.get<{ url: string }>(
+      `/backup/oauth/url${redirectUri ? `?redirectUri=${encodeURIComponent(redirectUri)}` : ''}`,
+    ),
+
+  submitOAuthCallback: (code: string, redirectUri?: string) =>
+    apiClient.post<{
+      success: boolean
+      message: string
+      email: string
+      folderId: string
+      folderName: string
+    }>('/backup/oauth/callback', { code, redirectUri }),
+
+  saveOAuthCredentials: (data: { clientId: string; clientSecret: string }) =>
+    apiClient.post<{ success: boolean; message: string }>(
+      '/backup/oauth/credentials',
+      data,
+    ),
+
+  disconnectOAuth: () =>
+    apiClient.post<{ success: boolean; message: string }>('/backup/oauth/disconnect'),
+
   testConnection: () =>
     apiClient.post<TestConnectionResult>('/backup/test-connection'),
 
@@ -72,6 +118,14 @@ export const backupApi = {
     apiClient.delete<{ success: boolean; message: string }>(
       `/backup/drive-files/${fileId}`,
     ),
+
+  updateFolder: (folderId: string) =>
+    apiClient.post<{
+      success: boolean
+      folderId: string
+      folderName: string
+      folderUrl?: string
+    }>('/backup/folder', { folderId }),
 
   downloadDriveFile: async (fileId: string, fileName: string) => {
     const res = await apiClient.get(`/backup/drive-files/${fileId}/download`, {

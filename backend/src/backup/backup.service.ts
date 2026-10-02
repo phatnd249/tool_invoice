@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import AdmZip from 'adm-zip';
+import * as cron from 'node-cron';
 
 export interface BackupArchiveInfo {
   archivePath: string;
@@ -22,9 +23,16 @@ export interface BackupArchiveInfo {
 
 export interface BackupConfigStatus {
   isDriveConfigured: boolean;
-  authMethod: 'JSON_CONTENT' | 'NOT_CONFIGURED';
+  authMethod: 'OAUTH' | 'NOT_CONFIGURED';
   clientEmail: string | null;
   folderId: string | null;
+  folderName?: string | null;
+  folderUrl?: string | null;
+  isConnected?: boolean;
+  hasOAuthConfig?: boolean;
+  oauthClientId?: string | null;
+  lastTestedAt?: Date | null;
+  lastError?: string | null;
   autoBackupEnabled: boolean;
   cronSchedule: string;
   retentionCount: number;
@@ -52,6 +60,15 @@ export interface InvoiceFileInfo {
   mtimeMs: number;
 }
 
+export class UpdateBackupScheduleDto {
+  autoBackupEnabled!: boolean;
+  cronSchedule!: string;
+  retentionCount?: number;
+  backupMode?: 'INCREMENTAL' | 'FULL';
+  maxChunkSizeMb?: number;
+  chunkDelayMs?: number;
+}
+
 @Injectable()
 export class BackupService {
   private readonly logger = new Logger(BackupService.name);
@@ -62,26 +79,115 @@ export class BackupService {
   ) {}
 
   /**
-   * Cấu hình phân tách file và tối ưu băng thông
+   * Lấy cài đặt lịch và phân tách file từ DB (fallback về .env)
    */
-  getChunkSettings(): {
-    maxChunkBytes: number;
-    maxChunkSizeMb: number;
-    chunkDelayMs: number;
+  async getBackupSettings(): Promise<{
+    autoBackupEnabled: boolean;
+    cronSchedule: string;
+    retentionCount: number;
     backupMode: 'INCREMENTAL' | 'FULL';
-  } {
-    const rawChunkSize = parseInt(process.env.BACKUP_MAX_CHUNK_SIZE_MB || '15', 10);
-    const maxChunkSizeMb = isNaN(rawChunkSize) || rawChunkSize <= 0 ? 15 : rawChunkSize;
-    const rawDelay = parseInt(process.env.BACKUP_CHUNK_DELAY_MS || '2000', 10);
+    maxChunkSizeMb: number;
+    maxChunkBytes: number;
+    chunkDelayMs: number;
+  }> {
+    const setting = await this.prisma.backupSetting.findUnique({
+      where: { id: 'default' },
+    });
+
+    const autoBackupEnabled =
+      setting?.autoBackupEnabled ??
+      (process.env.BACKUP_AUTO_ENABLED ?? 'true').toLowerCase() === 'true';
+
+    const cronSchedule =
+      setting?.cronSchedule || process.env.BACKUP_CRON_SCHEDULE || '0 2 * * *';
+
+    const rawRetention =
+      setting?.retentionCount ??
+      parseInt(process.env.BACKUP_RETENTION_COUNT ?? '7', 10);
+    const retentionCount = isNaN(rawRetention) || rawRetention < 0 ? 7 : rawRetention;
+
+    const rawMode = (
+      setting?.backupMode ||
+      process.env.BACKUP_MODE ||
+      'INCREMENTAL'
+    ).toUpperCase();
+    const backupMode: 'INCREMENTAL' | 'FULL' =
+      rawMode === 'FULL' ? 'FULL' : 'INCREMENTAL';
+
+    const rawChunkSize =
+      setting?.maxChunkSizeMb ??
+      parseInt(process.env.BACKUP_MAX_CHUNK_SIZE_MB || '15', 10);
+    const maxChunkSizeMb =
+      isNaN(rawChunkSize) || rawChunkSize <= 0 ? 15 : rawChunkSize;
+
+    const rawDelay =
+      setting?.chunkDelayMs ??
+      parseInt(process.env.BACKUP_CHUNK_DELAY_MS || '2000', 10);
     const chunkDelayMs = isNaN(rawDelay) || rawDelay < 0 ? 2000 : rawDelay;
-    const rawMode = (process.env.BACKUP_MODE || 'INCREMENTAL').toUpperCase();
-    const backupMode = rawMode === 'FULL' ? 'FULL' : 'INCREMENTAL';
 
     return {
+      autoBackupEnabled,
+      cronSchedule,
+      retentionCount,
+      backupMode,
       maxChunkSizeMb,
       maxChunkBytes: maxChunkSizeMb * 1024 * 1024,
       chunkDelayMs,
-      backupMode,
+    };
+  }
+
+  /**
+   * Cập nhật cài đặt lịch sao lưu vào database
+   */
+  async updateSchedule(dto: UpdateBackupScheduleDto) {
+    if (!cron.validate(dto.cronSchedule.trim())) {
+      throw new BadRequestException(
+        `Biểu thức Cron không hợp lệ: "${dto.cronSchedule}". Ví dụ: "0 2 * * *" (chạy lúc 02:00 sáng mỗi ngày).`,
+      );
+    }
+
+    const retentionCount =
+      dto.retentionCount !== undefined ? Math.max(0, dto.retentionCount) : 7;
+    const backupMode = dto.backupMode === 'FULL' ? 'FULL' : 'INCREMENTAL';
+    const maxChunkSizeMb =
+      dto.maxChunkSizeMb && dto.maxChunkSizeMb > 0 ? dto.maxChunkSizeMb : 15;
+    const chunkDelayMs =
+      dto.chunkDelayMs !== undefined && dto.chunkDelayMs >= 0
+        ? dto.chunkDelayMs
+        : 2000;
+
+    const updated = await this.prisma.backupSetting.upsert({
+      where: { id: 'default' },
+      create: {
+        id: 'default',
+        autoBackupEnabled: dto.autoBackupEnabled,
+        cronSchedule: dto.cronSchedule.trim(),
+        retentionCount,
+        backupMode,
+        maxChunkSizeMb,
+        chunkDelayMs,
+      },
+      update: {
+        autoBackupEnabled: dto.autoBackupEnabled,
+        cronSchedule: dto.cronSchedule.trim(),
+        retentionCount,
+        backupMode,
+        maxChunkSizeMb,
+        chunkDelayMs,
+      },
+    });
+
+    this.logger.log(
+      `Đã cập nhật lịch sao lưu: cron="${updated.cronSchedule}", auto=${updated.autoBackupEnabled}, retention=${updated.retentionCount}`,
+    );
+
+    return {
+      autoBackupEnabled: updated.autoBackupEnabled,
+      cronSchedule: updated.cronSchedule,
+      retentionCount: updated.retentionCount,
+      backupMode: updated.backupMode as 'INCREMENTAL' | 'FULL',
+      maxChunkSizeMb: updated.maxChunkSizeMb,
+      chunkDelayMs: updated.chunkDelayMs,
     };
   }
 
@@ -92,7 +198,6 @@ export class BackupService {
     const rawUrl = process.env.DATABASE_URL || 'file:./prisma/dev.db';
     let cleanPath = rawUrl.replace(/^file:/, '').trim();
 
-    // If query params exist, strip them
     if (cleanPath.includes('?')) {
       cleanPath = cleanPath.split('?')[0];
     }
@@ -101,7 +206,6 @@ export class BackupService {
       return cleanPath;
     }
 
-    // SQLite relative paths are usually relative to backend cwd or prisma dir
     const candidates = [
       path.resolve(process.cwd(), cleanPath),
       path.resolve(process.cwd(), 'prisma', path.basename(cleanPath)),
@@ -220,24 +324,28 @@ export class BackupService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const autoBackupEnabled =
-      (process.env.BACKUP_AUTO_ENABLED ?? 'true').toLowerCase() === 'true';
-    const cronSchedule = process.env.BACKUP_CRON_SCHEDULE || '0 2 * * *';
-    const retentionCount = parseInt(process.env.BACKUP_RETENTION_COUNT ?? '7', 10);
-    const { maxChunkSizeMb, chunkDelayMs, backupMode } = this.getChunkSettings();
+    const settings = await this.getBackupSettings();
+    const driveInfo = await this.googleDriveService.getDriveConfigInfo();
 
     return {
-      isDriveConfigured: this.googleDriveService.isConfigured(),
-      authMethod: this.googleDriveService.getAuthMethod(),
-      clientEmail: this.googleDriveService.getClientEmail(),
-      folderId: this.googleDriveService.getFolderId(),
-      autoBackupEnabled,
-      cronSchedule,
-      retentionCount: isNaN(retentionCount) ? 7 : retentionCount,
+      isDriveConfigured: driveInfo.isConfigured,
+      authMethod: driveInfo.authMethod,
+      clientEmail: driveInfo.clientEmail,
+      folderId: driveInfo.folderId,
+      folderName: driveInfo.folderName,
+      folderUrl: driveInfo.folderUrl,
+      isConnected: driveInfo.isConnected,
+      hasOAuthConfig: driveInfo.hasOAuthConfig,
+      oauthClientId: driveInfo.oauthClientId,
+      lastTestedAt: driveInfo.lastTestedAt,
+      lastError: driveInfo.lastError,
+      autoBackupEnabled: settings.autoBackupEnabled,
+      cronSchedule: settings.cronSchedule,
+      retentionCount: settings.retentionCount,
       lastBackup,
-      backupMode,
-      maxChunkSizeMb,
-      chunkDelayMs,
+      backupMode: settings.backupMode,
+      maxChunkSizeMb: settings.maxChunkSizeMb,
+      chunkDelayMs: settings.chunkDelayMs,
       database: {
         path: dbPath,
         exists: dbExists,
@@ -254,8 +362,6 @@ export class BackupService {
 
   /**
    * Đóng gói các tệp sao lưu.
-   * - Hỗ trợ INCREMENTAL (chỉ file mới/thay đổi) để tiết kiệm băng thông tối đa.
-   * - Tự động tách thành nhiều file nhỏ (multi-part archives) nếu tổng dung lượng vượt quá maxChunkSizeMb.
    */
   async createBackupArchives(options?: {
     forceFull?: boolean;
@@ -265,8 +371,9 @@ export class BackupService {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    const { maxChunkBytes, maxChunkSizeMb, backupMode } = this.getChunkSettings();
-    const effectiveMode = options?.forceFull ? 'FULL' : backupMode;
+    const settings = await this.getBackupSettings();
+    const effectiveMode = options?.forceFull ? 'FULL' : settings.backupMode;
+    const { maxChunkBytes, maxChunkSizeMb } = settings;
 
     const timestamp = new Date()
       .toISOString()
@@ -274,7 +381,7 @@ export class BackupService {
       .replace(/:/g, '-')
       .replace(/\..+/, '');
 
-    // 1. Collect database files (luôn sao lưu DB vì thay đổi liên tục và nhẹ)
+    // 1. Collect database files
     const dbPath = this.getDatabasePath();
     const dbFiles: Array<{ fullPath: string; zipSubPath: string; size: number }> = [];
     let dbTotalBytes = 0;
@@ -347,7 +454,6 @@ export class BackupService {
     const totalEstimatedBytes = dbTotalBytes + invoicesTotalBytes;
 
     // 3. Phân tách file theo giới hạn kích thước
-    // Nếu toàn bộ dữ liệu vừa trong 1 file nhỏ <= maxChunkBytes:
     if (totalEstimatedBytes <= maxChunkBytes || invoiceFilesToPack.length === 0) {
       const fileName = `invoice_backup_${timestamp}.zip`;
       const archivePath = path.join(tempDir, fileName);
@@ -448,17 +554,12 @@ export class BackupService {
     const totalParts = partsBatches.length;
     const archives: BackupArchiveInfo[] = [];
 
-    for (let p = 0; p < totalParts; p++) {
-      const partIndex = p + 1;
-      const batch = partsBatches[p];
-      const partNumStr = String(partIndex).padStart(2, '0');
-      const totalPartsStr = String(totalParts).padStart(2, '0');
-      const fileName = `invoice_backup_${timestamp}_part${partNumStr}_of_${totalPartsStr}.zip`;
+    for (let i = 0; i < totalParts; i++) {
+      const partIndex = i + 1;
+      const batch = partsBatches[i];
+      const partSuffix = `_part${String(partIndex).padStart(2, '0')}_of_${String(totalParts).padStart(2, '0')}`;
+      const fileName = `invoice_backup_${timestamp}${partSuffix}.zip`;
       const archivePath = path.join(tempDir, fileName);
-
-      this.logger.log(
-        `Đóng gói phần ${partIndex}/${totalParts}: ${fileName} (${batch.files.length} hóa đơn, DB: ${batch.hasDb ? 'Có' : 'Không'})...`,
-      );
 
       const zip = new AdmZip();
       let fileCount = 0;
@@ -529,18 +630,19 @@ export class BackupService {
 
   /**
    * Execute complete backup process and upload to Google Drive.
-   * - Hỗ trợ đẩy từ từ từng file nhỏ với khoảng chờ chunkDelayMs để tránh nghẽn băng thông.
    */
   async executeBackup(
     triggerType: 'MANUAL' | 'AUTO',
     forceFull = false,
   ): Promise<any> {
-    if (!this.googleDriveService.isConfigured()) {
+    const isConfigured = await this.googleDriveService.isConfigured();
+    if (!isConfigured) {
       throw new BadRequestException(
-        'Google Drive chưa được cấu hình. Vui lòng thiết lập biến môi trường Google Service Account và Folder ID.',
+        'Google Drive chưa được kết nối qua OAuth. Vui lòng kết nối tài khoản Google trên trang Cấu hình Sao lưu.',
       );
     }
 
+    const settings = await this.getBackupSettings();
     const startTime = Date.now();
     let archives: BackupArchiveInfo[] = [];
 
@@ -554,7 +656,7 @@ export class BackupService {
     });
 
     try {
-      // 1. Create local archives (single file or split into smaller parts)
+      // 1. Create local archives
       archives = await this.createBackupArchives({ forceFull });
 
       const totalSize = archives.reduce((sum, a) => sum + a.fileSize, 0);
@@ -571,8 +673,8 @@ export class BackupService {
         },
       });
 
-      // 2. Upload to Google Drive progressively ("đẩy từ từ để tiết kiệm băng thông")
-      const { chunkDelayMs } = this.getChunkSettings();
+      // 2. Upload to Google Drive
+      const { chunkDelayMs } = settings;
       const uploadedFiles: Array<{
         fileId: string;
         fileName: string;
@@ -592,7 +694,6 @@ export class BackupService {
         );
         uploadedFiles.push(uploadRes);
 
-        // Nếu còn part tiếp theo, tạm nghỉ chunkDelayMs để giãn cách băng thông
         if (i < archives.length - 1 && chunkDelayMs > 0) {
           this.logger.log(
             `[Backup] Đã tải lên phần ${i + 1}/${archives.length}. Tạm nghỉ ${chunkDelayMs}ms trước khi tải tiếp để tiết kiệm băng thông...`,
@@ -601,11 +702,10 @@ export class BackupService {
         }
       }
 
-      // 3. Prune old backups on Drive
-      const retentionCount = parseInt(process.env.BACKUP_RETENTION_COUNT ?? '7', 10);
+      // 3. Prune old backups on Drive based on configured retention count
       const pruneResult =
-        retentionCount > 0
-          ? await this.googleDriveService.pruneOldBackups(retentionCount)
+        settings.retentionCount > 0
+          ? await this.googleDriveService.pruneOldBackups(settings.retentionCount)
           : { deletedCount: 0, deletedFiles: [] };
 
       const durationMs = Date.now() - startTime;

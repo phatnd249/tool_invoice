@@ -139,81 +139,73 @@ npx prisma studio
 
 ## Cấu hình Google Drive Backup
 
-Hệ thống hỗ trợ tự động sao lưu database và file hoá đơn lên Google Drive theo lịch trình.
+Hệ thống sử dụng duy nhất phương thức **Google OAuth 2.0** để kết nối và sao lưu tự động lên Google Drive:
+- **Đăng nhập trực tiếp**: Đăng nhập 1 cú nhấp chuột bằng chính tài khoản Google của bạn trên trình duyệt, không cần quản lý file token hay JSON key.
+- **Tự động tạo thư mục**: Hệ thống tự động tạo thư mục `Invoice_Pro_Backups` trên Google Drive và quản lý token ngầm.
+- **Lịch chạy tự động tùy chỉnh trên Web**: Bạn có thể điều chỉnh tần suất sao lưu (hàng ngày, mỗi 6h, biểu thức Cron tùy ý), bật/tắt tự động, số bản lưu giữ (retention count) và chế độ sao lưu trực tiếp trên giao diện web (`/backup`) mà không cần sửa file `.env` hay restart máy chủ.
 
-### Bước 1: Bật Google Drive API (BẮT BUỘC)
+---
 
-> ⚠️ Bỏ qua bước này thì mọi thao tác backup sẽ lỗi **403 `SERVICE_DISABLED`**.
+### Hướng dẫn cấu hình Google Drive OAuth 2.0 (Chi tiết từ A-Z)
 
-1. Truy cập https://console.cloud.google.com/ → chọn Project của bạn
-2. Menu **APIs & Services** → **Library**
-3. Tìm **Google Drive API** → **Enable**
+Quá trình cấu hình gồm 4 bước đơn giản trên Google Cloud Console (chỉ cần làm một lần duy nhất, hoàn toàn miễn phí):
 
-### Bước 2: Tạo Google Service Account
+#### Bước 1: Tạo Project & Bật Google Drive API
+1. Truy cập [Google Cloud Console](https://console.cloud.google.com/) và đăng nhập tài khoản Google của bạn.
+2. Tạo Project mới (hoặc chọn Project có sẵn): Bấm vào menu chọn Project ở thanh tiêu đề trên cùng > **New Project** (ví dụ đặt tên: `Invoice Pro Backup`) > **Create**.
+3. Bật Google Drive API: Vào menu điều hướng **APIs & Services** > **Library** > Tìm từ khóa `Google Drive API` > Nhấn vào kết quả và bấm nút **Enable**.
 
-1. **Truy cập Google Cloud Console**: https://console.cloud.google.com/
-2. **Chọn hoặc tạo Project**:
-   - Click vào dropdown project phía trên
-   - Chọn project có sẵn hoặc "New Project"
-3. **Tạo Service Account**:
-   - Vào menu → **IAM & Admin** → **Service Accounts**
-   - Click **Create Service Account**
-   - Điền tên (ví dụ: `invoice-backup`)
-   - Click **Create and Continue**
-   - Role: có thể bỏ qua (không cần role vì chỉ dùng Drive API)
-   - Click **Done**
+#### Bước 2: Cấu hình OAuth Consent Screen (Màn hình xin phép)
+Google yêu cầu cấu hình màn hình này trước khi tạo thông tin xác thực:
+1. Vào **APIs & Services** > **OAuth consent screen**.
+2. Mục **User Type**: Chọn **External** (để dùng được cho tài khoản cá nhân @gmail.com) > Nhấn **Create**.
+3. Điền các trường cơ bản:
+   - **App name**: `Invoice Pro`
+   - **User support email**: Chọn email của bạn
+   - **Developer contact information**: Nhập email của bạn
+   - Bấm **Save and Continue**.
+4. **Scopes (Phạm vi)**: Bấm **Add or Remove Scopes** > Tìm chọn `https://www.googleapis.com/auth/drive.file` hoặc `.../auth/drive` > Bấm **Update** > Bấm **Save and Continue**.
+5. **Test users (Quan trọng)**: Bấm **Add Users** > Nhập tài khoản Gmail mà bạn sẽ dùng để đăng nhập sao lưu > Bấm **Save and Continue**.
+   > 💡 **Mẹo:** Bạn **KHÔNG CẦN** phải nộp hồ sơ xin Google xác minh (Verify app) phức tạp. Chỉ cần giữ ứng dụng ở trạng thái **Testing** và thêm email của bạn vào danh sách **Test users** là có thể sử dụng vĩnh viễn và an toàn!
 
-### Bước 3: Tạo và Download JSON Key
+#### Bước 3: Tạo OAuth 2.0 Client ID & Secret
+1. Vào **APIs & Services** > **Credentials** > Bấm **Create Credentials** ở trên cùng > Chọn **OAuth client ID**.
+2. **Application type**: Chọn **Web application**.
+3. **Name**: `Invoice Pro Web Client`.
+4. **Authorized redirect URIs (Bắt buộc chính xác)**: Bấm **Add URI** và thêm đường dẫn chuyển hướng sau:
+   - Chạy kiểm thử cục bộ: `http://localhost:5173/backup`
+   - Chạy qua Docker Compose: `http://localhost:8080/backup`
+   - Triển khai Production có domain riêng: `https://<domain-cua-ban>/backup`
+5. Bấm **Create**. Một hộp thoại sẽ hiện ra hiển thị **Client ID** và **Client Secret**. Hãy sao chép 2 giá trị này.
 
-1. Click vào service account vừa tạo
-2. Tab **Keys** → **Add Key** → **Create new key**
-3. Chọn **JSON** → **Create**
-4. File JSON sẽ được tự động download (ví dụ: `my-project-abc123.json`)
-
-### Bước 4: Tạo thư mục Google Drive
-
-1. Vào Google Drive: https://drive.google.com/
-2. Tạo thư mục mới cho backup (ví dụ: "Invoice Backups")
-3. Mở thư mục và copy **Folder ID** từ URL:
+#### Bước 4: Kết nối tài khoản Google trên giao diện Invoice Pro
+1. Truy cập vào trang **Sao lưu Google Drive** (`/backup`) trên trình duyệt web của bạn.
+2. Bấm nút **"Cài đặt OAuth"** (hoặc điền vào file `backend/.env`):
+   ```env
+   GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+   GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
+   GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5173/backup
    ```
-   https://drive.google.com/drive/folders/1D1oZQ2yIOT9Ya7A661pKrT4Nks8xCAg4
-                                           ↑ Đây là Folder ID
-   ```
+3. Bấm **"Lưu & Kết nối Google"** > Trình duyệt sẽ mở màn hình xác thực của Google:
+   - Đăng nhập tài khoản Google của bạn (email đã thêm vào Test Users ở Bước 2).
+   - Nếu Google hiển thị cảnh báo: *"Google hasn't verified this app" (Google chưa xác minh ứng dụng này)*: Hãy nhấn vào **Advanced (Nâng cao)** > Chọn **Go to Invoice Pro (unsafe) / Tiếp tục truy cập...**.
+   - Tích chọn cho phép quyền truy cập Google Drive > Nhấn **Continue (Tiếp tục)**.
+4. Hệ thống sẽ tự động hoàn tất đăng nhập, quay lại trang web và thông báo thành công! Thư mục `Invoice_Pro_Backups` sẽ được tự động tạo trên Google Drive của bạn.
 
-### Bước 5: Share thư mục với Service Account
+---
 
-⚠️ **QUAN TRỌNG** - Nếu không thực hiện bước này, backup sẽ lỗi 403!
+### Quản lý lịch sao lưu & tối ưu băng thông trên Web UI
+Trên trang **Sao lưu Google Drive** (`/backup`), bạn có thể điều chỉnh trực tiếp trên thẻ cấu hình:
+- **Bật / Tắt**: Bật hoặc tắt tiến trình tự động sao lưu.
+- **Tần suất chạy**: Chọn nhanh (02:00 sáng hàng ngày, 00:00 đêm, mỗi 6 tiếng, mỗi 12 tiếng, hàng tuần) hoặc nhập giờ cụ thể / biểu thức Cron tùy ý.
+- **Số bản lưu giữ**: Tự động dọn dẹp các bản sao lưu cũ trên Google Drive khi vượt quá số lượng này (mặc định 7 bản).
+- **Chế độ sao lưu**:
+  - `INCREMENTAL` (Khuyên dùng): Chỉ sao lưu hóa đơn mới hoặc đã sửa đổi kể từ lần thành công trước đó (tiết kiệm băng thông tối đa).
+  - `FULL`: Sao lưu toàn bộ tất cả hóa đơn từ trước đến nay.
 
-1. Mở file JSON key đã download ở Bước 3
-2. Tìm field `"client_email"`, copy email (dạng `xxx@xxx.iam.gserviceaccount.com`)
-3. Quay lại thư mục Google Drive đã tạo
-4. Click **Share** (hoặc biểu tượng người + dấu cộng)
-5. Paste email service account vào
-6. Chọn quyền: **Editor** (Người chỉnh sửa)
-7. **Bỏ tick** "Notify people" (không cần gửi email)
-8. Click **Share**
+### Bước 3: Áp dụng cấu hình & Khởi chạy
 
-### Bước 6: Cấu hình trong .env
-
-Mở file `backend/.env` và thêm:
-
-```env
-# 1. Paste Folder ID từ bước 4
-GOOGLE_DRIVE_FOLDER_ID=1D1oZQ2yIOT9Ya7A661pKrT4Nks8xCAg4
-
-# 2. Paste TOÀN BỘ nội dung file JSON từ bước 3
-# ⚠️ Phải nằm trên MỘT dòng; ký tự xuống dòng trong private_key phải là \n (2 ký tự)
-GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"my-project-123","private_key_id":"abc...","private_key":"-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n","client_email":"invoice-backup@my-project-123.iam.gserviceaccount.com",...}
-
-# 3. Tùy chỉnh lịch backup (optional)
-BACKUP_AUTO_ENABLED=true
-BACKUP_CRON_SCHEDULE="0 2 * * *"
-BACKUP_RETENTION_COUNT=7
-```
-
-### Bước 7: Áp dụng cấu hình
-
-Biến môi trường chỉ được đọc **một lần lúc khởi động container** — sửa `.env` xong phải recreate:
+Nếu bạn cấu hình qua file `.env`, hãy khởi động lại container/service để nạp biến môi trường mới:
 
 ```bash
 # Docker
@@ -224,30 +216,30 @@ docker logs backend | grep -i "sao lưu\|Drive"    # xác nhận đã kích ho�
 npm run dev:backend
 ```
 
-### Bước 8: Test kết nối
+### Bước 4: Kiểm tra kết nối
+
+Bạn có thể nhấn nút **"Kiểm tra kết nối"** trực tiếp trên trang `/backup`, hoặc gọi qua API:
 
 ```bash
-# Docker: app ở cổng 9000
-curl -X POST http://localhost:9000/api/backup/test-connection \
+# Docker: app ở cổng HOST_PORT (mặc định 8080)
+curl -X POST http://localhost:8080/api/backup/test-connection \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
-# Local dev: theo PORT trong backend/.env
-curl -X POST http://localhost:3000/api/backup/test-connection \
+# Local dev: theo PORT trong backend/.env (mặc định 4000)
+curl -X POST http://localhost:4000/api/backup/test-connection \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 > ⚠️ `POST /api/backup/trigger` **luôn trả HTTP 200** kể cả khi thất bại — phải kiểm tra `status` / `errorMessage` trong **body**, không chỉ HTTP status.
 
-Hoặc dùng Postman/Frontend để gọi endpoint `/api/backup/test-connection`
-
 **Response thành công:**
 ```json
 {
   "success": true,
-  "message": "Kết nối thành công đến thư mục \"Invoice Backups\" trên Google Drive",
-  "folderName": "Invoice Backups",
+  "message": "Kết nối thành công đến thư mục \"Invoice_Pro_Backups\" trên Google Drive",
+  "folderName": "Invoice_Pro_Backups",
   "folderId": "1D1oZQ2yIOT9Ya7A661pKrT4Nks8xCAg4",
-  "clientEmail": "invoice-backup@my-project-123.iam.gserviceaccount.com"
+  "clientEmail": "your-google-account@gmail.com"
 }
 ```
 

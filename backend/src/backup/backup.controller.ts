@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Delete,
   Param,
   Query,
@@ -12,8 +13,9 @@ import {
   Body,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { BackupService } from './backup.service';
+import { BackupService, UpdateBackupScheduleDto } from './backup.service';
 import { GoogleDriveService } from './google-drive.service';
+import { BackupScheduler } from './backup.scheduler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -24,11 +26,12 @@ export class BackupController {
   constructor(
     private readonly backupService: BackupService,
     private readonly googleDriveService: GoogleDriveService,
+    private readonly backupScheduler: BackupScheduler,
   ) {}
 
   /**
    * GET /api/backup/config
-   * Get current Google Drive backup configuration & storage status
+   * Lấy cấu hình sao lưu và thông tin dung lượng hệ thống
    */
   @Get('config')
   @RequirePermissions('backup:manage')
@@ -37,8 +40,82 @@ export class BackupController {
   }
 
   /**
+   * PUT /api/backup/schedule
+   * Cập nhật lịch sao lưu và cài đặt lưu trữ trực tiếp (không cần chỉnh trong env)
+   */
+  @Put('schedule')
+  @RequirePermissions('backup:manage')
+  async updateSchedule(@Body() body: UpdateBackupScheduleDto) {
+    const updated = await this.backupService.updateSchedule(body);
+    await this.backupScheduler.reschedule(body.cronSchedule, body.autoBackupEnabled);
+    return {
+      success: true,
+      message: 'Đã lưu cấu hình lịch sao lưu thành công!',
+      data: updated,
+    };
+  }
+
+  /**
+   * GET /api/backup/oauth/url
+   * Lấy URL để người dùng đăng nhập cấp quyền Google OAuth 2.0
+   */
+  @Get('oauth/url')
+  @RequirePermissions('backup:manage')
+  async getOAuthUrl(@Query('redirectUri') redirectUri?: string) {
+    return this.googleDriveService.getOAuthAuthUrl(redirectUri);
+  }
+
+  /**
+   * POST /api/backup/oauth/callback
+   * Tiếp nhận authorization code từ Google OAuth và lưu token vào DB
+   */
+  @Post('oauth/callback')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('backup:manage')
+  async handleOAuthCallback(
+    @Body() body: { code: string; redirectUri?: string },
+  ) {
+    return this.googleDriveService.handleOAuthCallback(body.code, body.redirectUri);
+  }
+
+  /**
+   * POST /api/backup/oauth/credentials
+   * Cấu hình hoặc cập nhật Client ID và Client Secret trực tiếp từ giao diện web
+   */
+  @Post('oauth/credentials')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('backup:manage')
+  async saveOAuthCredentials(
+    @Body() body: { clientId: string; clientSecret: string },
+  ) {
+    return this.googleDriveService.saveOAuthCredentials(body.clientId, body.clientSecret);
+  }
+
+  /**
+   * POST /api/backup/oauth/disconnect
+   * Ngắt kết nối tài khoản Google Drive
+   */
+  @Post('oauth/disconnect')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('backup:manage')
+  async disconnectOAuth() {
+    return this.googleDriveService.disconnectOAuth();
+  }
+
+  /**
+   * POST /api/backup/folder
+   * Cập nhật Folder ID hoặc Link thư mục lưu trữ trên Google Drive
+   */
+  @Post('folder')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('backup:manage')
+  async updateFolder(@Body() body: { folderId: string }) {
+    return this.googleDriveService.updateFolder(body.folderId);
+  }
+
+  /**
    * POST /api/backup/test-connection
-   * Test connection to Google Drive and verify folder access
+   * Kiểm tra kết nối Google Drive và quyền truy cập thư mục
    */
   @Post('test-connection')
   @HttpCode(HttpStatus.OK)
@@ -49,7 +126,7 @@ export class BackupController {
 
   /**
    * POST /api/backup/trigger
-   * Manually trigger a backup immediately
+   * Kích hoạt sao lưu ngay lập tức
    */
   @Post('trigger')
   @HttpCode(HttpStatus.OK)
@@ -60,7 +137,7 @@ export class BackupController {
 
   /**
    * GET /api/backup/history
-   * Get backup execution logs from database
+   * Lấy lịch sử các lần chạy sao lưu
    */
   @Get('history')
   @RequirePermissions('backup:manage')
@@ -73,7 +150,7 @@ export class BackupController {
 
   /**
    * GET /api/backup/drive-files
-   * List backup files stored in the Google Drive folder
+   * Danh sách các file backup đang lưu trên thư mục Google Drive
    */
   @Get('drive-files')
   @RequirePermissions('backup:manage')
@@ -83,7 +160,7 @@ export class BackupController {
 
   /**
    * DELETE /api/backup/drive-files/:fileId
-   * Delete a backup file from Google Drive
+   * Xóa 1 bản sao lưu trên Google Drive
    */
   @Delete('drive-files/:fileId')
   @HttpCode(HttpStatus.OK)
@@ -95,7 +172,7 @@ export class BackupController {
 
   /**
    * GET /api/backup/drive-files/:fileId/download
-   * Stream download a backup file from Google Drive
+   * Tải file sao lưu từ Google Drive về máy
    */
   @Get('drive-files/:fileId/download')
   @RequirePermissions('backup:manage')

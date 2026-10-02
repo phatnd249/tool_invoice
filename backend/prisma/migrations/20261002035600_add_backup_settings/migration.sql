@@ -1,0 +1,26 @@
+-- CreateTable
+CREATE TABLE "backup_settings" (
+    "id" TEXT NOT NULL PRIMARY KEY DEFAULT 'default',
+    "authMethod" TEXT NOT NULL DEFAULT 'OAUTH',
+    "accountEmail" TEXT,
+    "oauthClientId" TEXT,
+    "oauthClientSecret" TEXT,
+    "serviceAccountJson" TEXT,
+    "refreshToken" TEXT,
+    "accessToken" TEXT,
+    "tokenExpiry" DATETIME,
+    "folderId" TEXT,
+    "folderName" TEXT,
+    "folderUrl" TEXT,
+    "isConnected" BOOLEAN NOT NULL DEFAULT false,
+    "lastTestedAt" DATETIME,
+    "lastError" TEXT,
+    "autoBackupEnabled" BOOLEAN NOT NULL DEFAULT true,
+    "cronSchedule" TEXT NOT NULL DEFAULT '0 2 * * *',
+    "retentionCount" INTEGER NOT NULL DEFAULT 7,
+    "backupMode" TEXT NOT NULL DEFAULT 'INCREMENTAL',
+    "maxChunkSizeMb" INTEGER NOT NULL DEFAULT 15,
+    "chunkDelayMs" INTEGER NOT NULL DEFAULT 2000,
+    "updatedAt" DATETIME NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

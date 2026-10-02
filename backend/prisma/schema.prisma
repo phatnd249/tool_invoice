@@ -296,3 +296,31 @@ model BackupLog {
   @@map("backup_logs")
 }
 
+model BackupSetting {
+  id                 String    @id @default("default")
+  authMethod         String    @default("OAUTH")
+  accountEmail       String?
+  oauthClientId      String?   // Google OAuth Client ID (nếu cấu hình từ web UI)
+  oauthClientSecret  String?   // Encrypted Google OAuth Client Secret (nếu cấu hình từ web UI)
+  serviceAccountJson String?   // Encrypted JSON key (dự phòng)
+  refreshToken       String?
+  accessToken        String?
+  tokenExpiry        DateTime?
+  folderId           String?
+  folderName         String?
+  folderUrl          String?
+  isConnected        Boolean   @default(false)
+  lastTestedAt       DateTime?
+  lastError          String?
+  autoBackupEnabled  Boolean   @default(true)
+  cronSchedule       String    @default("0 2 * * *")
+  retentionCount     Int       @default(7)
+  backupMode         String    @default("INCREMENTAL") // "INCREMENTAL" | "FULL"
+  maxChunkSizeMb     Int       @default(15)
+  chunkDelayMs       Int       @default(2000)
+  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime  @default(now())
+
+  @@map("backup_settings")
+}
+

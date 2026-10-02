@@ -11,6 +11,10 @@ const mockPrisma = {
     create: jest.fn(),
     update: jest.fn(),
   },
+  backupSetting: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    upsert: jest.fn(),
+  },
 };
 
 const mockGoogleDriveService = {
@@ -18,6 +22,7 @@ const mockGoogleDriveService = {
   getAuthMethod: jest.fn(),
   getClientEmail: jest.fn(),
   getFolderId: jest.fn(),
+  getDriveConfigInfo: jest.fn(),
   testConnection: jest.fn(),
   uploadFile: jest.fn(),
   listFiles: jest.fn(),
@@ -44,17 +49,25 @@ describe('BackupService', () => {
 
   describe('getConfigStatus', () => {
     it('should return system backup configuration and stats', async () => {
-      mockGoogleDriveService.isConfigured.mockReturnValue(true);
-      mockGoogleDriveService.getAuthMethod.mockReturnValue('JSON_CONTENT');
-      mockGoogleDriveService.getClientEmail.mockReturnValue('test@example.iam.gserviceaccount.com');
-      mockGoogleDriveService.getFolderId.mockReturnValue('folder-123');
+      mockGoogleDriveService.getDriveConfigInfo.mockResolvedValue({
+        isConfigured: true,
+        authMethod: 'OAUTH',
+        clientEmail: 'test@example.com',
+        folderId: 'folder-123',
+        folderName: 'Invoice_Pro_Backups',
+        folderUrl: 'https://drive.google.com/...',
+        isConnected: true,
+        lastTestedAt: null,
+        lastError: null,
+      });
       mockPrisma.backupLog.findFirst.mockResolvedValue(null);
+      mockPrisma.backupSetting.findUnique.mockResolvedValue(null);
 
       const result = await service.getConfigStatus();
 
       expect(result.isDriveConfigured).toBe(true);
-      expect(result.authMethod).toBe('JSON_CONTENT');
-      expect(result.clientEmail).toBe('test@example.iam.gserviceaccount.com');
+      expect(result.authMethod).toBe('OAUTH');
+      expect(result.clientEmail).toBe('test@example.com');
       expect(result.folderId).toBe('folder-123');
       expect(result.database).toBeDefined();
       expect(result.invoices).toBeDefined();
@@ -66,7 +79,7 @@ describe('BackupService', () => {
 
   describe('executeBackup', () => {
     it('should throw BadRequestException if Google Drive is not configured', async () => {
-      mockGoogleDriveService.isConfigured.mockReturnValue(false);
+      mockGoogleDriveService.isConfigured.mockResolvedValue(false);
 
       await expect(service.executeBackup('MANUAL')).rejects.toThrow(
         BadRequestException,
@@ -74,7 +87,7 @@ describe('BackupService', () => {
     });
 
     it('should successfully execute backup with single archive and update log when configured', async () => {
-      mockGoogleDriveService.isConfigured.mockReturnValue(true);
+      mockGoogleDriveService.isConfigured.mockResolvedValue(true);
       mockPrisma.backupLog.create.mockResolvedValue({ id: 'log-1', status: 'IN_PROGRESS' });
       mockPrisma.backupLog.update.mockImplementation(({ data }) => Promise.resolve({ id: 'log-1', ...data }));
 
@@ -115,7 +128,10 @@ describe('BackupService', () => {
       mockPrisma.backupLog.update.mockImplementation(({ data }) => Promise.resolve({ id: 'log-2', ...data }));
 
       // Mock chunk delay to 10ms for fast test execution
-      jest.spyOn(service, 'getChunkSettings').mockReturnValue({
+      jest.spyOn(service, 'getBackupSettings').mockResolvedValue({
+        autoBackupEnabled: true,
+        cronSchedule: '0 2 * * *',
+        retentionCount: 7,
         maxChunkBytes: 1024 * 1024,
         maxChunkSizeMb: 1,
         chunkDelayMs: 10,
